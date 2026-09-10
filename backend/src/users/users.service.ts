@@ -26,9 +26,14 @@ export class UsersService {
     return user;
   }
 
-  async create(dto: CreateUserDto): Promise<UserResponseDto> {
+  async create(data: {
+    email: string;
+    username: string;
+    name: string;
+    passwordHash: string;
+  }): Promise<UserResponseDto> {
     return this.prisma.user.create({
-      data: dto,
+      data,
       select: userPublicSelect,
     });
   }
