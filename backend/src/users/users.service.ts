@@ -3,6 +3,7 @@ import { PrismaService } from '../database/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { userPublicSelect } from './user.select';
 import { UserResponseDto } from './dto/user-response.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
@@ -27,6 +28,16 @@ export class UsersService {
 
   async create(dto: CreateUserDto): Promise<UserResponseDto> {
     return this.prisma.user.create({
+      data: dto,
+      select: userPublicSelect,
+    });
+  }
+
+  async update(id: string, dto: UpdateUserDto): Promise<UserResponseDto> {
+    await this.findById(id);
+
+    return this.prisma.user.update({
+      where: { id },
       data: dto,
       select: userPublicSelect,
     });
