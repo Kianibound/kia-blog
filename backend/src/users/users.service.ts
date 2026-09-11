@@ -47,4 +47,10 @@ export class UsersService {
       select: userPublicSelect,
     });
   }
+
+  async findByEmailForAuth(email: string) {
+    return this.prisma.user.findUnique({
+      where: { email },
+    });
+  }
 }
