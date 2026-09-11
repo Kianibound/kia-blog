@@ -54,4 +54,8 @@ export class AuthService {
       user: safeUser,
     };
   }
+
+  async getMe(userId: string) {
+    return this.usersService.findById(userId);
+  }
 }
