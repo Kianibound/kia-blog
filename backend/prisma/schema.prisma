@@ -15,6 +15,7 @@ model User {
   avatarUrl     String?
   passwordHash  String?
   refreshTokens RefreshToken[]
+  emailVerificationTokens EmailVerificationToken[]
   emailVerified Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -27,6 +28,19 @@ model RefreshToken {
   userId    String
   expiresAt DateTime
   revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

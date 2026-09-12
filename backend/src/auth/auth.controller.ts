@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -53,5 +54,10 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   logoutAll(@CurrentUser() user: JwtPayload) {
     return this.authService.logoutAll(user.sub);
+  }
+
+  @Get('verify-email')
+  verifyEmail(@Query('token') token: string) {
+    return this.authService.verifyEmail(token);
   }
 }

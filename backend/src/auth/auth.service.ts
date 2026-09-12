@@ -9,6 +9,7 @@ import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { JwtPayload } from './types/jwt-payload.type';
+import { createHash, randomBytes } from 'node:crypto';
 
 @Injectable()
 export class AuthService {
@@ -20,14 +21,25 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    // Hash the raw password before storing it
     const passwordHash = await argon2.hash(dto.password);
 
-    return this.usersService.create({
+    // Create the user first
+    const user = await this.usersService.create({
       email: dto.email,
       username: dto.username,
       name: dto.name,
       passwordHash,
     });
+
+    // Create a one-time email verification token
+    const verificationToken = await this.createEmailVerificationToken(user.id);
+
+    // Temporary development-only response
+    return {
+      user,
+      verificationUrl: `http://localhost:3000/auth/verify-email?token=${verificationToken}`,
+    };
   }
 
   async login(dto: LoginDto) {
@@ -198,6 +210,77 @@ export class AuthService {
 
     return {
       message: 'Logged out from all devices successfully.',
+    };
+  }
+
+  private hashToken(token: string): string {
+    // Store only the token hash in the database
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private async createEmailVerificationToken(userId: string) {
+    // Generate a cryptographically secure random token
+    const rawToken = randomBytes(32).toString('hex');
+
+    const tokenHash = this.hashToken(rawToken);
+
+    // Token is valid for 24 hours
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    await this.prisma.emailVerificationToken.create({
+      data: {
+        tokenHash,
+        userId,
+        expiresAt,
+      },
+    });
+
+    // Raw token is returned only once so it can be sent to the user
+    return rawToken;
+  }
+
+  async verifyEmail(rawToken: string) {
+    // Hash the incoming token to compare with the stored hash
+    const tokenHash = this.hashToken(rawToken);
+
+    const verificationToken =
+      await this.prisma.emailVerificationToken.findUnique({
+        where: {
+          tokenHash,
+        },
+      });
+
+    // Reject missing, already-used, or expired tokens
+    if (
+      !verificationToken ||
+      verificationToken.usedAt ||
+      verificationToken.expiresAt < new Date()
+    ) {
+      throw new UnauthorizedException('Invalid or expired verification token.');
+    }
+
+    // Mark the user's email as verified
+    await this.prisma.user.update({
+      where: {
+        id: verificationToken.userId,
+      },
+      data: {
+        emailVerified: true,
+      },
+    });
+
+    // Mark this token as used
+    await this.prisma.emailVerificationToken.update({
+      where: {
+        id: verificationToken.id,
+      },
+      data: {
+        usedAt: new Date(),
+      },
+    });
+
+    return {
+      message: 'Email verified successfully.',
     };
   }
 }
