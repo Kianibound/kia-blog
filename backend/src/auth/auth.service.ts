@@ -131,4 +131,73 @@ export class AuthService {
       accessToken,
     };
   }
+
+  async logout(dto: RefreshTokenDto) {
+    let payload: JwtPayload;
+
+    try {
+      // Verify refresh token signature and expiration
+      payload = await this.jwtService.verifyAsync<JwtPayload>(
+        dto.refreshToken,
+        {
+          secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+        },
+      );
+    } catch {
+      throw new UnauthorizedException('Invalid or expired refresh token.');
+    }
+
+    // Get active refresh tokens for this user
+    const tokens = await this.prisma.refreshToken.findMany({
+      where: {
+        userId: payload.sub,
+        revokedAt: null,
+      },
+    });
+
+    // Find the database token that matches the raw refresh token
+    const matchingToken = (
+      await Promise.all(
+        tokens.map(async (token) => ({
+          token,
+          matches: await argon2.verify(token.tokenHash, dto.refreshToken),
+        })),
+      )
+    ).find((item) => item.matches);
+
+    if (!matchingToken) {
+      throw new UnauthorizedException('Invalid refresh token.');
+    }
+
+    // Revoke this refresh token
+    await this.prisma.refreshToken.update({
+      where: {
+        id: matchingToken.token.id,
+      },
+      data: {
+        revokedAt: new Date(),
+      },
+    });
+
+    return {
+      message: 'Logged out successfully.',
+    };
+  }
+
+  async logoutAll(userId: string) {
+    // Revoke all active refresh tokens for this user
+    await this.prisma.refreshToken.updateMany({
+      where: {
+        userId,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: new Date(),
+      },
+    });
+
+    return {
+      message: 'Logged out from all devices successfully.',
+    };
+  }
 }
