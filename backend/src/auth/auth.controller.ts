@@ -11,7 +11,9 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import type { AuthenticatedRequest } from './types/authenticated-request.type';
+import { CurrentUser } from './decorators/current-user.decorator';
+import type { JwtPayload } from './types/jwt-payload.type';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -30,7 +32,13 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
-  me(@Req() request: AuthenticatedRequest) {
-    return this.authService.getMe(request.user.sub);
+  me(@CurrentUser() user: JwtPayload) {
+    return this.authService.getMe(user.sub);
+  }
+
+  @HttpCode(200)
+  @Post('refresh')
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refresh(dto);
   }
 }
