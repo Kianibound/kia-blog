@@ -10,6 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { JwtPayload } from './types/jwt-payload.type';
 import { createHash, randomBytes } from 'node:crypto';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class AuthService {
@@ -18,13 +19,14 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly mailService: MailService,
   ) {}
 
   async register(dto: RegisterDto) {
-    // Hash the raw password before storing it
+    // Hash password before saving
     const passwordHash = await argon2.hash(dto.password);
 
-    // Create the user first
+    // Create user
     const user = await this.usersService.create({
       email: dto.email,
       username: dto.username,
@@ -32,13 +34,25 @@ export class AuthService {
       passwordHash,
     });
 
-    // Create a one-time email verification token
+    // Create one-time verification token
     const verificationToken = await this.createEmailVerificationToken(user.id);
 
-    // Temporary development-only response
+    // Build verification URL
+    const verificationUrl =
+      `${this.configService.getOrThrow<string>('APP_URL')}` +
+      `/auth/verify-email?token=${verificationToken}`;
+
+    // Send verification email
+    if (this.configService.get('EMAIL_ENABLED') === 'true') {
+      await this.mailService.sendEmailVerification(user.email, verificationUrl);
+    }
+
     return {
       user,
-      verificationUrl: `http://localhost:3000/auth/verify-email?token=${verificationToken}`,
+      message: 'Registration successful.',
+      ...(process.env.NODE_ENV !== 'production' && {
+        verificationUrl,
+      }),
     };
   }
 
