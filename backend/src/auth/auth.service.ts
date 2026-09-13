@@ -11,6 +11,8 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { JwtPayload } from './types/jwt-payload.type';
 import { createHash, randomBytes } from 'node:crypto';
 import { MailService } from '../mail/mail.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -295,6 +297,117 @@ export class AuthService {
 
     return {
       message: 'Email verified successfully.',
+    };
+  }
+
+  private async createPasswordResetToken(userId: string) {
+    // Generate a secure one-time token
+    const rawToken = randomBytes(32).toString('hex');
+
+    // Store only the SHA-256 hash
+    const tokenHash = this.hashToken(rawToken);
+
+    // Reset token expires after 1 hour
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+    await this.prisma.passwordResetToken.create({
+      data: {
+        tokenHash,
+        userId,
+        expiresAt,
+      },
+    });
+
+    // Return raw token only once so it can be sent to the user
+    return rawToken;
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+    // Find user by email for the reset flow
+    const user = await this.usersService.findByEmailForAuth(dto.email);
+
+    // Always return the same response to avoid email enumeration
+    if (!user) {
+      return {
+        message:
+          'If an account with that email exists, a password reset link has been sent.',
+      };
+    }
+
+    // Create a one-time reset token
+    const resetToken = await this.createPasswordResetToken(user.id);
+
+    const resetUrl =
+      `${this.configService.getOrThrow<string>('APP_URL')}` +
+      `/auth/reset-password?token=${resetToken}`;
+
+    // In development we can expose the URL for easier testing
+    if (this.configService.get<string>('EMAIL_ENABLED') === 'true') {
+      // We'll wire real reset email sending next
+    }
+
+    return {
+      message:
+        'If an account with that email exists, a password reset link has been sent.',
+      ...(process.env.NODE_ENV !== 'production' && {
+        resetUrl,
+      }),
+    };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    // Hash incoming raw token so we can look it up in DB
+    const tokenHash = this.hashToken(dto.token);
+
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: {
+        tokenHash,
+      },
+    });
+
+    // Reject missing, used, or expired tokens
+    if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
+      throw new UnauthorizedException(
+        'Invalid or expired password reset token.',
+      );
+    }
+
+    // Hash the new password before storing it
+    const passwordHash = await argon2.hash(dto.newPassword);
+
+    // Update user's password
+    await this.prisma.user.update({
+      where: {
+        id: resetToken.userId,
+      },
+      data: {
+        passwordHash,
+      },
+    });
+
+    // Revoke all active sessions after password reset
+    await this.prisma.refreshToken.updateMany({
+      where: {
+        userId: resetToken.userId,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: new Date(),
+      },
+    });
+
+    // Mark reset token as used
+    await this.prisma.passwordResetToken.update({
+      where: {
+        id: resetToken.id,
+      },
+      data: {
+        usedAt: new Date(),
+      },
+    });
+
+    return {
+      message: 'Password reset successfully.',
     };
   }
 }
