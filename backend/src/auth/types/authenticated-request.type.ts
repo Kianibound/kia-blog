@@ -1,6 +1,6 @@
-import { Request } from 'express';
-import { JwtPayload } from './jwt-payload.type';
+import type { Request } from 'express';
+import type { AccessTokenPayload } from './access-token-payload.type';
 
 export type AuthenticatedRequest = Request & {
-  user: JwtPayload;
+  user: AccessTokenPayload;
 };

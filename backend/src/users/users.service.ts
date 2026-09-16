@@ -31,6 +31,7 @@ export class UsersService {
     username: string;
     name: string;
     passwordHash: string;
+    roleId: string;
   }): Promise<UserResponseDto> {
     return this.prisma.user.create({
       data,
@@ -47,10 +48,16 @@ export class UsersService {
       select: userPublicSelect,
     });
   }
-
   async findByEmailForAuth(email: string) {
     return this.prisma.user.findUnique({
       where: { email },
+      include: {
+        role: {
+          select: {
+            name: true,
+          },
+        },
+      },
     });
   }
 }

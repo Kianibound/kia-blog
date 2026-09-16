@@ -1,4 +1,3 @@
-import { ConfigService } from '@nestjs/config';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { UsersService } from '../users/users.service';
@@ -6,34 +5,33 @@ import { RegisterDto } from './dto/register.dto';
 import * as argon2 from 'argon2';
 import { UnauthorizedException } from '@nestjs/common';
 import { LoginDto } from './dto/login.dto';
-import { JwtService } from '@nestjs/jwt';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
-import { JwtPayload } from './types/jwt-payload.type';
-import { createHash, randomBytes } from 'node:crypto';
-import { MailService } from '../mail/mail.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { TokenService } from './services/token.service';
 import { EmailVerificationService } from './services/email-verification.service';
-import { hashToken } from './utils/hash-token.util';
 import { PasswordResetService } from './services/password-reset.service';
 import { SessionService } from './services/session.service';
+import { RolesService } from '../roles/roles.service';
+import { isRoleName } from '../roles/constants/role.constants';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
-    private readonly jwtService: JwtService,
     private readonly tokenService: TokenService,
     private readonly emailVerificationService: EmailVerificationService,
     private readonly passwordResetService: PasswordResetService,
     private readonly sessionService: SessionService,
+    private readonly rolesService: RolesService,
   ) {}
 
   async register(dto: RegisterDto) {
     // Hash password before saving
     const passwordHash = await argon2.hash(dto.password);
+
+    // Resolve the default role for new registrations
+    const defaultRole = await this.rolesService.findRequiredByName('USER');
 
     // Create user
     const user = await this.usersService.create({
@@ -41,6 +39,7 @@ export class AuthService {
       username: dto.username,
       name: dto.name,
       passwordHash,
+      roleId: defaultRole.id,
     });
 
     // Create and optionally send verification email
@@ -59,12 +58,16 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
+    // Find the user with password hash and role for authentication
     const user = await this.usersService.findByEmailForAuth(dto.email);
 
+    // Use the same error for unknown email or missing password
+    // to avoid leaking whether an email exists
     if (!user || !user.passwordHash) {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
+    // Compare the provided password with the stored Argon2 hash
     const passwordMatches = await argon2.verify(
       user.passwordHash,
       dto.password,
@@ -74,22 +77,38 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
-    const payload = {
+    // Every authenticated user must have a valid role
+    if (!user.role) {
+      throw new UnauthorizedException('User role is not available.');
+    }
+
+    // Ensure the database role is one of the supported application roles
+    if (!isRoleName(user.role.name)) {
+      throw new UnauthorizedException('User role is invalid.');
+    }
+
+    // Access token contains the data needed for authenticated
+    // and role-based requests
+    const accessToken = await this.tokenService.createAccessToken({
       sub: user.id,
       email: user.email,
-    };
+      role: user.role.name,
+    });
 
-    const accessToken = await this.tokenService.createAccessToken(payload);
+    // Refresh token only identifies the user/session.
+    // Current role will be loaded from the database when refreshing.
+    const refreshToken = await this.tokenService.createRefreshToken({
+      sub: user.id,
+    });
 
-    const refreshToken = await this.tokenService.createRefreshToken(payload);
-
-    // Persist refresh token session
+    // Store only the hashed refresh token in the database
     await this.sessionService.storeRefreshToken(
       user.id,
       refreshToken,
       new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     );
 
+    // Load the public/safe user response without passwordHash
     const safeUser = await this.usersService.findById(user.id);
 
     return {
@@ -117,28 +136,6 @@ export class AuthService {
 
   async verifyEmail(token: string) {
     return this.emailVerificationService.verifyEmail(token);
-  }
-
-  private async createPasswordResetToken(userId: string) {
-    // Generate a secure one-time token
-    const rawToken = randomBytes(32).toString('hex');
-
-    // Store only the SHA-256 hash
-    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
-
-    // Reset token expires after 1 hour
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
-
-    await this.prisma.passwordResetToken.create({
-      data: {
-        tokenHash,
-        userId,
-        expiresAt,
-      },
-    });
-
-    // Return raw token only once so it can be sent to the user
-    return rawToken;
   }
 
   async forgotPassword(dto: ForgotPasswordDto) {

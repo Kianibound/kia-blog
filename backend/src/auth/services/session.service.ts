@@ -1,8 +1,9 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { TokenService } from './token.service';
-import type { JwtPayload } from '../types/jwt-payload.type';
+import type { RefreshTokenPayload } from '../types/refresh-token-payload.type';
 import { PrismaService } from '../../database/prisma.service';
+import { isRoleName } from '../../roles/constants/role.constants';
 
 @Injectable()
 export class SessionService {
@@ -29,7 +30,7 @@ export class SessionService {
   }
 
   async logoutAll(userId: string) {
-    // Revoke all active sessions for this user
+    // Revoke every active refresh-token session for this user
     await this.prisma.refreshToken.updateMany({
       where: {
         userId,
@@ -46,16 +47,16 @@ export class SessionService {
   }
 
   async refresh(refreshToken: string) {
-    let payload: JwtPayload;
+    let payload: RefreshTokenPayload;
 
     try {
-      // Verify refresh token signature and expiration
+      // Verify the refresh token and extract the user id
       payload = await this.tokenService.verifyRefreshToken(refreshToken);
     } catch {
       throw new UnauthorizedException('Invalid or expired refresh token.');
     }
 
-    // Get active sessions for this user
+    // Find active refresh-token sessions for this user
     const tokens = await this.prisma.refreshToken.findMany({
       where: {
         userId: payload.sub,
@@ -66,7 +67,7 @@ export class SessionService {
       },
     });
 
-    // Find matching stored refresh token
+    // Compare the provided refresh token with stored Argon2 hashes
     const matches = await Promise.all(
       tokens.map(async (token) => ({
         token,
@@ -80,19 +81,44 @@ export class SessionService {
       throw new UnauthorizedException('Invalid or expired refresh token.');
     }
 
-    // Issue a new access token
-    const accessToken = await this.tokenService.createAccessToken({
-      sub: payload.sub,
-      email: payload.email,
+    // Load the current user and current role from the database
+    const user = await this.prisma.user.findUnique({
+      where: {
+        id: payload.sub,
+      },
+      select: {
+        id: true,
+        email: true,
+        role: {
+          select: {
+            name: true,
+          },
+        },
+      },
     });
 
+    // The user must still exist and have a valid role
+    if (!user || !user.role) {
+      throw new UnauthorizedException('User or role is no longer available.');
+    }
+
+    // Ensure the current database role is supported by the application
+    if (!isRoleName(user.role.name)) {
+      throw new UnauthorizedException('User role is invalid.');
+    }
+
+    // Create a new access token with the user's current role
+    const accessToken = await this.tokenService.createAccessToken({
+      sub: user.id,
+      email: user.email,
+      role: user.role.name,
+    });
     return {
       accessToken,
     };
   }
-
   async logout(refreshToken: string) {
-    let payload: JwtPayload;
+    let payload: RefreshTokenPayload;
 
     try {
       // Verify refresh token before revoking it

@@ -10,11 +10,14 @@ import { TokenService } from './services/token.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { PasswordResetService } from './services/password-reset.service';
 import { SessionService } from './services/session.service';
+import { RolesModule } from '../roles/roles.module';
+import { RolesGuard } from './guards/roles.guard';
 
 @Module({
   imports: [
     UsersModule,
     MailModule,
+    RolesModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
@@ -33,6 +36,7 @@ import { SessionService } from './services/session.service';
     EmailVerificationService,
     PasswordResetService,
     SessionService,
+    RolesGuard,
   ],
 })
 export class AuthModule {}

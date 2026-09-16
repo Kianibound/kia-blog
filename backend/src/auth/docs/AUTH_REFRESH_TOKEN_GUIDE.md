@@ -345,3 +345,14 @@ Refresh Token Request
 ```text
 JWT valid ≠ Session valid
 ```
+
+RefreshTokenPayload
+→ فقط sub
+
+refresh()
+→ verify refresh token
+→ payload.sub
+→ load current user from DB
+→ get current email
+→ get current role
+→ create new access token

@@ -9,4 +9,11 @@ export const userPublicSelect = {
   emailVerified: true,
   createdAt: true,
   updatedAt: true,
+
+  // Expose role information instead of internal roleId
+  role: {
+    select: {
+      name: true,
+    },
+  },
 } satisfies Prisma.UserSelect;
