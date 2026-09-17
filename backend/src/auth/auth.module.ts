@@ -32,11 +32,14 @@ import { RolesGuard } from './guards/roles.guard';
   providers: [
     AuthService,
     JwtAuthGuard,
+    RolesGuard,
     TokenService,
+    SessionService,
     EmailVerificationService,
     PasswordResetService,
-    SessionService,
-    RolesGuard,
   ],
+
+  // Make auth guards available to other feature modules
+  exports: [JwtModule, JwtAuthGuard, RolesGuard],
 })
 export class AuthModule {}
