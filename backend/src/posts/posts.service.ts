@@ -11,6 +11,7 @@ import { ROLE } from '../roles/constants/role.constants';
 import type { RoleName } from '../roles/constants/role.constants';
 import type { UpdatePostDto } from './dto/update-post.dto';
 import slugify from 'slugify';
+import { PostStatus } from '../../generated/prisma/client';
 
 @Injectable()
 export class PostsService {
@@ -20,6 +21,9 @@ export class PostsService {
     // Generate a unique public URL slug from the title
     const slug = await this.generateUniqueSlug(dto.title);
 
+    // A post receives a publication date only when created as published
+    const publishedAt = dto.status === PostStatus.PUBLISHED ? new Date() : null;
+
     // Create a new post owned by the authenticated author
     return this.prisma.post.create({
       data: {
@@ -27,6 +31,7 @@ export class PostsService {
         slug,
         content: dto.content,
         status: dto.status,
+        publishedAt,
         authorId,
       },
     });
@@ -119,12 +124,31 @@ export class PostsService {
       );
     }
 
+    // Keep publishedAt synchronized with status changes
+    let publishedAt = post.publishedAt;
+
+    if (
+      dto.status === PostStatus.PUBLISHED &&
+      post.status !== PostStatus.PUBLISHED
+    ) {
+      // The post is being published now
+      publishedAt = new Date();
+    }
+
+    if (dto.status === PostStatus.DRAFT) {
+      // A draft should not have an active publication date
+      publishedAt = null;
+    }
+
     // Update only the fields provided by the client
     return this.prisma.post.update({
       where: {
         id: postId,
       },
-      data: dto,
+      data: {
+        ...dto,
+        publishedAt,
+      },
     });
   }
 
