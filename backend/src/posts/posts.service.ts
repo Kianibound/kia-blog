@@ -10,23 +10,28 @@ import type { CreatePostDto } from './dto/create-post.dto';
 import { ROLE } from '../roles/constants/role.constants';
 import type { RoleName } from '../roles/constants/role.constants';
 import type { UpdatePostDto } from './dto/update-post.dto';
+import slugify from 'slugify';
 
 @Injectable()
 export class PostsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(authorId: string, dto: CreatePostDto) {
+    // Generate a unique public URL slug from the title
+    const slug = await this.generateUniqueSlug(dto.title);
+
     // Create a new post owned by the authenticated author
     return this.prisma.post.create({
       data: {
         title: dto.title,
-        slug: dto.slug,
+        slug,
         content: dto.content,
         status: dto.status,
         authorId,
       },
     });
   }
+
   async findAll() {
     // Public feed should only expose published posts
     return this.prisma.post.findMany({
@@ -121,5 +126,30 @@ export class PostsService {
       },
       data: dto,
     });
+  }
+
+  private async generateUniqueSlug(title: string): Promise<string> {
+    // Convert the title into a URL-friendly base slug
+    const baseSlug = slugify(title, {
+      lower: true,
+      strict: true,
+      trim: true,
+    });
+
+    let slug = baseSlug;
+    let counter = 2;
+
+    // Keep trying until we find an unused slug
+    while (
+      await this.prisma.post.findUnique({
+        where: { slug },
+        select: { id: true },
+      })
+    ) {
+      slug = `${baseSlug}-${counter}`;
+      counter++;
+    }
+
+    return slug;
   }
 }

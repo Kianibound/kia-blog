@@ -16,11 +16,6 @@ export class UpdatePostDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  slug?: string;
-
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty()
   content?: string;
 
   @IsOptional()

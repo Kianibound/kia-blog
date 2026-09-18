@@ -9,10 +9,6 @@ export class CreatePostDto {
 
   @IsString()
   @IsNotEmpty()
-  slug: string;
-
-  @IsString()
-  @IsNotEmpty()
   content: string;
 
   @IsOptional()
