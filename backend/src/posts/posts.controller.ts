@@ -6,6 +6,7 @@ import {
   Patch,
   Post,
   UseGuards,
+  Delete,
 } from '@nestjs/common';
 
 import { UpdatePostDto } from './dto/update-post.dto';
@@ -60,5 +61,13 @@ export class PostsController {
   ) {
     // Role checks access level, while the service checks ownership
     return this.postsService.update(id, user.sub, user.role, dto);
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLE.AUTHOR, ROLE.ADMIN)
+  remove(@Param('id') id: string, @CurrentUser() user: AccessTokenPayload) {
+    // Role controls access level; the service enforces ownership
+    return this.postsService.remove(id, user.sub, user.role);
   }
 }

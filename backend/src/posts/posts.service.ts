@@ -176,4 +176,43 @@ export class PostsService {
 
     return slug;
   }
+
+  async remove(
+    postId: string,
+    currentUserId: string,
+    currentUserRole: RoleName,
+  ) {
+    // Load the post first so we can verify ownership
+    const post = await this.prisma.post.findUnique({
+      where: {
+        id: postId,
+      },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post not found.');
+    }
+
+    // Authors can only delete their own posts.
+    // Admins can delete any post.
+    const isOwner = post.authorId === currentUserId;
+    const isAdmin = currentUserRole === ROLE.ADMIN;
+
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException(
+        'You do not have permission to delete this post.',
+      );
+    }
+
+    // Delete the post after authorization checks pass
+    await this.prisma.post.delete({
+      where: {
+        id: postId,
+      },
+    });
+
+    return {
+      message: 'Post deleted successfully.',
+    };
+  }
 }
