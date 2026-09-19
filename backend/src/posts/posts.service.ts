@@ -136,10 +136,11 @@ export class PostsService {
   }
 
   async findBySlug(slug: string) {
-    // Find a single post by its public URL slug
-    const post = await this.prisma.post.findUnique({
+    // Public post pages should only expose published posts
+    const post = await this.prisma.post.findFirst({
       where: {
         slug,
+        status: PostStatus.PUBLISHED,
       },
       include: {
         author: {
