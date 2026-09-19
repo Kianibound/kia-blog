@@ -37,16 +37,37 @@ export class PostsService {
     });
   }
 
-  async findAll(page: number, limit: number) {
-    // Calculate how many records should be skipped
+  async findAll(page: number, limit: number, search?: string) {
     const skip = (page - 1) * limit;
+
+    // Build the public-post filter once and reuse it
+    const where = {
+      status: PostStatus.PUBLISHED,
+
+      ...(search
+        ? {
+            OR: [
+              {
+                title: {
+                  contains: search,
+                  mode: 'insensitive' as const,
+                },
+              },
+              {
+                content: {
+                  contains: search,
+                  mode: 'insensitive' as const,
+                },
+              },
+            ],
+          }
+        : {}),
+    };
 
     // Get the current page and total count in parallel
     const [posts, total] = await Promise.all([
       this.prisma.post.findMany({
-        where: {
-          status: PostStatus.PUBLISHED,
-        },
+        where,
         orderBy: {
           publishedAt: 'desc',
         },
@@ -65,9 +86,7 @@ export class PostsService {
       }),
 
       this.prisma.post.count({
-        where: {
-          status: PostStatus.PUBLISHED,
-        },
+        where,
       }),
     ]);
 

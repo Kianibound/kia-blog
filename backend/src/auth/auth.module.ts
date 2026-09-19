@@ -22,8 +22,13 @@ import { RolesGuard } from './guards/roles.guard';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         secret: configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
+
         signOptions: {
-          expiresIn: '15m',
+          // Convert env string to number because JWT accepts
+          // expiration time in seconds as a number
+          expiresIn: Number(
+            configService.getOrThrow<string>('JWT_ACCESS_EXPIRES_IN'),
+          ),
         },
       }),
     }),
