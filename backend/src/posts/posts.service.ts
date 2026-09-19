@@ -37,38 +37,83 @@ export class PostsService {
     });
   }
 
-  async findAll() {
-    // Public feed should only expose published posts
-    return this.prisma.post.findMany({
-      where: {
-        status: 'PUBLISHED',
-      },
-      orderBy: {
-        publishedAt: 'desc',
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            username: true,
-            name: true,
-            avatarUrl: true,
+  async findAll(page: number, limit: number) {
+    // Calculate how many records should be skipped
+    const skip = (page - 1) * limit;
+
+    // Get the current page and total count in parallel
+    const [posts, total] = await Promise.all([
+      this.prisma.post.findMany({
+        where: {
+          status: PostStatus.PUBLISHED,
+        },
+        orderBy: {
+          publishedAt: 'desc',
+        },
+        skip,
+        take: limit,
+        include: {
+          author: {
+            select: {
+              id: true,
+              username: true,
+              name: true,
+              avatarUrl: true,
+            },
           },
         },
+      }),
+
+      this.prisma.post.count({
+        where: {
+          status: PostStatus.PUBLISHED,
+        },
+      }),
+    ]);
+
+    return {
+      data: posts,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
-    });
+    };
   }
 
-  async findMine(authorId: string) {
-    // Return all posts owned by the authenticated author
-    return this.prisma.post.findMany({
-      where: {
-        authorId,
+  async findMine(authorId: string, page: number, limit: number) {
+    const skip = (page - 1) * limit;
+
+    // Get the author's posts and total count in parallel
+    const [posts, total] = await Promise.all([
+      this.prisma.post.findMany({
+        where: {
+          authorId,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: limit,
+      }),
+
+      this.prisma.post.count({
+        where: {
+          authorId,
+        },
+      }),
+    ]);
+
+    return {
+      data: posts,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    };
   }
 
   async findBySlug(slug: string) {

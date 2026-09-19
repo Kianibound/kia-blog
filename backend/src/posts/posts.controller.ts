@@ -7,7 +7,9 @@ import {
   Post,
   UseGuards,
   Delete,
+  Query,
 } from '@nestjs/common';
+import { PaginationQueryDto } from './dto/pagination-query.dto';
 
 import { UpdatePostDto } from './dto/update-post.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -34,16 +36,19 @@ export class PostsController {
   }
 
   @Get()
-  findAll() {
-    return this.postsService.findAll();
+  findAll(@Query() query: PaginationQueryDto) {
+    return this.postsService.findAll(query.page, query.limit);
   }
 
   @Get('mine')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.AUTHOR, ROLE.ADMIN)
-  findMine(@CurrentUser() user: AccessTokenPayload) {
-    // user.sub is the authenticated author's id
-    return this.postsService.findMine(user.sub);
+  findMine(
+    @CurrentUser() user: AccessTokenPayload,
+    @Query() query: PaginationQueryDto,
+  ) {
+    // Return only posts owned by the authenticated author
+    return this.postsService.findMine(user.sub, query.page, query.limit);
   }
 
   @Get(':slug')
