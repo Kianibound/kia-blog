@@ -42,6 +42,7 @@ export class PostsService {
     limit: number,
     search?: string,
     sort: 'newest' | 'oldest' = 'newest',
+    author?: string,
   ) {
     const skip = (page - 1) * limit;
 
@@ -49,6 +50,16 @@ export class PostsService {
     const where = {
       status: PostStatus.PUBLISHED,
 
+      // Filter posts by author username when provided
+      ...(author
+        ? {
+            author: {
+              username: author,
+            },
+          }
+        : {}),
+
+      // Search in title or content when provided
       ...(search
         ? {
             OR: [

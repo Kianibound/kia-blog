@@ -42,6 +42,7 @@ export class PostsController {
       query.limit,
       query.search,
       query.sort,
+      query.author,
     );
   }
 

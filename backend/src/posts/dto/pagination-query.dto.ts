@@ -22,4 +22,8 @@ export class PaginationQueryDto {
   @IsOptional()
   @IsIn(['newest', 'oldest'])
   sort: 'newest' | 'oldest' = 'newest';
+
+  @IsOptional()
+  @IsString()
+  author?: string;
 }
