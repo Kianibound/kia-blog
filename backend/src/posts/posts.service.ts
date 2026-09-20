@@ -37,10 +37,15 @@ export class PostsService {
     });
   }
 
-  async findAll(page: number, limit: number, search?: string) {
+  async findAll(
+    page: number,
+    limit: number,
+    search?: string,
+    sort: 'newest' | 'oldest' = 'newest',
+  ) {
     const skip = (page - 1) * limit;
 
-    // Build the public-post filter once and reuse it
+    // Build filters for public posts
     const where = {
       status: PostStatus.PUBLISHED,
 
@@ -64,13 +69,15 @@ export class PostsService {
         : {}),
     };
 
-    // Get the current page and total count in parallel
+    // Build sorting based on query input
+    const orderBy = {
+      publishedAt: sort === 'oldest' ? 'asc' : 'desc',
+    } as const;
+
     const [posts, total] = await Promise.all([
       this.prisma.post.findMany({
         where,
-        orderBy: {
-          publishedAt: 'desc',
-        },
+        orderBy,
         skip,
         take: limit,
         include: {

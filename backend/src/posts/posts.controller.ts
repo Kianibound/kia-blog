@@ -37,8 +37,14 @@ export class PostsController {
 
   @Get()
   findAll(@Query() query: PaginationQueryDto) {
-    return this.postsService.findAll(query.page, query.limit, query.search);
+    return this.postsService.findAll(
+      query.page,
+      query.limit,
+      query.search,
+      query.sort,
+    );
   }
+
   @Get('mine')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.AUTHOR, ROLE.ADMIN)

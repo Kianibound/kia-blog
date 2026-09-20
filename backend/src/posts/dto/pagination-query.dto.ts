@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class PaginationQueryDto {
   @IsOptional()
@@ -18,4 +18,8 @@ export class PaginationQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsIn(['newest', 'oldest'])
+  sort: 'newest' | 'oldest' = 'newest';
 }
