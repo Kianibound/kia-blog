@@ -153,6 +153,46 @@ export class PostsService {
     };
   }
 
+  async findMineById(
+  postId: string,
+  currentUserId: string,
+  currentUserRole: RoleName,
+) {
+  // Load the post for the authenticated author's edit/detail page
+  const post = await this.prisma.post.findUnique({
+    where: {
+      id: postId,
+    },
+    include: {
+      author: {
+        select: {
+          id: true,
+          username: true,
+          name: true,
+          avatarUrl: true,
+        },
+      },
+    },
+  });
+
+  if (!post) {
+    throw new NotFoundException('Post not found.');
+  }
+
+  // Authors can only access their own private posts.
+  // Admins may access any post.
+  const isOwner = post.authorId === currentUserId;
+  const isAdmin = currentUserRole === ROLE.ADMIN;
+
+  if (!isOwner && !isAdmin) {
+    throw new ForbiddenException(
+      'You do not have permission to access this post.',
+    );
+  }
+
+  return post;
+}
+
   async findBySlug(slug: string) {
     // Public post pages should only expose published posts
     const post = await this.prisma.post.findFirst({

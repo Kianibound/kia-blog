@@ -57,6 +57,17 @@ export class PostsController {
     return this.postsService.findMine(user.sub, query.page, query.limit);
   }
 
+  @Get('mine/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLE.AUTHOR, ROLE.ADMIN)
+  findMineById(
+    @Param('id') id: string,
+    @CurrentUser() user: AccessTokenPayload,
+  ) {
+    // Allow authors to load their own drafts for editing
+    return this.postsService.findMineById(id, user.sub, user.role);
+  }
+
   @Get(':slug')
   findBySlug(@Param('slug') slug: string) {
     return this.postsService.findBySlug(slug);
