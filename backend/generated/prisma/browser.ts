@@ -47,3 +47,13 @@ export type PasswordResetToken = Prisma.PasswordResetTokenModel
  * 
  */
 export type Post = Prisma.PostModel
+/**
+ * Model Category
+ * 
+ */
+export type Category = Prisma.CategoryModel
+/**
+ * Model Tag
+ * 
+ */
+export type Tag = Prisma.TagModel
