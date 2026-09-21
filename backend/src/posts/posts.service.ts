@@ -21,10 +21,9 @@ export class PostsService {
     // Generate a unique public URL slug from the title
     const slug = await this.generateUniqueSlug(dto.title);
 
-    // A post receives a publication date only when created as published
+    // Set publication time only when the post starts as published
     const publishedAt = dto.status === PostStatus.PUBLISHED ? new Date() : null;
 
-    // Create a new post owned by the authenticated author
     return this.prisma.post.create({
       data: {
         title: dto.title,
@@ -33,6 +32,30 @@ export class PostsService {
         status: dto.status,
         publishedAt,
         authorId,
+
+        // Connect existing categories by id
+        categories: dto.categoryIds
+          ? {
+              connect: dto.categoryIds.map((id) => ({
+                id,
+              })),
+            }
+          : undefined,
+
+        // Connect existing tags by id
+        tags: dto.tagIds
+          ? {
+              connect: dto.tagIds.map((id) => ({
+                id,
+              })),
+            }
+          : undefined,
+      },
+
+      // Return attached categories and tags in the response
+      include: {
+        categories: true,
+        tags: true,
       },
     });
   }
@@ -154,44 +177,44 @@ export class PostsService {
   }
 
   async findMineById(
-  postId: string,
-  currentUserId: string,
-  currentUserRole: RoleName,
-) {
-  // Load the post for the authenticated author's edit/detail page
-  const post = await this.prisma.post.findUnique({
-    where: {
-      id: postId,
-    },
-    include: {
-      author: {
-        select: {
-          id: true,
-          username: true,
-          name: true,
-          avatarUrl: true,
+    postId: string,
+    currentUserId: string,
+    currentUserRole: RoleName,
+  ) {
+    // Load the post for the authenticated author's edit/detail page
+    const post = await this.prisma.post.findUnique({
+      where: {
+        id: postId,
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            name: true,
+            avatarUrl: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  if (!post) {
-    throw new NotFoundException('Post not found.');
+    if (!post) {
+      throw new NotFoundException('Post not found.');
+    }
+
+    // Authors can only access their own private posts.
+    // Admins may access any post.
+    const isOwner = post.authorId === currentUserId;
+    const isAdmin = currentUserRole === ROLE.ADMIN;
+
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException(
+        'You do not have permission to access this post.',
+      );
+    }
+
+    return post;
   }
-
-  // Authors can only access their own private posts.
-  // Admins may access any post.
-  const isOwner = post.authorId === currentUserId;
-  const isAdmin = currentUserRole === ROLE.ADMIN;
-
-  if (!isOwner && !isAdmin) {
-    throw new ForbiddenException(
-      'You do not have permission to access this post.',
-    );
-  }
-
-  return post;
-}
 
   async findBySlug(slug: string) {
     // Public post pages should only expose published posts
@@ -250,6 +273,9 @@ export class PostsService {
     // Keep publishedAt synchronized with status changes
     let publishedAt = post.publishedAt;
 
+    // Separate relation ids from regular post fields
+    const { categoryIds, tagIds, ...postData } = dto;
+
     if (
       dto.status === PostStatus.PUBLISHED &&
       post.status !== PostStatus.PUBLISHED
@@ -269,8 +295,34 @@ export class PostsService {
         id: postId,
       },
       data: {
-        ...dto,
+        ...postData,
         publishedAt,
+
+        // Replace categories only when categoryIds is provided
+        categories:
+          categoryIds !== undefined
+            ? {
+                set: categoryIds.map((id) => ({
+                  id,
+                })),
+              }
+            : undefined,
+
+        // Replace tags only when tagIds is provided
+        tags:
+          tagIds !== undefined
+            ? {
+                set: tagIds.map((id) => ({
+                  id,
+                })),
+              }
+            : undefined,
+      },
+
+      // Return updated relations in the response
+      include: {
+        categories: true,
+        tags: true,
       },
     });
   }
