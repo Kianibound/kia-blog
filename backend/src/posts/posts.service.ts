@@ -66,6 +66,8 @@ export class PostsService {
     search?: string,
     sort: 'newest' | 'oldest' = 'newest',
     author?: string,
+    category?: string,
+    tag?: string,
   ) {
     const skip = (page - 1) * limit;
 
@@ -73,16 +75,41 @@ export class PostsService {
     const where = {
       status: PostStatus.PUBLISHED,
 
-      // Filter posts by author username when provided
+      // Filter by author username
       ...(author
         ? {
             author: {
-              username: author,
+              username: {
+                equals: author,
+                mode: 'insensitive' as const,
+              },
             },
           }
         : {}),
 
-      // Search in title or content when provided
+      // Filter by category slug
+      ...(category
+        ? {
+            categories: {
+              some: {
+                slug: category,
+              },
+            },
+          }
+        : {}),
+
+      // Filter by tag slug
+      ...(tag
+        ? {
+            tags: {
+              some: {
+                slug: tag,
+              },
+            },
+          }
+        : {}),
+
+      // Search in title or content
       ...(search
         ? {
             OR: [
@@ -123,6 +150,24 @@ export class PostsService {
               avatarUrl: true,
             },
           },
+
+          // Return related categories for public post cards
+          categories: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+            },
+          },
+
+          // Return related tags for public post cards
+          tags: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+            },
+          },
         },
       }),
 
@@ -140,6 +185,45 @@ export class PostsService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  async findById(id: string) {
+    // Find a post by its database id
+    const post = await this.prisma.post.findUnique({
+      where: {
+        id,
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            name: true,
+            avatarUrl: true,
+          },
+        },
+        categories: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+        tags: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+      },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post not found.');
+    }
+
+    return post;
   }
 
   async findMine(authorId: string, page: number, limit: number) {
@@ -230,6 +314,22 @@ export class PostsService {
             username: true,
             name: true,
             avatarUrl: true,
+          },
+        },
+
+        categories: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+
+        tags: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
           },
         },
       },

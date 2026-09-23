@@ -43,7 +43,15 @@ export class PostsController {
       query.search,
       query.sort,
       query.author,
+      query.category,
+      query.tag,
     );
+  }
+
+  @Get('by-id/:id')
+  findById(@Param('id') id: string) {
+    // Useful for internal/admin/testing lookups by database id
+    return this.postsService.findById(id);
   }
 
   @Get('mine')
