@@ -20,6 +20,7 @@ model User {
   roleId String?
   role   Role?   @relation(fields: [roleId], references: [id])
   emailVerified Boolean  @default(false)
+  comments Comment[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   posts Post[]
@@ -94,6 +95,8 @@ model Post {
   categories Category[]
   tags       Tag[]
 
+  comments Comment[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -118,4 +121,27 @@ model Tag {
   posts     Post[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+
+model Comment {
+  id      String @id @default(uuid())
+  content String
+
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  parentId String?
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  Comment[] @relation("CommentReplies")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([postId])
+  @@index([authorId])
+  @@index([parentId])
 }

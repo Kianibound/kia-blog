@@ -57,3 +57,8 @@ export type Category = Prisma.CategoryModel
  * 
  */
 export type Tag = Prisma.TagModel
+/**
+ * Model Comment
+ * 
+ */
+export type Comment = Prisma.CommentModel
