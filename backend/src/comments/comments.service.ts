@@ -1,7 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-
 import { PrismaService } from '../database/prisma.service';
 import type { CreateCommentDto } from './dto/create-comment.dto';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+
+import { ROLE } from '../roles/constants/role.constants';
+import type { RoleName } from '../roles/constants/role.constants';
+import type { UpdateCommentDto } from './dto/update-comment.dto';
 
 @Injectable()
 export class CommentsService {
@@ -138,5 +145,81 @@ export class CommentsService {
         },
       },
     });
+  }
+
+  async update(
+    commentId: string,
+    currentUserId: string,
+    currentUserRole: RoleName,
+    dto: UpdateCommentDto,
+  ) {
+    // Load the comment first so we can check ownership
+    const comment = await this.prisma.comment.findUnique({
+      where: {
+        id: commentId,
+      },
+    });
+
+    if (!comment) {
+      throw new NotFoundException('Comment not found.');
+    }
+
+    const isOwner = comment.authorId === currentUserId;
+    const isAdmin = currentUserRole === ROLE.ADMIN;
+
+    // Users can only update their own comments.
+    // Admins can update any comment.
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException(
+        'You do not have permission to update this comment.',
+      );
+    }
+
+    // Update only the provided comment fields
+    return this.prisma.comment.update({
+      where: {
+        id: commentId,
+      },
+      data: dto,
+    });
+  }
+
+  async remove(
+    commentId: string,
+    currentUserId: string,
+    currentUserRole: RoleName,
+  ) {
+    // Load the comment first so we can check ownership
+    const comment = await this.prisma.comment.findUnique({
+      where: {
+        id: commentId,
+      },
+    });
+
+    if (!comment) {
+      throw new NotFoundException('Comment not found.');
+    }
+
+    const isOwner = comment.authorId === currentUserId;
+    const isAdmin = currentUserRole === ROLE.ADMIN;
+
+    // Users can only delete their own comments.
+    // Admins can delete any comment.
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException(
+        'You do not have permission to delete this comment.',
+      );
+    }
+
+    // Replies are also deleted because of onDelete: Cascade
+    await this.prisma.comment.delete({
+      where: {
+        id: commentId,
+      },
+    });
+
+    return {
+      message: 'Comment deleted successfully.',
+    };
   }
 }
