@@ -84,3 +84,8 @@ export type Tag = Prisma.TagModel
  * 
  */
 export type Comment = Prisma.CommentModel
+/**
+ * Model Bookmark
+ * 
+ */
+export type Bookmark = Prisma.BookmarkModel

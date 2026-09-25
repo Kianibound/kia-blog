@@ -21,6 +21,7 @@ model User {
   role   Role?   @relation(fields: [roleId], references: [id])
   emailVerified Boolean  @default(false)
   comments Comment[]
+  bookmarks Bookmark[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   posts Post[]
@@ -88,15 +89,12 @@ model Post {
   content     String
   status      PostStatus @default(DRAFT)
   publishedAt DateTime?
-
   authorId String
   author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
-
   categories Category[]
   tags       Tag[]
-
   comments Comment[]
-
+  bookmarks Bookmark[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -144,4 +142,19 @@ model Comment {
   @@index([postId])
   @@index([authorId])
   @@index([parentId])
+}
+
+
+model Bookmark {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([userId])
+  @@index([postId])
 }
