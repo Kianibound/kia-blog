@@ -67,3 +67,8 @@ export type Comment = Prisma.CommentModel
  * 
  */
 export type Bookmark = Prisma.BookmarkModel
+/**
+ * Model PostLike
+ * 
+ */
+export type PostLike = Prisma.PostLikeModel

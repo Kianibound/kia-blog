@@ -11,6 +11,7 @@ import { CategoriesModule } from './categories/categories.module';
 import { TagsModule } from './tags/tags.module';
 import { CommentsModule } from './comments/comments.module';
 import { BookmarksModule } from './bookmarks/bookmarks.module';
+import { PostLikesModule } from './post-likes/post-likes.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { BookmarksModule } from './bookmarks/bookmarks.module';
     TagsModule,
     CommentsModule,
     BookmarksModule,
+    PostLikesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
