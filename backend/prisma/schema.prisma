@@ -23,6 +23,7 @@ model User {
   comments Comment[]
   bookmarks Bookmark[]
   postLikes PostLike[]
+  media Media[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   posts Post[]
@@ -173,4 +174,24 @@ model PostLike {
   @@unique([userId, postId])
   @@index([userId])
   @@index([postId])
+}
+
+
+model Media {
+  id           String   @id @default(uuid())
+  url          String
+  publicId     String   @unique
+  resourceType String
+  format       String
+  bytes        Int
+  width        Int?
+  height       Int?
+
+  ownerId String
+  owner   User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
 }

@@ -12,6 +12,7 @@ import { TagsModule } from './tags/tags.module';
 import { CommentsModule } from './comments/comments.module';
 import { BookmarksModule } from './bookmarks/bookmarks.module';
 import { PostLikesModule } from './post-likes/post-likes.module';
+import { MediaModule } from './media/media.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { PostLikesModule } from './post-likes/post-likes.module';
     CommentsModule,
     BookmarksModule,
     PostLikesModule,
+    MediaModule,
   ],
   controllers: [AppController],
   providers: [AppService],

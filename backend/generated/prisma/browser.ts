@@ -72,3 +72,8 @@ export type Bookmark = Prisma.BookmarkModel
  * 
  */
 export type PostLike = Prisma.PostLikeModel
+/**
+ * Model Media
+ * 
+ */
+export type Media = Prisma.MediaModel
