@@ -1,7 +1,15 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import type { Multer } from 'multer';
+
+import { ROLE } from '../roles/constants/role.constants';
+import type { RoleName } from '../roles/constants/role.constants';
 
 @Injectable()
 export class CloudinaryService {
@@ -37,4 +45,15 @@ export class CloudinaryService {
       uploadStream.end(file.buffer);
     });
   }
+
+  async deleteImage(publicId: string) {
+    const result = await cloudinary.uploader.destroy(publicId, {
+      resource_type: 'image',
+      invalidate: true,
+    });
+
+    return result;
+  }
+
+
 }

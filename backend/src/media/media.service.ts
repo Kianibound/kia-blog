@@ -1,7 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { PrismaService } from '../database/prisma.service';
 import { CloudinaryService } from './cloudinary.service';
+import { ROLE, RoleName } from '../roles/constants/role.constants';
 
 @Injectable()
 export class MediaService {
@@ -27,5 +32,47 @@ export class MediaService {
         height: uploaded.height ?? null,
       },
     });
+  }
+
+  async remove(
+    mediaId: string,
+    currentUserId: string,
+    currentUserRole: RoleName,
+  ) {
+    // Load media first so we can check ownership
+    const media = await this.prisma.media.findUnique({
+      where: {
+        id: mediaId,
+      },
+    });
+
+    if (!media) {
+      throw new NotFoundException('Media not found.');
+    }
+
+    const isOwner = media.ownerId === currentUserId;
+    const isAdmin = currentUserRole === ROLE.ADMIN;
+
+    // Users can only delete their own media.
+    // Admins can delete any media.
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException(
+        'You do not have permission to delete this media.',
+      );
+    }
+
+    // Delete the actual image from Cloudinary first
+    await this.cloudinaryService.deleteImage(media.publicId);
+
+    // Remove its metadata from our database
+    await this.prisma.media.delete({
+      where: {
+        id: media.id,
+      },
+    });
+
+    return {
+      message: 'Media deleted successfully.',
+    };
   }
 }

@@ -1,6 +1,8 @@
 import {
   Controller,
+  Delete,
   HttpStatus,
+  Param,
   ParseFilePipeBuilder,
   Post,
   UploadedFile,
@@ -38,5 +40,14 @@ export class MediaController {
     file: Express.Multer.File,
   ) {
     return this.mediaService.uploadImage(user.sub, file);
+  }
+
+  @Delete(':mediaId')
+  @UseGuards(JwtAuthGuard)
+  remove(
+    @Param('mediaId') mediaId: string,
+    @CurrentUser() user: AccessTokenPayload,
+  ) {
+    return this.mediaService.remove(mediaId, user.sub, user.role);
   }
 }
