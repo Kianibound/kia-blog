@@ -49,8 +49,10 @@ export class PostsController {
   }
 
   @Get('by-id/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLE.ADMIN)
   findById(@Param('id') id: string) {
-    // Useful for internal/admin/testing lookups by database id
+    // Internal/admin lookup by database id
     return this.postsService.findById(id);
   }
 
