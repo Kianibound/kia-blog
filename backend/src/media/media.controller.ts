@@ -4,6 +4,7 @@ import {
   HttpStatus,
   Param,
   ParseFilePipeBuilder,
+  Patch,
   Post,
   UploadedFile,
   UseGuards,
@@ -49,5 +50,27 @@ export class MediaController {
     @CurrentUser() user: AccessTokenPayload,
   ) {
     return this.mediaService.remove(mediaId, user.sub, user.role);
+  }
+
+  @Patch('avatar')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  updateAvatar(
+    @CurrentUser() user: AccessTokenPayload,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addFileTypeValidator({
+          fileType: /^image\/(jpeg|png|webp)$/,
+        })
+        .addMaxSizeValidator({
+          maxSize: 5 * 1024 * 1024,
+        })
+        .build({
+          errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+        }),
+    )
+    file: Express.Multer.File,
+  ) {
+    return this.mediaService.updateAvatar(user.sub, file);
   }
 }

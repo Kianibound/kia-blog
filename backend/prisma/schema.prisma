@@ -8,25 +8,27 @@ datasource db {
 }
 
 model User {
-  id            String   @id @default(uuid())
-  email         String   @unique
-  username      String   @unique
-  name          String?
-  avatarUrl     String?
-  passwordHash  String?
-  refreshTokens RefreshToken[]
+  id                      String                   @id @default(uuid())
+  email                   String                   @unique
+  username                String                   @unique
+  name                    String?
+  avatarUrl               String?
+  passwordHash            String?
+  refreshTokens           RefreshToken[]
   emailVerificationTokens EmailVerificationToken[]
-  passwordResetTokens PasswordResetToken[]
-  roleId String?
-  role   Role?   @relation(fields: [roleId], references: [id])
-  emailVerified Boolean  @default(false)
-  comments Comment[]
-  bookmarks Bookmark[]
-  postLikes PostLike[]
-  media Media[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  posts Post[]
+  passwordResetTokens     PasswordResetToken[]
+  roleId                  String?
+  role                    Role?                    @relation(fields: [roleId], references: [id])
+  emailVerified           Boolean                  @default(false)
+  comments                Comment[]
+  bookmarks               Bookmark[]
+  postLikes               PostLike[]
+  avatarMediaId           String?                  @unique
+  avatarMedia             Media?                   @relation("UserAvatar", fields: [avatarMediaId], references: [id], onDelete: SetNull)
+  media                   Media[]
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  posts                   Post[]
 }
 
 model Role {
@@ -37,14 +39,13 @@ model Role {
   updatedAt DateTime @updatedAt
 }
 
-
 model RefreshToken {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   tokenHash String
   userId    String
   expiresAt DateTime
   revokedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -52,26 +53,25 @@ model RefreshToken {
 }
 
 model EmailVerificationToken {
-  id        String   @id @default(uuid())
-  tokenHash String   @unique
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
   userId    String
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
-
 model PasswordResetToken {
-  id        String   @id @default(uuid())
-  tokenHash String   @unique
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
   userId    String
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -91,15 +91,15 @@ model Post {
   content     String
   status      PostStatus @default(DRAFT)
   publishedAt DateTime?
-  authorId String
-  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  categories Category[]
-  tags       Tag[]
-  comments Comment[]
-  bookmarks Bookmark[]
-  postLikes PostLike[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  authorId    String
+  author      User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  categories  Category[]
+  tags        Tag[]
+  comments    Comment[]
+  bookmarks   Bookmark[]
+  postLikes   PostLike[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   @@index([authorId])
   @@index([status])
@@ -114,7 +114,6 @@ model Category {
   updatedAt DateTime @updatedAt
 }
 
-
 model Tag {
   id        String   @id @default(uuid())
   name      String   @unique
@@ -123,7 +122,6 @@ model Tag {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
-
 
 model Comment {
   id      String @id @default(uuid())
@@ -146,7 +144,6 @@ model Comment {
   @@index([authorId])
   @@index([parentId])
 }
-
 
 model Bookmark {
   id        String   @id @default(uuid())
@@ -176,20 +173,19 @@ model PostLike {
   @@index([postId])
 }
 
-
 model Media {
-  id           String   @id @default(uuid())
+  id           String @id @default(uuid())
   url          String
-  publicId     String   @unique
+  publicId     String @unique
   resourceType String
   format       String
   bytes        Int
   width        Int?
   height       Int?
 
-  ownerId String
-  owner   User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  avatarOf  User?    @relation("UserAvatar")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

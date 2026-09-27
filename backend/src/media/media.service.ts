@@ -75,4 +75,67 @@ export class MediaService {
       message: 'Media deleted successfully.',
     };
   }
+
+  async updateAvatar(userId: string, file: Express.Multer.File) {
+    // Load the current avatar before uploading the new one
+    const user = await this.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        id: true,
+        avatarMedia: {
+          select: {
+            id: true,
+            publicId: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found.');
+    }
+
+    // Upload the new avatar and create its Media record
+    const newMedia = await this.uploadImage(userId, file);
+
+    // Make the new media the active avatar
+    const updatedUser = await this.prisma.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        avatarMediaId: newMedia.id,
+        avatarUrl: newMedia.url,
+      },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        name: true,
+        avatarUrl: true,
+        createdAt: true,
+        updatedAt: true,
+        role: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    // Delete the previous avatar after the new one is active
+    if (user.avatarMedia) {
+      await this.cloudinaryService.deleteImage(user.avatarMedia.publicId);
+
+      await this.prisma.media.delete({
+        where: {
+          id: user.avatarMedia.id,
+        },
+      });
+    }
+
+    return updatedUser;
+  }
 }
