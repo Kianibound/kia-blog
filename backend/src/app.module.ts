@@ -13,6 +13,7 @@ import { CommentsModule } from './comments/comments.module';
 import { BookmarksModule } from './bookmarks/bookmarks.module';
 import { PostLikesModule } from './post-likes/post-likes.module';
 import { MediaModule } from './media/media.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { MediaModule } from './media/media.module';
     BookmarksModule,
     PostLikesModule,
     MediaModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],
