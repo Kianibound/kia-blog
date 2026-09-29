@@ -24,4 +24,9 @@ export class AdminController {
   updateUserRole(@Param('id') id: string, @Body() dto: UpdateUserRoleDto) {
     return this.usersService.updateRole(id, dto.role);
   }
+
+  @Get('users/:id')
+  findUserById(@Param('id') id: string) {
+    return this.usersService.findById(id);
+  }
 }
