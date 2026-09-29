@@ -7,12 +7,14 @@ import { PrismaService } from '../../database/prisma.service';
 import { hashToken } from '../utils/hash-token.util';
 import type { ForgotPasswordDto } from '../dto/forgot-password.dto';
 import type { ResetPasswordDto } from '../dto/reset-password.dto';
+import { MailService } from '../../mail/mail.service';
 
 @Injectable()
 export class PasswordResetService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly mailService: MailService,
   ) {}
 
   private async createPasswordResetToken(userId: string) {
@@ -56,6 +58,10 @@ export class PasswordResetService {
     const resetUrl =
       `${this.configService.getOrThrow<string>('APP_URL')}` +
       `/auth/reset-password?token=${resetToken}`;
+
+    if (this.configService.get<string>('EMAIL_ENABLED') === 'true') {
+      await this.mailService.sendPasswordReset(user.email, resetUrl);
+    }
 
     return {
       message:

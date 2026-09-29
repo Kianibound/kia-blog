@@ -34,4 +34,23 @@ export class MailService {
       );
     }
   }
+
+  async sendPasswordReset(email: string, resetUrl: string): Promise<void> {
+    const { error } = await this.resend.emails.send({
+      from: this.configService.getOrThrow<string>('EMAIL_FROM'),
+      to: email,
+      subject: 'Reset your password',
+      html: `
+      <p>You requested a password reset for Kia Blog.</p>
+      <p>Use the link below to reset your password:</p>
+      <p><a href="${resetUrl}">Reset password</a></p>
+    `,
+    });
+
+    if (error) {
+      throw new InternalServerErrorException(
+        'Failed to send password reset email.',
+      );
+    }
+  }
 }
