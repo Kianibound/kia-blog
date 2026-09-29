@@ -9,6 +9,7 @@ import {
 import { ROLE } from '../roles/constants/role.constants';
 import type { RoleName } from '../roles/constants/role.constants';
 import type { UpdateCommentDto } from './dto/update-comment.dto';
+import { PostStatus } from '../../generated/prisma/client';
 
 @Injectable()
 export class CommentsService {
@@ -16,9 +17,10 @@ export class CommentsService {
 
   async create(postId: string, authorId: string, dto: CreateCommentDto) {
     // Make sure the target post exists
-    const post = await this.prisma.post.findUnique({
+    const post = await this.prisma.post.findFirst({
       where: {
         id: postId,
+        status: PostStatus.PUBLISHED,
       },
       select: {
         id: true,
@@ -52,9 +54,10 @@ export class CommentsService {
 
   async findByPost(postId: string) {
     // Make sure the target post exists
-    const post = await this.prisma.post.findUnique({
+    const post = await this.prisma.post.findFirst({
       where: {
         id: postId,
+        status: PostStatus.PUBLISHED,
       },
       select: {
         id: true,
@@ -110,9 +113,12 @@ export class CommentsService {
     dto: CreateCommentDto,
   ) {
     // Make sure the parent comment exists
-    const parentComment = await this.prisma.comment.findUnique({
+    const parentComment = await this.prisma.comment.findFirst({
       where: {
         id: parentCommentId,
+        post: {
+          status: PostStatus.PUBLISHED,
+        },
       },
       select: {
         id: true,

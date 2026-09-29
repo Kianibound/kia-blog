@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-
+import { PostStatus } from '../../generated/prisma/client';
 import { PrismaService } from '../database/prisma.service';
 
 @Injectable()
@@ -8,15 +8,15 @@ export class BookmarksService {
 
   async create(userId: string, postId: string) {
     // Make sure the target post exists
-    const post = await this.prisma.post.findUnique({
+    const post = await this.prisma.post.findFirst({
       where: {
         id: postId,
+        status: PostStatus.PUBLISHED,
       },
       select: {
         id: true,
       },
     });
-
     if (!post) {
       throw new NotFoundException('Post not found.');
     }
