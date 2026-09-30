@@ -1,0 +1,1 @@
+{"version":3,"file":"role.constants.js","sourceRoot":"","sources":["role.constants.ts"],"names":[],"mappings":";;;AASA,gCAEC;AAXY,QAAA,IAAI,GAAG;IAClB,IAAI,EAAE,MAAM;IACZ,MAAM,EAAE,QAAQ;IAChB,KAAK,EAAE,OAAO;CACN,CAAC;AAKX,SAAgB,UAAU,CAAC,KAAa;IACtC,OAAO,MAAM,CAAC,MAAM,CAAC,YAAI,CAAC,CAAC,QAAQ,CAAC,KAAiB,CAAC,CAAC;AACzD,CAAC"}
