@@ -2,7 +2,7 @@ import { PrismaService } from '../database/prisma.service';
 import type { CreatePostDto } from './dto/create-post.dto';
 import type { RoleName } from '../roles/constants/role.constants';
 import type { UpdatePostDto } from './dto/update-post.dto';
-import { PostStatus } from '../../generated/prisma/client';
+import { PostStatus } from '../generated/prisma/client';
 export declare class PostsService {
     private readonly prisma;
     constructor(prisma: PrismaService);
@@ -26,9 +26,9 @@ export declare class PostsService {
         createdAt: Date;
         updatedAt: Date;
         title: string;
-        slug: string;
         content: string;
         status: PostStatus;
+        slug: string;
         publishedAt: Date | null;
         authorId: string;
     }>;
@@ -55,9 +55,9 @@ export declare class PostsService {
             createdAt: Date;
             updatedAt: Date;
             title: string;
-            slug: string;
             content: string;
             status: PostStatus;
+            slug: string;
             publishedAt: Date | null;
             authorId: string;
         })[];
@@ -90,9 +90,9 @@ export declare class PostsService {
         createdAt: Date;
         updatedAt: Date;
         title: string;
-        slug: string;
         content: string;
         status: PostStatus;
+        slug: string;
         publishedAt: Date | null;
         authorId: string;
     }>;
@@ -102,9 +102,9 @@ export declare class PostsService {
             createdAt: Date;
             updatedAt: Date;
             title: string;
-            slug: string;
             content: string;
             status: PostStatus;
+            slug: string;
             publishedAt: Date | null;
             authorId: string;
         }[];
@@ -127,9 +127,9 @@ export declare class PostsService {
         createdAt: Date;
         updatedAt: Date;
         title: string;
-        slug: string;
         content: string;
         status: PostStatus;
+        slug: string;
         publishedAt: Date | null;
         authorId: string;
     }>;
@@ -155,9 +155,9 @@ export declare class PostsService {
         createdAt: Date;
         updatedAt: Date;
         title: string;
-        slug: string;
         content: string;
         status: PostStatus;
+        slug: string;
         publishedAt: Date | null;
         authorId: string;
     }>;
@@ -181,9 +181,9 @@ export declare class PostsService {
         createdAt: Date;
         updatedAt: Date;
         title: string;
-        slug: string;
         content: string;
         status: PostStatus;
+        slug: string;
         publishedAt: Date | null;
         authorId: string;
     }>;

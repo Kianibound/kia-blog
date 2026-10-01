@@ -7,7 +7,7 @@ import {
   IsUUID,
 } from 'class-validator';
 
-import { PostStatus } from '../../../generated/prisma/client';
+import { PostStatus } from '../../generated/prisma/client';
 
 export class UpdatePostDto {
   @IsOptional()

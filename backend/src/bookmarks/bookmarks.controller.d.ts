@@ -39,9 +39,9 @@ export declare class BookmarksController {
             createdAt: Date;
             updatedAt: Date;
             title: string;
-            slug: string;
             content: string;
-            status: import("../../generated/prisma/enums").PostStatus;
+            status: import("../generated/prisma/enums").PostStatus;
+            slug: string;
             publishedAt: Date | null;
             authorId: string;
         };

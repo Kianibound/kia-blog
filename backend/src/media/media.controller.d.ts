@@ -4,6 +4,7 @@ export declare class MediaController {
     private readonly mediaService;
     constructor(mediaService: MediaService);
     uploadImage(user: AccessTokenPayload, file: Express.Multer.File): Promise<{
+        bytes: number;
         id: string;
         createdAt: Date;
         updatedAt: Date;
@@ -11,7 +12,6 @@ export declare class MediaController {
         publicId: string;
         resourceType: string;
         format: string;
-        bytes: number;
         width: number | null;
         height: number | null;
         ownerId: string;
@@ -20,6 +20,9 @@ export declare class MediaController {
         message: string;
     }>;
     updateAvatar(user: AccessTokenPayload, file: Express.Multer.File): Promise<{
+        role: {
+            name: string;
+        } | null;
         id: string;
         email: string;
         username: string;
@@ -27,8 +30,5 @@ export declare class MediaController {
         avatarUrl: string | null;
         createdAt: Date;
         updatedAt: Date;
-        role: {
-            name: string;
-        } | null;
     }>;
 }

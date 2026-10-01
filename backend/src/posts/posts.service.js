@@ -17,7 +17,7 @@ const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../database/prisma.service");
 const role_constants_1 = require("../roles/constants/role.constants");
 const slugify_1 = __importDefault(require("slugify"));
-const client_1 = require("../../generated/prisma/client");
+const client_1 = require("../generated/prisma/client");
 let PostsService = class PostsService {
     prisma;
     constructor(prisma) {

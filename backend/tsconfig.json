@@ -13,7 +13,6 @@
     "target": "ES2023",
     "types": ["node", "jest"],
     "sourceMap": true,
-    "rootDir": ".",
     "incremental": true,
     "skipLibCheck": true,
     "strict": true,

@@ -1,4 +1,4 @@
-import { PostStatus } from '../../generated/prisma/client';
+import { PostStatus } from '../generated/prisma/client';
 import { PrismaService } from '../database/prisma.service';
 export declare class BookmarksService {
     private readonly prisma;
@@ -39,9 +39,9 @@ export declare class BookmarksService {
             createdAt: Date;
             updatedAt: Date;
             title: string;
-            slug: string;
             content: string;
             status: PostStatus;
+            slug: string;
             publishedAt: Date | null;
             authorId: string;
         };

@@ -8,8 +8,8 @@ export declare class SessionService {
         id: string;
         createdAt: Date;
         tokenHash: string;
-        userId: string;
         expiresAt: Date;
+        userId: string;
         revokedAt: Date | null;
     }>;
     logoutAll(userId: string): Promise<{

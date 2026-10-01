@@ -6,6 +6,7 @@ export declare class MediaService {
     private readonly cloudinaryService;
     constructor(prisma: PrismaService, cloudinaryService: CloudinaryService);
     uploadImage(ownerId: string, file: Express.Multer.File): Promise<{
+        bytes: number;
         id: string;
         createdAt: Date;
         updatedAt: Date;
@@ -13,7 +14,6 @@ export declare class MediaService {
         publicId: string;
         resourceType: string;
         format: string;
-        bytes: number;
         width: number | null;
         height: number | null;
         ownerId: string;
@@ -22,6 +22,9 @@ export declare class MediaService {
         message: string;
     }>;
     updateAvatar(userId: string, file: Express.Multer.File): Promise<{
+        role: {
+            name: string;
+        } | null;
         id: string;
         email: string;
         username: string;
@@ -29,8 +32,5 @@ export declare class MediaService {
         avatarUrl: string | null;
         createdAt: Date;
         updatedAt: Date;
-        role: {
-            name: string;
-        } | null;
     }>;
 }

@@ -11,7 +11,7 @@ import { ROLE } from '../roles/constants/role.constants';
 import type { RoleName } from '../roles/constants/role.constants';
 import type { UpdatePostDto } from './dto/update-post.dto';
 import slugify from 'slugify';
-import { PostStatus } from '../../generated/prisma/client';
+import { PostStatus } from '../generated/prisma/client';
 
 @Injectable()
 export class PostsService {

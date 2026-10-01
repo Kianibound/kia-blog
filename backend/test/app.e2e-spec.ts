@@ -5,7 +5,7 @@ import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaExceptionFilter } from '../src/common/filters/prisma-exception.filter';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '../generated/prisma/client';
+import { PrismaClient } from '../src/generated/prisma/client';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;

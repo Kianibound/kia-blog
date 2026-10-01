@@ -9,7 +9,7 @@ import {
 import { ROLE } from '../roles/constants/role.constants';
 import type { RoleName } from '../roles/constants/role.constants';
 import type { UpdateCommentDto } from './dto/update-comment.dto';
-import { PostStatus } from '../../generated/prisma/client';
+import { PostStatus } from '../generated/prisma/client';
 
 @Injectable()
 export class CommentsService {

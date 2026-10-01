@@ -13,7 +13,7 @@ exports.CommentsService = void 0;
 const prisma_service_1 = require("../database/prisma.service");
 const common_1 = require("@nestjs/common");
 const role_constants_1 = require("../roles/constants/role.constants");
-const client_1 = require("../../generated/prisma/client");
+const client_1 = require("../generated/prisma/client");
 let CommentsService = class CommentsService {
     prisma;
     constructor(prisma) {
