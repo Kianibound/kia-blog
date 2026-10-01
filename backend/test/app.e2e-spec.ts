@@ -4,7 +4,8 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaExceptionFilter } from '../src/common/filters/prisma-exception.filter';
-import { PrismaService } from '../src/database/prisma.service';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '../generated/prisma/client';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
@@ -14,7 +15,7 @@ describe('AppController (e2e)', () => {
   let password: string;
   let accessToken: string;
   let refreshToken: string;
-  let prisma: PrismaService;
+  let prisma: PrismaClient;
 
   let authorEmail: string;
   let authorUsername: string;
@@ -47,8 +48,10 @@ describe('AppController (e2e)', () => {
 
   beforeAll(async () => {
     const unique = Date.now();
+
     authorEmail = `author-${unique}@example.com`;
     authorUsername = `author_${unique}`;
+
     otherAuthorEmail = `other-author-${unique}@example.com`;
     otherAuthorUsername = `other_author_${unique}`;
 
@@ -61,7 +64,16 @@ describe('AppController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    prisma = moduleFixture.get(PrismaService);
+
+    const adapter = new PrismaPg({
+      connectionString: process.env.DATABASE_URL!,
+    });
+
+    prisma = new PrismaClient({
+      adapter,
+    });
+
+    await prisma.$connect();
 
     // Keep E2E behavior consistent with the real application
     app.useGlobalFilters(new PrismaExceptionFilter());
@@ -690,6 +702,12 @@ describe('AppController (e2e)', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    if (prisma) {
+      await prisma.$disconnect();
+    }
+
+    if (app) {
+      await app.close();
+    }
   });
 });
