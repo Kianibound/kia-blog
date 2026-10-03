@@ -1,114 +1,467 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Kia Blog Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend API for a blog platform built with **NestJS**, **Prisma**, and **PostgreSQL**.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+The project includes authentication, role-based authorization, posts, categories, tags, comments, likes, bookmarks, media uploads, and basic admin functionality.
 
-## Description
+## Tech Stack
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- NestJS
+- TypeScript
+- PostgreSQL
+- Prisma ORM
+- Neon PostgreSQL for production
+- Vercel for deployment
+- Cloudinary for media storage
+- Resend for email
+- Vitest + Supertest for E2E testing
+- Swagger / OpenAPI for API documentation
 
-## Project setup
+## Main Features
 
-```bash
-$ npm install
+### Authentication
+
+- User registration
+- Login
+- JWT access tokens
+- Refresh tokens
+- Logout
+- Logout from all sessions
+- Email verification
+- Forgot password
+- Reset password
+
+### Authorization
+
+Three application roles are supported:
+
+- `USER`
+- `AUTHOR`
+- `ADMIN`
+
+Examples:
+
+- Users can interact with published posts.
+- Authors can create and manage their own posts.
+- Admins can manage users, roles, categories, and tags.
+
+### Posts
+
+- Create posts
+- Draft and published states
+- Update and delete owned posts
+- Public published post listing
+- Pagination
+- Search
+- Sort by newest or oldest
+- Filter by author
+- Filter by category
+- Filter by tag
+
+### Categories and Tags
+
+- Public listing
+- Admin-only create, update, and delete operations
+
+### Comments
+
+- Comment on published posts
+- Reply to comments
+- Nested replies
+- Update own comments
+- Delete own comments
+- Admin moderation
+
+### Likes
+
+- Like a published post
+- Remove a like
+- Prevent duplicate likes
+- Public like count
+
+### Bookmarks
+
+- Bookmark published posts
+- Remove bookmarks
+- List the authenticated user's bookmarks
+
+### Media
+
+- Image upload
+- Image deletion
+- Avatar upload and replacement
+- JPEG, PNG, and WebP support
+- Maximum upload size: 5 MB
+- Cloudinary storage
+
+## API Documentation
+
+Swagger UI is available at:
+
+```text
+/api
 ```
 
-## Compile and run the project
+Local example:
 
-```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+```text
+http://localhost:3000/api
 ```
 
-## Run tests
+Production:
+
+```text
+https://kia-blog-pi.vercel.app/api
+```
+
+Swagger can also be used to test authenticated endpoints using a JWT access token through the **Authorize** button.
+
+The generated OpenAPI JSON is available at:
+
+```text
+/api-json
+```
+
+## Requirements
+
+Install the following before running the project locally:
+
+- Node.js
+- npm
+- PostgreSQL
+
+## Installation
+
+Clone the repository and enter the backend directory:
 
 ```bash
-# unit tests
-$ npm run test
+git clone https://github.com/Kianibound/kia-blog.git
+cd kia-blog/backend
+```
 
-# e2e tests
-$ npm run test:e2e
+Install dependencies:
 
-# test coverage
-$ npm run test:cov
+```bash
+npm install
+```
+
+## Environment Variables
+
+Create a `.env` file based on `.env.example`.
+
+Example:
+
+```env
+# Application
+NODE_ENV=development
+PORT=3000
+APP_URL=http://localhost:3000
+
+# CORS
+CORS_ORIGINS=http://localhost:3001
+
+# Database
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DATABASE
+DIRECT_URL=postgresql://USER:PASSWORD@HOST:PORT/DATABASE
+
+# JWT
+JWT_ACCESS_SECRET=replace_with_a_strong_secret
+JWT_ACCESS_EXPIRES_IN=3600
+JWT_REFRESH_SECRET=replace_with_another_strong_secret
+
+# Email
+EMAIL_ENABLED=false
+RESEND_API_KEY=replace_with_resend_api_key
+EMAIL_FROM=no-reply@example.com
+
+# Cloudinary
+CLOUDINARY_CLOUD_NAME=replace_with_cloud_name
+CLOUDINARY_API_KEY=replace_with_api_key
+CLOUDINARY_API_SECRET=replace_with_api_secret
+```
+
+Never commit real secrets to Git.
+
+## Database Connections
+
+The project uses two database connection variables:
+
+```text
+DATABASE_URL
+```
+
+Used by the running NestJS application.
+
+In production this should normally use the pooled PostgreSQL connection.
+
+```text
+DIRECT_URL
+```
+
+Used by Prisma CLI operations such as migrations and production seeding.
+
+In production this should use the direct PostgreSQL connection.
+
+For local development, both variables can point to the same local PostgreSQL database.
+
+Example:
+
+```env
+DATABASE_URL=postgresql://postgres:password@localhost:5432/blog_db
+DIRECT_URL=postgresql://postgres:password@localhost:5432/blog_db
+```
+
+## Prisma Setup
+
+Generate the Prisma client:
+
+```bash
+npm run prisma:generate
+```
+
+Run development migrations:
+
+```bash
+npx prisma migrate dev
+```
+
+Seed the development database:
+
+```bash
+npm run prisma:seed
+```
+
+## Development
+
+Start the application in watch mode:
+
+```bash
+npm run start:dev
+```
+
+The API runs by default at:
+
+```text
+http://localhost:3000
+```
+
+Health check:
+
+```text
+GET /health
+```
+
+Example response:
+
+```json
+{
+  "status": "ok",
+  "timestamp": "2026-10-03T10:00:00.000Z"
+}
+```
+
+## Testing
+
+Run E2E tests:
+
+```bash
+npm run test:e2e
+```
+
+The E2E suite covers critical flows including:
+
+- Registration and login
+- JWT authentication
+- Refresh tokens
+- Logout
+- Role-based authorization
+- Posts
+- Ownership rules
+- Comments and replies
+- Likes
+- Bookmarks
+- Media uploads
+- Avatar replacement
+
+### Important
+
+E2E tests create and modify data.
+
+Always run them against a development/local database.
+
+Do **not** run the E2E suite against the production Neon database.
+
+## Build
+
+Build the application:
+
+```bash
+npm run build
+```
+
+Run the compiled production build locally:
+
+```bash
+npm run start:prod
+```
+
+## Database Migration Workflow
+
+### Development
+
+Change the Prisma schema and create a migration using:
+
+```bash
+npx prisma migrate dev --name migration_name
+```
+
+If you only want to create the migration file without applying it:
+
+```bash
+npx prisma migrate dev --name migration_name --create-only
+```
+
+Test the migration locally before deploying it.
+
+### Production
+
+Production migrations should only apply already-created and committed migration files:
+
+```bash
+npm run prisma:migrate:deploy
+```
+
+Avoid using these commands against the production database:
+
+```bash
+npx prisma migrate dev
+npx prisma migrate reset
+npx prisma db push --accept-data-loss
+```
+
+## Production Seeding
+
+Production seeding only creates the required application roles:
+
+```text
+USER
+AUTHOR
+ADMIN
+```
+
+Development-only test posts are not created when:
+
+```env
+NODE_ENV=production
+```
+
+Run the seed using:
+
+```bash
+npm run prisma:seed
 ```
 
 ## Deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+The backend is deployed using:
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+```text
+Vercel
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+Production database:
 
-## Observability
+```text
+Neon PostgreSQL
+```
 
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
+Production API:
 
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
+```text
+https://kia-blog-pi.vercel.app
+```
 
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
+The Vercel project requires the application environment variables to be configured in the Vercel dashboard.
 
-## Resources
+Because the project uses NestJS 12 with its current module setup, Vercel also uses:
 
-Check out a few resources that may come in handy when working with NestJS:
+```env
+NODE_OPTIONS=--experimental-require-module
+```
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observer](https://observer.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+## Production Architecture
 
-## Support
+```text
+Client
+  |
+  v
+Vercel
+  |
+  v
+NestJS API
+  |
+  +--> Neon PostgreSQL
+  |
+  +--> Cloudinary
+  |
+  +--> Resend
+```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## Useful Commands
 
-## Stay in touch
+```bash
+# Development server
+npm run start:dev
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+# Build
+npm run build
 
-## License
+# Production start
+npm run start:prod
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+# Prisma client generation
+npm run prisma:generate
+
+# Development migration
+npx prisma migrate dev
+
+# Production migration
+npm run prisma:migrate:deploy
+
+# Seed
+npm run prisma:seed
+
+# E2E tests
+npm run test:e2e
+
+# Lint
+npm run lint
+
+# Format
+npm run format
+```
+
+## Project Status
+
+The backend MVP currently includes:
+
+- Authentication
+- JWT and refresh tokens
+- Roles and authorization
+- Posts
+- Categories
+- Tags
+- Comments and replies
+- Likes
+- Bookmarks
+- Media and avatars
+- Admin endpoints
+- Security headers
+- CORS
+- Rate limiting
+- Critical E2E tests
+- Swagger API documentation
+- Production deployment
+- Production PostgreSQL database
+
+Features such as social OAuth, following authors, newsletters, and advanced analytics are outside the current MVP scope.
