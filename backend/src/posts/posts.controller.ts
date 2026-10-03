@@ -23,10 +23,37 @@ import type { AccessTokenPayload } from '../auth/types/access-token-payload.type
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
 
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+
+@ApiTags('Posts')
 @Controller('posts')
 export class PostsController {
   constructor(private readonly postsService: PostsService) {}
 
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Create a new post' })
+  @ApiBody({
+    schema: {
+      example: {
+        title: 'My First Post',
+        content: 'This is the post content.',
+        status: 'DRAFT',
+        categoryIds: ['550e8400-e29b-41d4-a716-446655440000'],
+        tagIds: ['550e8400-e29b-41d4-a716-446655440001'],
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Post created successfully.' })
+  @ApiResponse({
+    status: 403,
+    description: 'Only AUTHOR or ADMIN can create posts.',
+  })
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.AUTHOR, ROLE.ADMIN)
@@ -35,6 +62,11 @@ export class PostsController {
     return this.postsService.create(user.sub, dto);
   }
 
+  @ApiOperation({ summary: 'Get published posts with pagination and filters' })
+  @ApiResponse({
+    status: 200,
+    description: 'Published posts returned successfully.',
+  })
   @Get()
   findAll(@Query() query: PaginationQueryDto) {
     return this.postsService.findAll(
@@ -48,6 +80,10 @@ export class PostsController {
     );
   }
 
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get a post by database ID (admin only)' })
+  @ApiResponse({ status: 200, description: 'Post returned successfully.' })
+  @ApiResponse({ status: 403, description: 'Admin access required.' })
   @Get('by-id/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)
@@ -56,6 +92,12 @@ export class PostsController {
     return this.postsService.findById(id);
   }
 
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get posts owned by the current author' })
+  @ApiResponse({
+    status: 200,
+    description: 'Author posts returned successfully.',
+  })
   @Get('mine')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.AUTHOR, ROLE.ADMIN)
@@ -67,6 +109,9 @@ export class PostsController {
     return this.postsService.findMine(user.sub, query.page, query.limit);
   }
 
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get one post owned by the current author' })
+  @ApiResponse({ status: 200, description: 'Post returned successfully.' })
   @Get('mine/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.AUTHOR, ROLE.ADMIN)
@@ -78,11 +123,38 @@ export class PostsController {
     return this.postsService.findMineById(id, user.sub, user.role);
   }
 
+  @ApiOperation({ summary: 'Get a published post by slug' })
+  @ApiResponse({
+    status: 200,
+    description: 'Published post returned successfully.',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Post not found or not publicly available.',
+  })
   @Get(':slug')
   findBySlug(@Param('slug') slug: string) {
     return this.postsService.findBySlug(slug);
   }
 
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Update a post owned by the current author' })
+  @ApiBody({
+    schema: {
+      example: {
+        title: 'Updated Post Title',
+        content: 'Updated content.',
+        status: 'PUBLISHED',
+        categoryIds: ['550e8400-e29b-41d4-a716-446655440000'],
+        tagIds: ['550e8400-e29b-41d4-a716-446655440001'],
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Post updated successfully.' })
+  @ApiResponse({
+    status: 403,
+    description: 'User is not allowed to update this post.',
+  })
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.AUTHOR, ROLE.ADMIN)
@@ -95,6 +167,13 @@ export class PostsController {
     return this.postsService.update(id, user.sub, user.role, dto);
   }
 
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Delete a post owned by the current author' })
+  @ApiResponse({ status: 200, description: 'Post deleted successfully.' })
+  @ApiResponse({
+    status: 403,
+    description: 'User is not allowed to delete this post.',
+  })
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.AUTHOR, ROLE.ADMIN)

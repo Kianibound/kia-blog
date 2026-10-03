@@ -18,15 +18,40 @@ import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+
+@ApiTags('Categories')
 @Controller('categories')
 export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
+  @ApiOperation({ summary: 'Get all categories' })
+  @ApiResponse({
+    status: 200,
+    description: 'Categories returned successfully.',
+  })
   @Get()
   findAll() {
     return this.categoriesService.findAll();
   }
 
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Create a category (admin only)' })
+  @ApiBody({
+    schema: {
+      example: {
+        name: 'Technology',
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Category created successfully.' })
+  @ApiResponse({ status: 403, description: 'Admin access required.' })
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)
@@ -34,6 +59,17 @@ export class CategoriesController {
     return this.categoriesService.create(dto);
   }
 
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Update a category (admin only)' })
+  @ApiBody({
+    schema: {
+      example: {
+        name: 'Software Engineering',
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Category updated successfully.' })
+  @ApiResponse({ status: 403, description: 'Admin access required.' })
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)
@@ -41,6 +77,10 @@ export class CategoriesController {
     return this.categoriesService.update(id, dto);
   }
 
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Delete a category (admin only)' })
+  @ApiResponse({ status: 200, description: 'Category deleted successfully.' })
+  @ApiResponse({ status: 403, description: 'Admin access required.' })
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)
