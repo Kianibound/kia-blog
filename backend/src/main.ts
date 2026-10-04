@@ -8,8 +8,18 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   // Add common security-related HTTP headers
-  app.use(helmet());
-
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          scriptSrc: ["'self'", 'https://cdn.jsdelivr.net'],
+          styleSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
+          imgSrc: ["'self'", 'data:', 'https:'],
+        },
+      },
+    }),
+  );
+  
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Kia Blog API')
     .setDescription('REST API documentation for Kia Blog backend')
