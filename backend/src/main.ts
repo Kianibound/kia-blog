@@ -26,7 +26,15 @@ async function bootstrap() {
 
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
 
-  SwaggerModule.setup('api', app, swaggerDocument);
+  const swaggerCdn = 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.33.0';
+
+  SwaggerModule.setup('api', app, swaggerDocument, {
+    customCssUrl: `${swaggerCdn}/swagger-ui.css`,
+    customJs: [
+      `${swaggerCdn}/swagger-ui-bundle.js`,
+      `${swaggerCdn}/swagger-ui-standalone-preset.js`,
+    ],
+  });
 
   const allowedOrigins = process.env.CORS_ORIGINS?.split(',').map((origin) =>
     origin.trim(),
