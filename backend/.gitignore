@@ -56,3 +56,7 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 
+# Repomix generated context
+repomix-output.md
+
+*.tsbuildinfo

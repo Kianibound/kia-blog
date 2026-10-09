@@ -465,3 +465,7 @@ The backend MVP currently includes:
 - Production PostgreSQL database
 
 Features such as social OAuth, following authors, newsletters, and advanced analytics are outside the current MVP scope.
+
+## Architecture
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for diagrams of the modules, database, auth flow and request lifecycle.

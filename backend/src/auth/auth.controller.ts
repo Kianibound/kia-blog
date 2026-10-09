@@ -5,7 +5,6 @@ import {
   HttpCode,
   Post,
   Query,
-  Req,
   UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
@@ -135,7 +134,6 @@ export class AuthController {
   @HttpCode(200)
   @Post('logout-all')
   @UseGuards(JwtAuthGuard)
-  @UseGuards(JwtAuthGuard)
   logoutAll(@CurrentUser() user: JwtPayload) {
     return this.authService.logoutAll(user.sub);
   }
@@ -199,26 +197,5 @@ export class AuthController {
   })
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
-  }
-
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Test access to an admin-only endpoint' })
-  @ApiResponse({
-    status: 200,
-    description: 'Admin access granted.',
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'User does not have the ADMIN role.',
-  })
-  @Get('admin-test')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
-  adminTest() {
-    return {
-      message: 'Admin access granted.',
-    };
   }
 }
