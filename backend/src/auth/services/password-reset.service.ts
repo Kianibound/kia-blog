@@ -76,55 +76,69 @@ export class PasswordResetService {
     // Hash incoming token for DB lookup
     const tokenHash = hashToken(dto.token);
 
-    const resetToken = await this.prisma.passwordResetToken.findUnique({
-      where: {
-        tokenHash,
-      },
-    });
-
-    // Reject invalid, used, or expired tokens
-    if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
-      throw new UnauthorizedException(
-        'Invalid or expired password reset token.',
-      );
-    }
-
     // Hash the new password
     const passwordHash = await argon2.hash(dto.newPassword);
+    const now = new Date();
 
-    // Update user password
-    await this.prisma.user.update({
-      where: {
-        id: resetToken.userId,
-      },
-      data: {
-        passwordHash,
-      },
+    return this.prisma.$transaction(async (transaction) => {
+      const resetToken = await transaction.passwordResetToken.findUnique({
+        where: {
+          tokenHash,
+        },
+      });
+
+      // Reject invalid, used, or expired tokens before attempting to claim one.
+      if (!resetToken || resetToken.usedAt || resetToken.expiresAt <= now) {
+        throw new UnauthorizedException(
+          'Invalid or expired password reset token.',
+        );
+      }
+
+      // Claim the token with a conditional write so concurrent requests cannot
+      // complete the same one-time workflow twice.
+      const claimedToken = await transaction.passwordResetToken.updateMany({
+        where: {
+          id: resetToken.id,
+          usedAt: null,
+          expiresAt: {
+            gt: now,
+          },
+        },
+        data: {
+          usedAt: now,
+        },
+      });
+
+      if (claimedToken.count !== 1) {
+        throw new UnauthorizedException(
+          'Invalid or expired password reset token.',
+        );
+      }
+
+      // Password replacement, session revocation, and token consumption are
+      // committed together or rolled back together.
+      await transaction.user.update({
+        where: {
+          id: resetToken.userId,
+        },
+        data: {
+          passwordHash,
+        },
+      });
+
+      await transaction.refreshToken.updateMany({
+        where: {
+          userId: resetToken.userId,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: now,
+        },
+      });
+
+      return {
+        message: 'Password reset successfully.',
+      };
     });
-
-    // Revoke all active sessions after password reset
-    await this.prisma.refreshToken.updateMany({
-      where: {
-        userId: resetToken.userId,
-        revokedAt: null,
-      },
-      data: {
-        revokedAt: new Date(),
-      },
-    });
-
-    // Prevent reset token reuse
-    await this.prisma.passwordResetToken.update({
-      where: {
-        id: resetToken.id,
-      },
-      data: {
-        usedAt: new Date(),
-      },
-    });
-
-    return {
-      message: 'Password reset successfully.',
-    };
   }
 }

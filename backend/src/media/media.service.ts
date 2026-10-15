@@ -1,6 +1,7 @@
 import {
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 
@@ -10,6 +11,8 @@ import { ROLE, RoleName } from '../roles/constants/role.constants';
 
 @Injectable()
 export class MediaService {
+  private readonly logger = new Logger(MediaService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cloudinaryService: CloudinaryService,
@@ -19,19 +22,19 @@ export class MediaService {
     // Upload the actual file to Cloudinary
     const uploaded = await this.cloudinaryService.uploadImage(file);
 
-    // Store only metadata and the remote URL in our database
-    return this.prisma.media.create({
-      data: {
-        ownerId,
-        url: uploaded.secure_url,
-        publicId: uploaded.public_id,
-        resourceType: uploaded.resource_type,
-        format: uploaded.format,
-        bytes: uploaded.bytes,
-        width: uploaded.width ?? null,
-        height: uploaded.height ?? null,
-      },
-    });
+    try {
+      // Store only metadata and the remote URL in our database.
+      return await this.prisma.media.create({
+        data: this.toMediaData(ownerId, uploaded),
+      });
+    } catch (error) {
+      // The upload already happened, so compensate if persistence fails.
+      await this.deleteRemoteImageBestEffort(
+        uploaded.public_id,
+        'rolling back an image whose database record could not be created',
+      );
+      throw error;
+    }
   }
 
   async remove(
@@ -61,7 +64,8 @@ export class MediaService {
       );
     }
 
-    // Delete the actual image from Cloudinary first
+    // Delete Cloudinary first. If the database delete fails, retrying this
+    // operation is safe because remote deletion is idempotent.
     await this.cloudinaryService.deleteImage(media.publicId);
 
     // Remove its metadata from our database
@@ -97,45 +101,101 @@ export class MediaService {
       throw new NotFoundException('User not found.');
     }
 
-    // Upload the new avatar and create its Media record
-    const newMedia = await this.uploadImage(userId, file);
+    const uploaded = await this.cloudinaryService.uploadImage(file);
 
-    // Make the new media the active avatar
-    const updatedUser = await this.prisma.user.update({
-      where: {
-        id: userId,
-      },
-      data: {
-        avatarMediaId: newMedia.id,
-        avatarUrl: newMedia.url,
-      },
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        name: true,
-        avatarUrl: true,
-        createdAt: true,
-        updatedAt: true,
-        role: {
-          select: {
-            name: true,
+    let updatedUser;
+
+    try {
+      // Creating Media and activating it as the Avatar are one database
+      // workflow. A failure rolls both writes back.
+      updatedUser = await this.prisma.$transaction(async (transaction) => {
+        const newMedia = await transaction.media.create({
+          data: this.toMediaData(userId, uploaded),
+        });
+
+        return transaction.user.update({
+          where: {
+            id: userId,
           },
-        },
-      },
-    });
-
-    // Delete the previous avatar after the new one is active
-    if (user.avatarMedia) {
-      await this.cloudinaryService.deleteImage(user.avatarMedia.publicId);
-
-      await this.prisma.media.delete({
-        where: {
-          id: user.avatarMedia.id,
-        },
+          data: {
+            avatarMediaId: newMedia.id,
+            avatarUrl: newMedia.url,
+          },
+          select: {
+            id: true,
+            email: true,
+            username: true,
+            name: true,
+            avatarUrl: true,
+            createdAt: true,
+            updatedAt: true,
+            role: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        });
       });
+    } catch (error) {
+      // Roll back the external side effect when the database transaction fails.
+      await this.deleteRemoteImageBestEffort(
+        uploaded.public_id,
+        'rolling back an avatar whose database transaction failed',
+      );
+      throw error;
+    }
+
+    // The new Avatar is already committed. Cleanup is deliberately best-effort
+    // so a remote failure does not turn a successful replacement into a false
+    // error response. Keeping the old row makes cleanup safely retryable.
+    if (user.avatarMedia) {
+      try {
+        await this.cloudinaryService.deleteImage(user.avatarMedia.publicId);
+
+        await this.prisma.media.delete({
+          where: {
+            id: user.avatarMedia.id,
+          },
+        });
+      } catch (error) {
+        this.logger.error(
+          `Failed to clean up previous avatar ${user.avatarMedia.id}.`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      }
     }
 
     return updatedUser;
+  }
+
+  private toMediaData(
+    ownerId: string,
+    uploaded: Awaited<ReturnType<CloudinaryService['uploadImage']>>,
+  ) {
+    return {
+      ownerId,
+      url: uploaded.secure_url,
+      publicId: uploaded.public_id,
+      resourceType: uploaded.resource_type,
+      format: uploaded.format,
+      bytes: uploaded.bytes,
+      width: uploaded.width ?? null,
+      height: uploaded.height ?? null,
+    };
+  }
+
+  private async deleteRemoteImageBestEffort(
+    publicId: string,
+    context: string,
+  ): Promise<void> {
+    try {
+      await this.cloudinaryService.deleteImage(publicId);
+    } catch (error) {
+      this.logger.error(
+        `Failed to delete Cloudinary image ${publicId} while ${context}.`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
   }
 }

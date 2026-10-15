@@ -49,44 +49,61 @@ export class EmailVerificationService {
     // Hash incoming raw token for DB lookup
     const tokenHash = this.hashToken(rawToken);
 
-    const verificationToken =
-      await this.prisma.emailVerificationToken.findUnique({
+    const now = new Date();
+
+    return this.prisma.$transaction(async (transaction) => {
+      const verificationToken =
+        await transaction.emailVerificationToken.findUnique({
+          where: {
+            tokenHash,
+          },
+        });
+
+      // Reject invalid, used, or expired tokens before attempting to claim one.
+      if (
+        !verificationToken ||
+        verificationToken.usedAt ||
+        verificationToken.expiresAt <= now
+      ) {
+        throw new UnauthorizedException(
+          'Invalid or expired verification token.',
+        );
+      }
+
+      // Claim the token with a conditional write. If two requests race, only
+      // one can change usedAt from null and continue the workflow.
+      const claimedToken = await transaction.emailVerificationToken.updateMany({
         where: {
-          tokenHash,
+          id: verificationToken.id,
+          usedAt: null,
+          expiresAt: {
+            gt: now,
+          },
+        },
+        data: {
+          usedAt: now,
         },
       });
 
-    // Reject invalid, used, or expired tokens
-    if (
-      !verificationToken ||
-      verificationToken.usedAt ||
-      verificationToken.expiresAt < new Date()
-    ) {
-      throw new UnauthorizedException('Invalid or expired verification token.');
-    }
+      if (claimedToken.count !== 1) {
+        throw new UnauthorizedException(
+          'Invalid or expired verification token.',
+        );
+      }
 
-    // Mark user's email as verified
-    await this.prisma.user.update({
-      where: {
-        id: verificationToken.userId,
-      },
-      data: {
-        emailVerified: true,
-      },
+      // The user update and token claim commit or roll back together.
+      await transaction.user.update({
+        where: {
+          id: verificationToken.userId,
+        },
+        data: {
+          emailVerified: true,
+        },
+      });
+
+      return {
+        message: 'Email verified successfully.',
+      };
     });
-
-    // Prevent this token from being reused
-    await this.prisma.emailVerificationToken.update({
-      where: {
-        id: verificationToken.id,
-      },
-      data: {
-        usedAt: new Date(),
-      },
-    });
-
-    return {
-      message: 'Email verified successfully.',
-    };
   }
 }
