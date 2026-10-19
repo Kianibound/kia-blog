@@ -1,16 +1,8 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import type { CommentsService } from './comments.service';
 import { CommentsController } from './comments.controller';
 
 describe('CommentsController', () => {
-  let controller: CommentsController;
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [CommentsController],
-    }).compile();
-
-    controller = module.get<CommentsController>(CommentsController);
-  });
+  const controller = new CommentsController({} as CommentsService);
 
   it('should be defined', () => {
     expect(controller).toBeDefined();

@@ -1,16 +1,8 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import type { PostLikesService } from './post-likes.service';
 import { PostLikesController } from './post-likes.controller';
 
 describe('PostLikesController', () => {
-  let controller: PostLikesController;
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [PostLikesController],
-    }).compile();
-
-    controller = module.get<PostLikesController>(PostLikesController);
-  });
+  const controller = new PostLikesController({} as PostLikesService);
 
   it('should be defined', () => {
     expect(controller).toBeDefined();

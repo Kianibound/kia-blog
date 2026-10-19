@@ -1,16 +1,8 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import type { BookmarksService } from './bookmarks.service';
 import { BookmarksController } from './bookmarks.controller';
 
 describe('BookmarksController', () => {
-  let controller: BookmarksController;
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [BookmarksController],
-    }).compile();
-
-    controller = module.get<BookmarksController>(BookmarksController);
-  });
+  const controller = new BookmarksController({} as BookmarksService);
 
   it('should be defined', () => {
     expect(controller).toBeDefined();

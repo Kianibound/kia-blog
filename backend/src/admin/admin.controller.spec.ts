@@ -1,16 +1,8 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import type { UsersService } from '../users/users.service';
 import { AdminController } from './admin.controller';
 
 describe('AdminController', () => {
-  let controller: AdminController;
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [AdminController],
-    }).compile();
-
-    controller = module.get<AdminController>(AdminController);
-  });
+  const controller = new AdminController({} as UsersService);
 
   it('should be defined', () => {
     expect(controller).toBeDefined();

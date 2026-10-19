@@ -1,16 +1,8 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import type { MediaService } from './media.service';
 import { MediaController } from './media.controller';
 
 describe('MediaController', () => {
-  let controller: MediaController;
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [MediaController],
-    }).compile();
-
-    controller = module.get<MediaController>(MediaController);
-  });
+  const controller = new MediaController({} as MediaService);
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
