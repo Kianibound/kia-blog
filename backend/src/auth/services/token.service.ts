@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import type { JwtPayload } from '../types/jwt-payload.type';
-import { AccessTokenPayload } from '../types/access-token-payload.type';
+import type { AccessTokenPayload } from '../../access-control/types/access-token-payload.type';
 import { RefreshTokenPayload } from '../types/refresh-token-payload.type';
 
 @Injectable()

@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { CategoriesController } from './categories.controller';
 import { CategoriesService } from './categories.service';
-import { AuthModule } from '../auth/auth.module';
+import { AccessControlModule } from '../access-control/access-control.module';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AccessControlModule],
   controllers: [CategoriesController],
   providers: [CategoriesService],
 })

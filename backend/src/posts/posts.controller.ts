@@ -12,13 +12,13 @@ import {
 import { PaginationQueryDto } from './dto/pagination-query.dto';
 
 import { UpdatePostDto } from './dto/update-post.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { JwtAuthGuard } from '../access-control/guards/jwt-auth.guard';
+import { RolesGuard } from '../access-control/guards/roles.guard';
+import { CurrentUser } from '../access-control/decorators/current-user.decorator';
+import { Roles } from '../access-control/decorators/roles.decorator';
 
 import { ROLE } from '../roles/constants/role.constants';
-import type { AccessTokenPayload } from '../auth/types/access-token-payload.type';
+import type { AccessTokenPayload } from '../access-control/types/access-token-payload.type';
 
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';

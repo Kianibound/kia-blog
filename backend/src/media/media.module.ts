@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 
-import { AuthModule } from '../auth/auth.module';
+import { AccessControlModule } from '../access-control/access-control.module';
 import { CloudinaryService } from './cloudinary.service';
 import { MediaController } from './media.controller';
 import { MediaService } from './media.service';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AccessControlModule],
   controllers: [MediaController],
   providers: [MediaService, CloudinaryService],
   exports: [MediaService],

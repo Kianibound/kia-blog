@@ -12,14 +12,14 @@ async function bootstrap() {
     helmet({
       contentSecurityPolicy: {
         directives: {
-          scriptSrc: ["'self'", 'https://cdn.jsdelivr.net'],
-          styleSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
           imgSrc: ["'self'", 'data:', 'https:'],
         },
       },
     }),
   );
-  
+
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Kia Blog API')
     .setDescription('REST API documentation for Kia Blog backend')
@@ -35,16 +35,7 @@ async function bootstrap() {
     .build();
 
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
-
-  const swaggerCdn = 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.33.0';
-
-  SwaggerModule.setup('api', app, swaggerDocument, {
-    customCssUrl: `${swaggerCdn}/swagger-ui.css`,
-    customJs: [
-      `${swaggerCdn}/swagger-ui-bundle.js`,
-      `${swaggerCdn}/swagger-ui-standalone-preset.js`,
-    ],
-  });
+  SwaggerModule.setup('api', app, swaggerDocument);
 
   const allowedOrigins = process.env.CORS_ORIGINS?.split(',').map((origin) =>
     origin.trim(),

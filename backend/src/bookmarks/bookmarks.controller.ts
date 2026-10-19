@@ -7,9 +7,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import type { AccessTokenPayload } from '../auth/types/access-token-payload.type';
+import { CurrentUser } from '../access-control/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../access-control/guards/jwt-auth.guard';
+import type { AccessTokenPayload } from '../access-control/types/access-token-payload.type';
 import { BookmarksService } from './bookmarks.service';
 
 import {

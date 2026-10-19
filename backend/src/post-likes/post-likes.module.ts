@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
 
-import { AuthModule } from '../auth/auth.module';
+import { AccessControlModule } from '../access-control/access-control.module';
 import { PostLikesController } from './post-likes.controller';
 import { PostLikesService } from './post-likes.service';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AccessControlModule],
   controllers: [PostLikesController],
   providers: [PostLikesService],
 })

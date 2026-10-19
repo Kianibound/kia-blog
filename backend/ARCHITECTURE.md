@@ -8,7 +8,7 @@ A visual map of the backend. All diagrams are [Mermaid](https://mermaid.js.org/)
 
 ## 1. Big picture: modules and external services
 
-Every feature is its own NestJS module. Feature modules import `AuthModule` only to reuse the guards (`JwtAuthGuard`, `RolesGuard`). `DatabaseModule` is `@Global()`, so `PrismaService` is injectable everywhere without being imported.
+Every feature is its own NestJS module. Protected feature modules import the focused `AccessControlModule`, which owns access-token verification and role enforcement. Authentication workflows remain in `AuthModule`. `DatabaseModule` is `@Global()`, so `PrismaService` is injectable everywhere without being imported.
 
 ```mermaid
 flowchart LR
@@ -21,6 +21,7 @@ flowchart LR
         DB["DatabaseModule (global)<br/>PrismaService"]
 
         subgraph Identity["Identity"]
+            Access["AccessControlModule<br/>access JWT + guards"]
             Auth["AuthModule"]
             Users["UsersModule"]
             Roles["RolesModule"]
@@ -48,24 +49,25 @@ flowchart LR
     Auth --> Users
     Auth --> Roles
     Auth --> Mail
+    Auth --> Access
     Users --> Roles
-    Admin --> Auth
+    Admin --> Access
     Admin --> Users
 
-    Posts -.->|guards| Auth
-    Categories -.->|guards| Auth
-    Tags -.->|guards| Auth
-    Comments -.->|guards| Auth
-    Likes -.->|guards| Auth
-    Bookmarks -.->|guards| Auth
-    Media -.->|guards| Auth
+    Posts -.->|access control| Access
+    Categories -.->|access control| Access
+    Tags -.->|access control| Access
+    Comments -.->|access control| Access
+    Likes -.->|access control| Access
+    Bookmarks -.->|access control| Access
+    Media -.->|access control| Access
 
     DB --> Neon
     Media --> Cloudinary
     Mail --> Resend
 ```
 
-Solid arrows = real business dependency. Dotted arrows = "imports AuthModule just for the guards".
+Solid arrows = workflow dependency. Dotted arrows = protected feature modules consuming the focused access-control seam.
 
 ---
 
@@ -127,6 +129,7 @@ erDiagram
 ```
 
 Notes:
+
 - `POST_LIKE` and `BOOKMARK` have a composite unique on `(userId, postId)`, so a user can like or bookmark a post only once.
 - Deleting a `USER` cascades to their posts, comments, tokens, likes, bookmarks and media. Deleting a `COMMENT` cascades to its replies.
 - Token tables store a **hash** of the token, never the raw value.
@@ -143,6 +146,7 @@ flowchart TB
 
     AS --> US["UsersService"]
     AS --> TS["TokenService<br/>sign / verify JWT"]
+    AC -. protected routes .-> ACX["AccessControlModule<br/>verify access JWT / roles"]
     AS --> SS["SessionService<br/>refresh tokens"]
     AS --> EV["EmailVerificationService"]
     AS --> PR["PasswordResetService"]
@@ -189,18 +193,18 @@ flowchart LR
 
 ## 5. Endpoint map by access level
 
-| Area | Public | Logged in | AUTHOR / ADMIN | ADMIN only |
-|---|---|---|---|---|
-| **Auth** `/auth` | register, login, refresh, logout, verify-email, forgot-password, reset-password | me, logout-all | | |
-| **Posts** `/posts` | list, get by slug | | create, mine, mine/:id, update, delete | by-id/:id |
-| **Categories** `/categories` | list | | | create, update, delete |
-| **Tags** `/tags` | list | | | create, update, delete |
-| **Comments** | list on post | create, reply, edit, delete | | |
-| **Likes** | count on post | like, unlike | | |
-| **Bookmarks** | | bookmark, unbookmark, list mine | | |
-| **Media** `/media` | | upload image, delete, set avatar | | |
-| **Admin** `/admin` | | | | list users, get user, change role |
-| **App** | `/`, `/health` | | | |
+| Area                         | Public                                                                          | Logged in                        | AUTHOR / ADMIN                         | ADMIN only                        |
+| ---------------------------- | ------------------------------------------------------------------------------- | -------------------------------- | -------------------------------------- | --------------------------------- |
+| **Auth** `/auth`             | register, login, refresh, logout, verify-email, forgot-password, reset-password | me, logout-all                   |                                        |                                   |
+| **Posts** `/posts`           | list, get by slug                                                               |                                  | create, mine, mine/:id, update, delete | by-id/:id                         |
+| **Categories** `/categories` | list                                                                            |                                  |                                        | create, update, delete            |
+| **Tags** `/tags`             | list                                                                            |                                  |                                        | create, update, delete            |
+| **Comments**                 | list on post                                                                    | create, reply, edit, delete      |                                        |                                   |
+| **Likes**                    | count on post                                                                   | like, unlike                     |                                        |                                   |
+| **Bookmarks**                |                                                                                 | bookmark, unbookmark, list mine  |                                        |                                   |
+| **Media** `/media`           |                                                                                 | upload image, delete, set avatar |                                        |                                   |
+| **Admin** `/admin`           |                                                                                 |                                  |                                        | list users, get user, change role |
+| **App**                      | `/`, `/health`                                                                  |                                  |                                        |                                   |
 
 Roles: `USER`, `AUTHOR`, `ADMIN`.
 
@@ -217,7 +221,8 @@ backend/
 │   ├── app.module.ts       root module, global throttler guard
 │   ├── database/           PrismaService (global)
 │   ├── common/filters/     PrismaExceptionFilter
-│   ├── auth/               controller, service, guards, decorators, token/session/email services
+│   ├── access-control/     access JWT config, guards, decorators, request identity types
+│   ├── auth/               authentication controller and token/session/email workflows
 │   ├── users/ roles/ admin/ mail/
 │   ├── posts/ categories/ tags/ comments/ post-likes/ bookmarks/ media/
 │   └── generated/prisma/   auto-generated client (do not edit)

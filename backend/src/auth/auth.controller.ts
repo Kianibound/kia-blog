@@ -10,14 +10,12 @@ import {
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { CurrentUser } from './decorators/current-user.decorator';
-import type { JwtPayload } from './types/jwt-payload.type';
+import { JwtAuthGuard } from '../access-control/guards/jwt-auth.guard';
+import { CurrentUser } from '../access-control/decorators/current-user.decorator';
+import type { AccessTokenPayload } from '../access-control/types/access-token-payload.type';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
-import { RolesGuard } from './guards/roles.guard';
-import { Roles } from './decorators/roles.decorator';
 import { Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
@@ -85,7 +83,7 @@ export class AuthController {
   })
   @Get('me')
   @UseGuards(JwtAuthGuard)
-  me(@CurrentUser() user: JwtPayload) {
+  me(@CurrentUser() user: AccessTokenPayload) {
     return this.authService.getMe(user.sub);
   }
 
@@ -134,7 +132,7 @@ export class AuthController {
   @HttpCode(200)
   @Post('logout-all')
   @UseGuards(JwtAuthGuard)
-  logoutAll(@CurrentUser() user: JwtPayload) {
+  logoutAll(@CurrentUser() user: AccessTokenPayload) {
     return this.authService.logoutAll(user.sub);
   }
 
