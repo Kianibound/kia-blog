@@ -250,3 +250,29 @@ The isolated HTTP contract suite imports the real Posts module and exercises its
 wiring, guards, and validation without connecting to PostgreSQL or Cloudinary.
 This is an organization refactor, not a concurrency fix: slug collision checking
 still has a check/insert race, and pagination still uses separate read/count queries.
+
+## Published Post visibility
+
+`PublishedPostsModule` owns the shared visibility seam. Its `PublishedPosts`
+interface provides a fresh `where()` predicate for reads and relational filters,
+and `requireById()` for existence/eligibility checks with a consistent 404. The
+existing Prisma adapter stays behind this module; no new repository abstraction
+is introduced. The module imports only `DatabaseModule`, not authentication or
+the Posts workflow module.
+
+Posts, Comments, Bookmarks, and Post Likes explicitly import this module. Public
+feed/detail reads, comment creation/listing/replies, like creation/counts, and
+bookmark creation/listing use the same rule. This gives visibility changes
+locality and gives consumers leverage without coupling them to Posts workflows.
+Replies retain one relational lookup and the existing parent-not-found error.
+
+Intentional behavior fix: a saved Bookmark no longer exposes Post content after
+that Post becomes DRAFT or DEPRECATED. The Bookmark itself is retained, so it can
+be removed or become visible again on republication. Private owner/admin Post
+reads and removal of existing interactions keep their existing behavior.
+
+The shared interface adds depth by concentrating eligibility, query construction,
+minimal existence lookup, and errors in one place. Tests import the real feature
+modules and replace persistence, exercising published/unpublished/missing Posts
+and ensuring rejected operations never reach interaction reads/writes. This does
+not make eligibility-check/write sequences atomic against concurrent unpublishing.

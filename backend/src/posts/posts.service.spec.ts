@@ -6,6 +6,7 @@ import { PostStatus } from '../generated/prisma/client';
 import { ROLE } from '../roles/constants/role.constants';
 import { PostsService } from './posts.service';
 import { PostsModule } from './posts.module';
+import { PublishedPosts } from '../published-posts/published-posts';
 
 // Tests cross the public Posts interface so internal refactors need no rewrites.
 describe('Posts behavior', () => {
@@ -36,6 +37,7 @@ describe('Posts behavior', () => {
     const module = await Test.createTestingModule({
       providers: [
         ...Reflect.getMetadata('providers', PostsModule),
+        PublishedPosts,
         { provide: PrismaService, useValue: { post: repository } },
       ],
     }).compile();

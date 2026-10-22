@@ -9,27 +9,17 @@ import {
 import { ROLE } from '../roles/constants/role.constants';
 import type { RoleName } from '../roles/constants/role.constants';
 import type { UpdateCommentDto } from './dto/update-comment.dto';
-import { PostStatus } from '../generated/prisma/client';
+import { PublishedPosts } from '../published-posts/published-posts';
 
 @Injectable()
 export class CommentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly publishedPosts: PublishedPosts,
+  ) {}
 
   async create(postId: string, authorId: string, dto: CreateCommentDto) {
-    // Make sure the target post exists
-    const post = await this.prisma.post.findFirst({
-      where: {
-        id: postId,
-        status: PostStatus.PUBLISHED,
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    if (!post) {
-      throw new NotFoundException('Post not found.');
-    }
+    await this.publishedPosts.requireById(postId);
 
     // Create a top-level comment.
     // parentId stays null because this is not a reply.
@@ -53,20 +43,7 @@ export class CommentsService {
   }
 
   async findByPost(postId: string) {
-    // Make sure the target post exists
-    const post = await this.prisma.post.findFirst({
-      where: {
-        id: postId,
-        status: PostStatus.PUBLISHED,
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    if (!post) {
-      throw new NotFoundException('Post not found.');
-    }
+    await this.publishedPosts.requireById(postId);
 
     // Return top-level comments with their direct replies
     return this.prisma.comment.findMany({
@@ -116,9 +93,7 @@ export class CommentsService {
     const parentComment = await this.prisma.comment.findFirst({
       where: {
         id: parentCommentId,
-        post: {
-          status: PostStatus.PUBLISHED,
-        },
+        post: this.publishedPosts.where(),
       },
       select: {
         id: true,

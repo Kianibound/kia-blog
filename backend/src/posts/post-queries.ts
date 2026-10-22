@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import type { RoleName } from '../roles/constants/role.constants';
-import { PostStatus } from '../generated/prisma/client';
+import { PublishedPosts } from '../published-posts/published-posts';
 import { assertPostAccess } from './post-access.policy';
 import type { Prisma } from '../generated/prisma/client';
 
@@ -30,7 +30,10 @@ export type PostFeedQuery = {
 // Internal to PostsModule: reads own visibility, filters, pagination, and projections.
 @Injectable()
 export class PostQueries {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly publishedPosts: PublishedPosts,
+  ) {}
 
   async findAll({
     page,
@@ -45,7 +48,7 @@ export class PostQueries {
 
     // Build filters for public posts
     const where = {
-      status: PostStatus.PUBLISHED,
+      ...this.publishedPosts.where(),
 
       // Filter by author username
       ...(author
@@ -211,7 +214,7 @@ export class PostQueries {
     const post = await this.prisma.post.findFirst({
       where: {
         slug,
-        status: PostStatus.PUBLISHED,
+        ...this.publishedPosts.where(),
       },
       include: detailProjection,
     });

@@ -44,7 +44,7 @@ An article owned by an Author. A Post has a unique slug and one lifecycle state:
 
 ### Published Post
 
-A Post visible to the public and eligible for Comments, Bookmarks, and Post Likes. `publishedAt` records when the Post most recently entered the published state.
+A Post whose current lifecycle state is `PUBLISHED`, making it visible to the public and eligible for new Comments, Bookmarks, and Post Likes. `publishedAt` records when the Post most recently entered the published state; a past publication date alone does not grant public visibility.
 
 ### Category
 
@@ -60,7 +60,7 @@ User-authored discussion attached to a Published Post. A Comment may be top-leve
 
 ### Bookmark
 
-A User's private saved reference to a Published Post. A User can Bookmark a given Post at most once.
+A User's private saved reference to a Published Post. A User can Bookmark a given Post at most once; if the Post becomes unpublished, the reference remains removable but its content is hidden from the User's Bookmark list until republished.
 
 ### Post Like
 

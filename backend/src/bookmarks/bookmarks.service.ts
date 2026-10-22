@@ -1,25 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PostStatus } from '../generated/prisma/client';
+import { PublishedPosts } from '../published-posts/published-posts';
 import { PrismaService } from '../database/prisma.service';
 
 @Injectable()
 export class BookmarksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly publishedPosts: PublishedPosts,
+  ) {}
 
   async create(userId: string, postId: string) {
-    // Make sure the target post exists
-    const post = await this.prisma.post.findFirst({
-      where: {
-        id: postId,
-        status: PostStatus.PUBLISHED,
-      },
-      select: {
-        id: true,
-      },
-    });
-    if (!post) {
-      throw new NotFoundException('Post not found.');
-    }
+    await this.publishedPosts.requireById(postId);
 
     // Prevent duplicate bookmarks.
     // If it already exists, simply return the existing bookmark.
@@ -73,6 +64,7 @@ export class BookmarksService {
     return this.prisma.bookmark.findMany({
       where: {
         userId,
+        post: this.publishedPosts.where(),
       },
       orderBy: {
         createdAt: 'desc',
