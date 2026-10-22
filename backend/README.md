@@ -262,7 +262,19 @@ Example response:
 
 ## Testing
 
-Run E2E tests:
+Run safe, isolated verification (no PostgreSQL, Resend, or Cloudinary connection):
+
+```bash
+npm test -- --runInBand
+npm run test:isolated
+```
+
+Jest checks workflow behavior. The isolated Vitest suite checks each feature's
+explicit database imports, shared adapter lifecycle, and real application HTTP
+contracts with substituted I/O. It uses the installed TypeScript compiler for Nest
+decorator metadata and does not require SWC's platform-native addon.
+
+Run the separate live E2E suite only with disposable development resources:
 
 ```bash
 npm run test:e2e

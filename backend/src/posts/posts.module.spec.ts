@@ -4,7 +4,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { DatabaseModule } from '../database/database.module';
 import { PrismaService } from '../database/prisma.service';
 import { PostStatus } from '../generated/prisma/client';
 import { PostsModule } from './posts.module';
@@ -33,7 +32,6 @@ describe('PostsModule HTTP contract', () => {
     const module = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
-        DatabaseModule,
         PostsModule,
       ],
     })

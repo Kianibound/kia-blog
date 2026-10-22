@@ -8,7 +8,7 @@ A visual map of the backend. All diagrams are [Mermaid](https://mermaid.js.org/)
 
 ## 1. Big picture: modules and external services
 
-Every feature is its own NestJS module. Protected feature modules import the focused `AccessControlModule`, which owns access-token verification and role enforcement. Authentication workflows remain in `AuthModule`. `DatabaseModule` is `@Global()`, so `PrismaService` is injectable everywhere without being imported.
+Every feature is its own NestJS module. Protected feature modules import the focused `AccessControlModule`, which owns access-token verification and role enforcement. Authentication workflows remain in `AuthModule`. Each module that needs `PrismaService` explicitly imports `DatabaseModule`; root/sibling imports do not grant access. Repeated imports share one Prisma adapter.
 
 ```mermaid
 flowchart LR
@@ -18,7 +18,7 @@ flowchart LR
         direction TB
         Config["ConfigModule (global)"]
         Throttler["ThrottlerModule<br/>100 req / 60s"]
-        DB["DatabaseModule (global)<br/>PrismaService"]
+        DB["DatabaseModule (explicit imports)<br/>shared PrismaService"]
 
         subgraph Identity["Identity"]
             Access["AccessControlModule<br/>access JWT + guards"]
@@ -219,7 +219,7 @@ backend/
 ├── src/
 │   ├── main.ts             bootstrap: helmet, Swagger, CORS, ValidationPipe, filter
 │   ├── app.module.ts       root module, global throttler guard
-│   ├── database/           PrismaService (global)
+│   ├── database/           PrismaService (explicit module imports)
 │   ├── common/filters/     PrismaExceptionFilter
 │   ├── access-control/     access JWT config, guards, decorators, request identity types
 │   ├── auth/               authentication controller and token/session/email workflows
@@ -276,3 +276,25 @@ minimal existence lookup, and errors in one place. Tests import the real feature
 modules and replace persistence, exercising published/unpublished/missing Posts
 and ensuring rejected operations never reach interaction reads/writes. This does
 not make eligibility-check/write sequences atomic against concurrent unpublishing.
+
+## Explicit database dependencies and test surface
+
+The database seam is explicit in Auth, Users, Roles, Posts, Published Posts,
+Categories, Tags, Comments, Bookmarks, Post Likes, and Media. Admin depends on
+Users, not persistence. Access Control and Mail do not import persistence. Prisma
+is provided only by DatabaseModule, never redeclared in feature providers.
+
+Tests cross real module interfaces for leverage and depth: features initialize
+independently with a substituted Prisma adapter, a negative sibling-import test
+protects against global injection, and a multi-feature lifecycle test verifies
+that the shared adapter initializes and shuts down once. Isolated HTTP contracts
+boot AppModule with real workflows, JWT guards, validation and Argon2, replacing
+only database, email, and image I/O. Constructor-only smoke tests are replaced by
+behavioral checks, not layered underneath them.
+
+Run Jest behavior tests with `npm test -- --runInBand` and isolated module/HTTP
+contracts with `npm run test:isolated`. The latter has its own TypeScript-based
+Vitest configuration to emit Nest decorator metadata without a native SWC addon.
+These suites do not connect to PostgreSQL, Resend or Cloudinary. They complement,
+but do not replace, live database constraints/transaction tests. The legacy live
+E2E suite must only run with disposable development resources.

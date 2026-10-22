@@ -1,3 +1,4 @@
+import { DatabaseModule } from '../database/database.module';
 import { PublishedPostsModule } from '../published-posts/published-posts.module';
 import { Module } from '@nestjs/common';
 
@@ -6,7 +7,7 @@ import { BookmarksController } from './bookmarks.controller';
 import { BookmarksService } from './bookmarks.service';
 
 @Module({
-  imports: [AccessControlModule, PublishedPostsModule],
+  imports: [DatabaseModule, AccessControlModule, PublishedPostsModule],
   controllers: [BookmarksController],
   providers: [BookmarksService],
 })

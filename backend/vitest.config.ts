@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import swc from 'unplugin-swc';
 
 export default defineConfig({
@@ -6,6 +6,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['test/**/*.e2e-spec.ts'],
+    exclude: [...configDefaults.exclude, 'test/isolated/**'],
   },
 
   plugins: [
