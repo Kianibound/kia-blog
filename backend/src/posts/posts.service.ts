@@ -1,66 +1,23 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
-
-import { PrismaService } from '../database/prisma.service';
-import type { CreatePostDto } from './dto/create-post.dto';
-
-import { ROLE } from '../roles/constants/role.constants';
+import { Injectable } from '@nestjs/common';
 import type { RoleName } from '../roles/constants/role.constants';
+import type { CreatePostDto } from './dto/create-post.dto';
 import type { UpdatePostDto } from './dto/update-post.dto';
-import slugify from 'slugify';
-import { PostStatus } from '../generated/prisma/client';
+import { PostCommands } from './post-commands';
+import { PostQueries } from './post-queries';
 
+// Stable external Posts interface; read/write organization stays private to the module.
 @Injectable()
 export class PostsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly commands: PostCommands,
+    private readonly queries: PostQueries,
+  ) {}
 
-  async create(authorId: string, dto: CreatePostDto) {
-    // Generate a unique public URL slug from the title
-    const slug = await this.generateUniqueSlug(dto.title);
-
-    // Set publication time only when the post starts as published
-    const publishedAt = dto.status === PostStatus.PUBLISHED ? new Date() : null;
-
-    return this.prisma.post.create({
-      data: {
-        title: dto.title,
-        slug,
-        content: dto.content,
-        status: dto.status,
-        publishedAt,
-        authorId,
-
-        // Connect existing categories by id
-        categories: dto.categoryIds
-          ? {
-              connect: dto.categoryIds.map((id) => ({
-                id,
-              })),
-            }
-          : undefined,
-
-        // Connect existing tags by id
-        tags: dto.tagIds
-          ? {
-              connect: dto.tagIds.map((id) => ({
-                id,
-              })),
-            }
-          : undefined,
-      },
-
-      // Return attached categories and tags in the response
-      include: {
-        categories: true,
-        tags: true,
-      },
-    });
+  create(authorId: string, dto: CreatePostDto) {
+    return this.commands.create(authorId, dto);
   }
 
-  async findAll(
+  findAll(
     page: number,
     limit: number,
     search?: string,
@@ -69,425 +26,47 @@ export class PostsService {
     category?: string,
     tag?: string,
   ) {
-    const skip = (page - 1) * limit;
-
-    // Build filters for public posts
-    const where = {
-      status: PostStatus.PUBLISHED,
-
-      // Filter by author username
-      ...(author
-        ? {
-            author: {
-              username: {
-                equals: author,
-                mode: 'insensitive' as const,
-              },
-            },
-          }
-        : {}),
-
-      // Filter by category slug
-      ...(category
-        ? {
-            categories: {
-              some: {
-                slug: category,
-              },
-            },
-          }
-        : {}),
-
-      // Filter by tag slug
-      ...(tag
-        ? {
-            tags: {
-              some: {
-                slug: tag,
-              },
-            },
-          }
-        : {}),
-
-      // Search in title or content
-      ...(search
-        ? {
-            OR: [
-              {
-                title: {
-                  contains: search,
-                  mode: 'insensitive' as const,
-                },
-              },
-              {
-                content: {
-                  contains: search,
-                  mode: 'insensitive' as const,
-                },
-              },
-            ],
-          }
-        : {}),
-    };
-
-    // Build sorting based on query input
-    const orderBy = {
-      publishedAt: sort === 'oldest' ? 'asc' : 'desc',
-    } as const;
-
-    const [posts, total] = await Promise.all([
-      this.prisma.post.findMany({
-        where,
-        orderBy,
-        skip,
-        take: limit,
-        include: {
-          author: {
-            select: {
-              id: true,
-              username: true,
-              name: true,
-              avatarUrl: true,
-            },
-          },
-
-          // Return related categories for public post cards
-          categories: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-            },
-          },
-
-          // Return related tags for public post cards
-          tags: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-            },
-          },
-        },
-      }),
-
-      this.prisma.post.count({
-        where,
-      }),
-    ]);
-
-    return {
-      data: posts,
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  }
-
-  async findById(id: string) {
-    // Find a post by its database id
-    const post = await this.prisma.post.findUnique({
-      where: {
-        id,
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            username: true,
-            name: true,
-            avatarUrl: true,
-          },
-        },
-        categories: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
-        tags: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
-      },
+    return this.queries.findAll({
+      page,
+      limit,
+      search,
+      sort,
+      author,
+      category,
+      tag,
     });
-
-    if (!post) {
-      throw new NotFoundException('Post not found.');
-    }
-
-    return post;
   }
 
-  async findMine(authorId: string, page: number, limit: number) {
-    const skip = (page - 1) * limit;
-
-    // Get the author's posts and total count in parallel
-    const [posts, total] = await Promise.all([
-      this.prisma.post.findMany({
-        where: {
-          authorId,
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-        skip,
-        take: limit,
-      }),
-
-      this.prisma.post.count({
-        where: {
-          authorId,
-        },
-      }),
-    ]);
-
-    return {
-      data: posts,
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+  findById(id: string) {
+    return this.queries.findById(id);
   }
 
-  async findMineById(
+  findMine(authorId: string, page: number, limit: number) {
+    return this.queries.findMine(authorId, page, limit);
+  }
+
+  findMineById(
     postId: string,
     currentUserId: string,
     currentUserRole: RoleName,
   ) {
-    // Load the post for the authenticated author's edit/detail page
-    const post = await this.prisma.post.findUnique({
-      where: {
-        id: postId,
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            username: true,
-            name: true,
-            avatarUrl: true,
-          },
-        },
-      },
-    });
-
-    if (!post) {
-      throw new NotFoundException('Post not found.');
-    }
-
-    // Authors can only access their own private posts.
-    // Admins may access any post.
-    const isOwner = post.authorId === currentUserId;
-    const isAdmin = currentUserRole === ROLE.ADMIN;
-
-    if (!isOwner && !isAdmin) {
-      throw new ForbiddenException(
-        'You do not have permission to access this post.',
-      );
-    }
-
-    return post;
+    return this.queries.findMineById(postId, currentUserId, currentUserRole);
   }
 
-  async findBySlug(slug: string) {
-    // Public post pages should only expose published posts
-    const post = await this.prisma.post.findFirst({
-      where: {
-        slug,
-        status: PostStatus.PUBLISHED,
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            username: true,
-            name: true,
-            avatarUrl: true,
-          },
-        },
-
-        categories: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
-
-        tags: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
-      },
-    });
-
-    if (!post) {
-      throw new NotFoundException('Post not found.');
-    }
-
-    return post;
+  findBySlug(slug: string) {
+    return this.queries.findBySlug(slug);
   }
 
-  async update(
+  update(
     postId: string,
     currentUserId: string,
     currentUserRole: RoleName,
     dto: UpdatePostDto,
   ) {
-    // Load the post first so we can verify ownership
-    const post = await this.prisma.post.findUnique({
-      where: {
-        id: postId,
-      },
-    });
-
-    if (!post) {
-      throw new NotFoundException('Post not found.');
-    }
-
-    // Authors can only update their own posts.
-    // Admins are allowed to update any post.
-    const isOwner = post.authorId === currentUserId;
-    const isAdmin = currentUserRole === ROLE.ADMIN;
-
-    if (!isOwner && !isAdmin) {
-      throw new ForbiddenException(
-        'You do not have permission to update this post.',
-      );
-    }
-
-    // Keep publishedAt synchronized with status changes
-    let publishedAt = post.publishedAt;
-
-    // Separate relation ids from regular post fields
-    const { categoryIds, tagIds, ...postData } = dto;
-
-    if (
-      dto.status === PostStatus.PUBLISHED &&
-      post.status !== PostStatus.PUBLISHED
-    ) {
-      // The post is being published now
-      publishedAt = new Date();
-    }
-
-    if (dto.status === PostStatus.DRAFT) {
-      // A draft should not have an active publication date
-      publishedAt = null;
-    }
-
-    // Update only the fields provided by the client
-    return this.prisma.post.update({
-      where: {
-        id: postId,
-      },
-      data: {
-        ...postData,
-        publishedAt,
-
-        // Replace categories only when categoryIds is provided
-        categories:
-          categoryIds !== undefined
-            ? {
-                set: categoryIds.map((id) => ({
-                  id,
-                })),
-              }
-            : undefined,
-
-        // Replace tags only when tagIds is provided
-        tags:
-          tagIds !== undefined
-            ? {
-                set: tagIds.map((id) => ({
-                  id,
-                })),
-              }
-            : undefined,
-      },
-
-      // Return updated relations in the response
-      include: {
-        categories: true,
-        tags: true,
-      },
-    });
+    return this.commands.update(postId, currentUserId, currentUserRole, dto);
   }
 
-  private async generateUniqueSlug(title: string): Promise<string> {
-    // Convert the title into a URL-friendly base slug
-    const baseSlug = slugify(title, {
-      lower: true,
-      strict: true,
-      trim: true,
-    });
-
-    let slug = baseSlug;
-    let counter = 2;
-
-    // Keep trying until we find an unused slug
-    while (
-      await this.prisma.post.findUnique({
-        where: { slug },
-        select: { id: true },
-      })
-    ) {
-      slug = `${baseSlug}-${counter}`;
-      counter++;
-    }
-
-    return slug;
-  }
-
-  async remove(
-    postId: string,
-    currentUserId: string,
-    currentUserRole: RoleName,
-  ) {
-    // Load the post first so we can verify ownership
-    const post = await this.prisma.post.findUnique({
-      where: {
-        id: postId,
-      },
-    });
-
-    if (!post) {
-      throw new NotFoundException('Post not found.');
-    }
-
-    // Authors can only delete their own posts.
-    // Admins can delete any post.
-    const isOwner = post.authorId === currentUserId;
-    const isAdmin = currentUserRole === ROLE.ADMIN;
-
-    if (!isOwner && !isAdmin) {
-      throw new ForbiddenException(
-        'You do not have permission to delete this post.',
-      );
-    }
-
-    // Delete the post after authorization checks pass
-    await this.prisma.post.delete({
-      where: {
-        id: postId,
-      },
-    });
-
-    return {
-      message: 'Post deleted successfully.',
-    };
+  remove(postId: string, currentUserId: string, currentUserRole: RoleName) {
+    return this.commands.remove(postId, currentUserId, currentUserRole);
   }
 }

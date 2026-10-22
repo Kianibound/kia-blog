@@ -230,3 +230,23 @@ backend/
 ```
 
 Each feature folder follows the same pattern: `*.module.ts` → `*.controller.ts` → `*.service.ts`, plus `dto/` for input validation and `*.spec.ts` for unit tests.
+
+## Posts internals
+
+`PostsService` remains the stable external interface of the Posts module. Its
+internal seam separates `PostCommands` (creation, slug allocation, publication
+transitions, relation replacement, and deletion) from `PostQueries` (visibility,
+filtering, pagination, and safe read projections). Neither is exported from
+`PostsModule`. They use the existing Prisma adapter, without adding repository
+interfaces or a command bus.
+
+This depth gives callers leverage without changing routes, arguments, responses,
+or access rules. Publication changes have locality in commands; read-model changes
+have locality in queries. The shared ownership policy keeps owner/admin decisions
+consistent across private reads and mutations.
+
+Behavior tests cross the existing Posts interface and replace only persistence.
+The isolated HTTP contract suite imports the real Posts module and exercises its
+wiring, guards, and validation without connecting to PostgreSQL or Cloudinary.
+This is an organization refactor, not a concurrency fix: slug collision checking
+still has a check/insert race, and pagination still uses separate read/count queries.
