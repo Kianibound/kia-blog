@@ -116,6 +116,12 @@ https://kia-blog-pi.vercel.app/api
 
 Swagger can also be used to test authenticated endpoints using a JWT access token through the **Authorize** button.
 
+Swagger UI assets are redirected to a pinned jsDelivr release so documentation
+works on Vercel even when local static assets are omitted. The initializer and
+OpenAPI JSON stay on the application origin. `src/swagger.ts` keeps the asset
+version and the matching Content Security Policy together; update the pinned
+version when upgrading `swagger-ui-dist`.
+
 The generated OpenAPI JSON is available at:
 
 ```text

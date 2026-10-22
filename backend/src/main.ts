@@ -3,7 +3,7 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 import helmet from 'helmet';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { setupSwagger, swaggerCspDirectives } from './swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -11,31 +11,12 @@ async function bootstrap() {
   app.use(
     helmet({
       contentSecurityPolicy: {
-        directives: {
-          scriptSrc: ["'self'"],
-          styleSrc: ["'self'", "'unsafe-inline'"],
-          imgSrc: ["'self'", 'data:', 'https:'],
-        },
+        directives: swaggerCspDirectives,
       },
     }),
   );
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Kia Blog API')
-    .setDescription('REST API documentation for Kia Blog backend')
-    .setVersion('1.0')
-    .addBearerAuth(
-      {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-      },
-      'access-token',
-    )
-    .build();
-
-  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api', app, swaggerDocument);
+  setupSwagger(app);
 
   const allowedOrigins = process.env.CORS_ORIGINS?.split(',').map((origin) =>
     origin.trim(),
