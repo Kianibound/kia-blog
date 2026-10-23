@@ -1,4 +1,11 @@
-# Matt Pocock setup — proposed, awaiting approval
+# Matt Pocock setup — reviewed proposal (historical)
+
+The user approved GitHub Issues and asked to complete this proposal on
+2026-10-23, including the recommended default labels and root AGENTS.md.
+Active configuration now lives in root `AGENTS.md`, `issue-tracker.md`,
+`triage-labels.md` and `domain.md`. The proposal below is retained as history;
+its approval prompts are superseded by that user instruction. See
+`../PREPARATION_FOLLOWUP.md` for remote-label verification and investigation results.
 
 The actual installed `setup-matt-pocock-skills/SKILL.md` was read, together with
 its GitHub tracker, domain and triage templates and the installed `wayfinder`

@@ -23,11 +23,14 @@ failed with `could not load saved runtime settings`, including after explicitly
 creating a writable CBM_CACHE_DIR and trying a writable CBM_RUNTIME_DIR.
 
 **Result: no successful index, graph query or cross-process persistence check.**
-The cause is not established; do not claim it is a cloud-only limitation or
-that moving the cache fixes it. The official configuration documents per-account
-daemon/cache private-directory requirements that a supported local setup must
-satisfy. No global ACL/security settings were weakened. Binary/cache artifacts
-are not committed. There is no background watcher active for this checkout.
+Follow-up diagnosis: Windows sandbox execution cannot open the user's profile
+ancestor with the READ_CONTROL access required by the native cache-security
+validator (error 5). A fresh empty cache also fails before `_config.db` exists;
+merely moving it below the same profile does not fix ancestor validation.
+Creating an alternate cache under C:\workspace was denied by the host.
+See `PREPARATION_FOLLOWUP.md` for source tracing, evidence and the supported
+local-environment remedy. No ACL/security settings were weakened. Binary/cache
+artifacts are not committed; no background watcher is active for this checkout.
 
 ### Reproduce in a supported local coding environment
 

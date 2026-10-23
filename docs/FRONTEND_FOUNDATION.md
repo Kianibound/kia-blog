@@ -2,6 +2,11 @@
 
 Date: 2026-10-23. Branch: `chore/frontend-foundation`.
 
+Follow-up on the same date: see `PREPARATION_FOLLOWUP.md` for the current
+Matt Pocock configuration status, diagnosed sandbox/cache failure, security
+reachability assessment and detailed minimal backend proposals. That report
+supersedes the initial pending-setup and unknown-cause statements below.
+
 ## Results
 
 | Area | Result |
@@ -13,7 +18,7 @@ Date: 2026-10-23. Branch: `chore/frontend-foundation`.
 | Feature implementation | None; no API client, auth workflow, blog screen or feature tickets |
 | Codebase Memory | Official v0.12.1 download checksum verified; CLI failed loading saved runtime settings. No successful index/query/persistence verification |
 | VibeFarsi MCP | Manual HTTP initialize, tools/list and registry search succeeded; persistent Work tool registration not verified |
-| Matt Pocock | Installed instructions and seed files inspected; concrete setup proposal in `agents/setup-draft.md`; activation awaits required setup exchange |
+| Matt Pocock | User approved proposal; root AGENTS.md and docs/agents config active. Four remote labels still pending authenticated label-capable access |
 | Backend / production | No code, database, deployment or configuration changes |
 
 ## Verification
@@ -65,15 +70,18 @@ Authenticated/live-write integration remains unverified.
    visual choice. Persian launch only; English/LTR later.
 6. Approval of narrowly scoped backend changes for draft taxonomy projections
    and complete OpenAPI typing; additional endpoints only as scope requires.
-7. Matt tracker/default labels/root instruction filename, and a local environment
-   where Codebase Memory can index and demonstrate restart persistence.
+7. Authenticated access to create four missing remote labels (tracker/default
+   labels/root AGENTS.md already approved), and a local environment where
+   Codebase Memory can index and demonstrate restart persistence.
 8. Acceptance or upstream resolution of the documented lint dependency risks.
 
 ## Exact next action
 
-Complete `/setup-matt-pocock-skills` using `agents/setup-draft.md`, beginning with
-confirmation of GitHub Issues. Its actual installed instructions require that
-exchange before writing active config/labels. Then invoke:
+Local `/setup-matt-pocock-skills` configuration is now active. Remote labels
+need `scripts/setup-triage-labels.ps1` in an authenticated GitHub CLI environment.
+Report the follow-up findings before invoking the next skill; the user explicitly
+requested this stop. After reviewing them and agreeing to continue, the proposed
+next invocation remains:
 
 ```text
 /wayfinder
