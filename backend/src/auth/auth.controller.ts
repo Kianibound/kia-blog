@@ -1,4 +1,12 @@
 import {
+  RegisterResponseDto,
+  LoginResponseDto,
+  AccessTokenResponseDto,
+  ForgotPasswordResponseDto,
+} from './dto/auth-response.dto';
+import { UserResponseDto } from '../users/dto/user-response.dto';
+import { MessageResponseDto } from '../common/dto/response.dto';
+import {
   Body,
   Controller,
   Get,
@@ -21,6 +29,7 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiOperation,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -32,16 +41,23 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Register a new user' })
   @ApiBody({
-    schema: {
-      example: {
-        email: 'user@example.com',
-        username: 'test_user',
-        password: 'StrongPassword123!',
-        name: 'Test User',
+    type: RegisterDto,
+    examples: {
+      default: {
+        value: {
+          email: 'user@example.com',
+          username: 'test_user',
+          password: 'StrongPassword123!',
+          name: 'Test User',
+        },
       },
     },
   })
-  @ApiResponse({ status: 201, description: 'User registered successfully.' })
+  @ApiResponse({
+    type: RegisterResponseDto,
+    status: 201,
+    description: 'User registered successfully.',
+  })
   @Post('register')
   @Throttle({
     default: {
@@ -55,14 +71,21 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Login with email and password' })
   @ApiBody({
-    schema: {
-      example: {
-        email: 'user@example.com',
-        password: 'StrongPassword123!',
+    type: LoginDto,
+    examples: {
+      default: {
+        value: {
+          email: 'user@example.com',
+          password: 'StrongPassword123!',
+        },
       },
     },
   })
-  @ApiResponse({ status: 200, description: 'Login successful.' })
+  @ApiResponse({
+    type: LoginResponseDto,
+    status: 200,
+    description: 'Login successful.',
+  })
   @HttpCode(200)
   @Post('login')
   @Throttle({
@@ -78,6 +101,7 @@ export class AuthController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get the current authenticated user' })
   @ApiResponse({
+    type: UserResponseDto,
     status: 200,
     description: 'Current user returned successfully.',
   })
@@ -89,13 +113,17 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Refresh the access token' })
   @ApiBody({
-    schema: {
-      example: {
-        refreshToken: 'your-refresh-token',
+    type: RefreshTokenDto,
+    examples: {
+      default: {
+        value: {
+          refreshToken: 'your-refresh-token',
+        },
       },
     },
   })
   @ApiResponse({
+    type: AccessTokenResponseDto,
     status: 200,
     description: 'A new access token is returned.',
   })
@@ -107,13 +135,17 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Logout the current session' })
   @ApiBody({
-    schema: {
-      example: {
-        refreshToken: 'your-refresh-token',
+    type: RefreshTokenDto,
+    examples: {
+      default: {
+        value: {
+          refreshToken: 'your-refresh-token',
+        },
       },
     },
   })
   @ApiResponse({
+    type: MessageResponseDto,
     status: 200,
     description: 'Current refresh token is revoked.',
   })
@@ -126,6 +158,7 @@ export class AuthController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Logout all sessions for the current user' })
   @ApiResponse({
+    type: MessageResponseDto,
     status: 200,
     description: 'All active refresh tokens are revoked.',
   })
@@ -140,23 +173,29 @@ export class AuthController {
     summary: 'Verify an email address using a verification token',
   })
   @ApiResponse({
+    type: MessageResponseDto,
     status: 200,
     description: 'Email verified successfully.',
   })
   @Get('verify-email')
+  @ApiQuery({ name: 'token', type: String, required: true })
   verifyEmail(@Query('token') token: string) {
     return this.authService.verifyEmail(token);
   }
 
   @ApiOperation({ summary: 'Request a password reset' })
   @ApiBody({
-    schema: {
-      example: {
-        email: 'user@example.com',
+    type: ForgotPasswordDto,
+    examples: {
+      default: {
+        value: {
+          email: 'user@example.com',
+        },
       },
     },
   })
   @ApiResponse({
+    type: ForgotPasswordResponseDto,
     status: 200,
     description: 'Password reset request accepted.',
   })
@@ -174,14 +213,18 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Reset password using a reset token' })
   @ApiBody({
-    schema: {
-      example: {
-        token: 'your-password-reset-token',
-        newPassword: 'NewStrongPassword123!',
+    type: ResetPasswordDto,
+    examples: {
+      default: {
+        value: {
+          token: 'your-password-reset-token',
+          newPassword: 'NewStrongPassword123!',
+        },
       },
     },
   })
   @ApiResponse({
+    type: MessageResponseDto,
     status: 200,
     description: 'Password reset successfully.',
   })

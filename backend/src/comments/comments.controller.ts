@@ -1,4 +1,13 @@
 import {
+  CommentAuthorResponseDto,
+  CommentThreadResponseDto,
+  CommentResponseDto,
+} from './dto/comment-response.dto';
+import {
+  ErrorResponseDto,
+  MessageResponseDto,
+} from '../common/dto/response.dto';
+import {
   Body,
   Controller,
   Delete,
@@ -34,13 +43,20 @@ export class CommentsController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Add a comment to a published post' })
   @ApiBody({
-    schema: {
-      example: {
-        content: 'This is a comment.',
+    type: CreateCommentDto,
+    examples: {
+      default: {
+        value: {
+          content: 'This is a comment.',
+        },
       },
     },
   })
-  @ApiResponse({ status: 201, description: 'Comment created successfully.' })
+  @ApiResponse({
+    type: CommentAuthorResponseDto,
+    status: 201,
+    description: 'Comment created successfully.',
+  })
   @Post('posts/:postId/comments')
   @UseGuards(JwtAuthGuard)
   create(
@@ -53,7 +69,11 @@ export class CommentsController {
   }
 
   @ApiOperation({ summary: 'Get comments and replies for a post' })
-  @ApiResponse({ status: 200, description: 'Comments returned successfully.' })
+  @ApiResponse({
+    type: [CommentThreadResponseDto],
+    status: 200,
+    description: 'Comments returned successfully.',
+  })
   @Get('posts/:postId/comments')
   findByPost(@Param('postId') postId: string) {
     // Public endpoint for reading post comments
@@ -63,13 +83,20 @@ export class CommentsController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Reply to a comment' })
   @ApiBody({
-    schema: {
-      example: {
-        content: 'This is a reply.',
+    type: CreateCommentDto,
+    examples: {
+      default: {
+        value: {
+          content: 'This is a reply.',
+        },
       },
     },
   })
-  @ApiResponse({ status: 201, description: 'Reply created successfully.' })
+  @ApiResponse({
+    type: CommentAuthorResponseDto,
+    status: 201,
+    description: 'Reply created successfully.',
+  })
   @Post('comments/:commentId/replies')
   @UseGuards(JwtAuthGuard)
   reply(
@@ -83,14 +110,25 @@ export class CommentsController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update a comment owned by the current user' })
   @ApiBody({
-    schema: {
-      example: {
-        content: 'Updated comment content.',
+    type: UpdateCommentDto,
+    examples: {
+      default: {
+        value: {
+          content: 'Updated comment content.',
+        },
       },
     },
   })
-  @ApiResponse({ status: 200, description: 'Comment updated successfully.' })
-  @ApiResponse({ status: 403, description: 'User cannot update this comment.' })
+  @ApiResponse({
+    type: CommentResponseDto,
+    status: 200,
+    description: 'Comment updated successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'User cannot update this comment.',
+  })
   @Patch('comments/:commentId')
   @UseGuards(JwtAuthGuard)
   update(
@@ -104,8 +142,16 @@ export class CommentsController {
 
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Delete a comment' })
-  @ApiResponse({ status: 200, description: 'Comment deleted successfully.' })
-  @ApiResponse({ status: 403, description: 'User cannot delete this comment.' })
+  @ApiResponse({
+    type: MessageResponseDto,
+    status: 200,
+    description: 'Comment deleted successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'User cannot delete this comment.',
+  })
   @Delete('comments/:commentId')
   @UseGuards(JwtAuthGuard)
   remove(

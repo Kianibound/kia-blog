@@ -175,7 +175,7 @@ describe('Posts behavior', () => {
       NotFoundException,
     );
   });
-  it('keeps private detail projection limited to the safe author fields', async () => {
+  it('loads private detail taxonomy while keeping the safe author projection', async () => {
     await service.findMineById('p', 'owner', ROLE.AUTHOR);
     expect(repository.findUnique).toHaveBeenCalledWith({
       where: { id: 'p' },
@@ -183,6 +183,8 @@ describe('Posts behavior', () => {
         author: {
           select: { id: true, username: true, name: true, avatarUrl: true },
         },
+        categories: { select: { id: true, name: true, slug: true } },
+        tags: { select: { id: true, name: true, slug: true } },
       },
     });
   });

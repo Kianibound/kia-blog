@@ -1,4 +1,9 @@
 import {
+  BookmarkResponseDto,
+  BookmarkDetailResponseDto,
+} from './dto/bookmark-response.dto';
+import { MessageResponseDto } from '../common/dto/response.dto';
+import {
   Controller,
   Delete,
   Get,
@@ -27,7 +32,11 @@ export class BookmarksController {
   constructor(private readonly bookmarksService: BookmarksService) {}
 
   @ApiOperation({ summary: 'Bookmark a published post' })
-  @ApiResponse({ status: 201, description: 'Post bookmarked successfully.' })
+  @ApiResponse({
+    type: BookmarkResponseDto,
+    status: 201,
+    description: 'Post bookmarked successfully.',
+  })
   @Post('posts/:postId/bookmark')
   create(
     @Param('postId') postId: string,
@@ -37,7 +46,11 @@ export class BookmarksController {
   }
 
   @ApiOperation({ summary: 'Remove a bookmark from a post' })
-  @ApiResponse({ status: 200, description: 'Bookmark removed successfully.' })
+  @ApiResponse({
+    type: MessageResponseDto,
+    status: 200,
+    description: 'Bookmark removed successfully.',
+  })
   @Delete('posts/:postId/bookmark')
   remove(
     @Param('postId') postId: string,
@@ -47,7 +60,11 @@ export class BookmarksController {
   }
 
   @ApiOperation({ summary: 'Get bookmarks for the current user' })
-  @ApiResponse({ status: 200, description: 'Bookmarks returned successfully.' })
+  @ApiResponse({
+    type: [BookmarkDetailResponseDto],
+    status: 200,
+    description: 'Bookmarks returned successfully.',
+  })
   @Get('bookmarks')
   findMine(@CurrentUser() user: AccessTokenPayload) {
     return this.bookmarksService.findMine(user.sub);

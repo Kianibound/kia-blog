@@ -1,4 +1,9 @@
 import {
+  ErrorResponseDto,
+  TaxonomyResponseDto,
+  MessageResponseDto,
+} from '../common/dto/response.dto';
+import {
   Body,
   Controller,
   Delete,
@@ -31,7 +36,11 @@ export class TagsController {
   constructor(private readonly tagsService: TagsService) {}
 
   @ApiOperation({ summary: 'Get all tags' })
-  @ApiResponse({ status: 200, description: 'Tags returned successfully.' })
+  @ApiResponse({
+    type: [TaxonomyResponseDto],
+    status: 200,
+    description: 'Tags returned successfully.',
+  })
   @Get()
   findAll() {
     return this.tagsService.findAll();
@@ -40,14 +49,25 @@ export class TagsController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Create a tag (admin only)' })
   @ApiBody({
-    schema: {
-      example: {
-        name: 'NestJS',
+    type: CreateTagDto,
+    examples: {
+      default: {
+        value: {
+          name: 'NestJS',
+        },
       },
     },
   })
-  @ApiResponse({ status: 201, description: 'Tag created successfully.' })
-  @ApiResponse({ status: 403, description: 'Admin access required.' })
+  @ApiResponse({
+    type: TaxonomyResponseDto,
+    status: 201,
+    description: 'Tag created successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'Admin access required.',
+  })
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)
@@ -58,14 +78,25 @@ export class TagsController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update a tag (admin only)' })
   @ApiBody({
-    schema: {
-      example: {
-        name: 'Backend',
+    type: UpdateTagDto,
+    examples: {
+      default: {
+        value: {
+          name: 'Backend',
+        },
       },
     },
   })
-  @ApiResponse({ status: 200, description: 'Tag updated successfully.' })
-  @ApiResponse({ status: 403, description: 'Admin access required.' })
+  @ApiResponse({
+    type: TaxonomyResponseDto,
+    status: 200,
+    description: 'Tag updated successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'Admin access required.',
+  })
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)
@@ -75,8 +106,16 @@ export class TagsController {
 
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Delete a tag (admin only)' })
-  @ApiResponse({ status: 200, description: 'Tag deleted successfully.' })
-  @ApiResponse({ status: 403, description: 'Admin access required.' })
+  @ApiResponse({
+    type: MessageResponseDto,
+    status: 200,
+    description: 'Tag deleted successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'Admin access required.',
+  })
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)

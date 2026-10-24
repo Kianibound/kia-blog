@@ -1,4 +1,9 @@
 import {
+  ErrorResponseDto,
+  TaxonomyResponseDto,
+  MessageResponseDto,
+} from '../common/dto/response.dto';
+import {
   Body,
   Controller,
   Delete,
@@ -33,6 +38,7 @@ export class CategoriesController {
 
   @ApiOperation({ summary: 'Get all categories' })
   @ApiResponse({
+    type: [TaxonomyResponseDto],
     status: 200,
     description: 'Categories returned successfully.',
   })
@@ -44,14 +50,25 @@ export class CategoriesController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Create a category (admin only)' })
   @ApiBody({
-    schema: {
-      example: {
-        name: 'Technology',
+    type: CreateCategoryDto,
+    examples: {
+      default: {
+        value: {
+          name: 'Technology',
+        },
       },
     },
   })
-  @ApiResponse({ status: 201, description: 'Category created successfully.' })
-  @ApiResponse({ status: 403, description: 'Admin access required.' })
+  @ApiResponse({
+    type: TaxonomyResponseDto,
+    status: 201,
+    description: 'Category created successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'Admin access required.',
+  })
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)
@@ -62,14 +79,25 @@ export class CategoriesController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update a category (admin only)' })
   @ApiBody({
-    schema: {
-      example: {
-        name: 'Software Engineering',
+    type: UpdateCategoryDto,
+    examples: {
+      default: {
+        value: {
+          name: 'Software Engineering',
+        },
       },
     },
   })
-  @ApiResponse({ status: 200, description: 'Category updated successfully.' })
-  @ApiResponse({ status: 403, description: 'Admin access required.' })
+  @ApiResponse({
+    type: TaxonomyResponseDto,
+    status: 200,
+    description: 'Category updated successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'Admin access required.',
+  })
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)
@@ -79,8 +107,16 @@ export class CategoriesController {
 
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Delete a category (admin only)' })
-  @ApiResponse({ status: 200, description: 'Category deleted successfully.' })
-  @ApiResponse({ status: 403, description: 'Admin access required.' })
+  @ApiResponse({
+    type: MessageResponseDto,
+    status: 200,
+    description: 'Category deleted successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'Admin access required.',
+  })
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)

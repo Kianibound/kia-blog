@@ -1,3 +1,8 @@
+import { MediaResponseDto, AvatarResponseDto } from './dto/media-response.dto';
+import {
+  ErrorResponseDto,
+  MessageResponseDto,
+} from '../common/dto/response.dto';
 import {
   Controller,
   Delete,
@@ -46,8 +51,13 @@ export class MediaController {
       required: ['file'],
     },
   })
-  @ApiResponse({ status: 201, description: 'Image uploaded successfully.' })
   @ApiResponse({
+    type: MediaResponseDto,
+    status: 201,
+    description: 'Image uploaded successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
     status: 422,
     description: 'Invalid file type or file larger than 5 MB.',
   })
@@ -75,8 +85,16 @@ export class MediaController {
 
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Delete an uploaded media item' })
-  @ApiResponse({ status: 200, description: 'Media deleted successfully.' })
-  @ApiResponse({ status: 403, description: 'User cannot delete this media.' })
+  @ApiResponse({
+    type: MessageResponseDto,
+    status: 200,
+    description: 'Media deleted successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'User cannot delete this media.',
+  })
   @Delete(':mediaId')
   @UseGuards(JwtAuthGuard)
   remove(
@@ -101,8 +119,13 @@ export class MediaController {
       required: ['file'],
     },
   })
-  @ApiResponse({ status: 200, description: 'Avatar updated successfully.' })
   @ApiResponse({
+    type: AvatarResponseDto,
+    status: 200,
+    description: 'Avatar updated successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
     status: 422,
     description: 'Invalid file type or file larger than 5 MB.',
   })

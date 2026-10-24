@@ -1,4 +1,14 @@
 import {
+  PostWriteResponseDto,
+  PostFeedResponseDto,
+  PostDetailResponseDto,
+  MyPostsResponseDto,
+} from './dto/post-response.dto';
+import {
+  ErrorResponseDto,
+  MessageResponseDto,
+} from '../common/dto/response.dto';
+import {
   Body,
   Controller,
   Get,
@@ -39,16 +49,24 @@ export class PostsController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Create a new post' })
   @ApiBody({
-    schema: {
-      example: {
-        title: 'My First Post',
-        content: 'This is the post content.',
-        status: 'PUBLISHED',
+    type: CreatePostDto,
+    examples: {
+      default: {
+        value: {
+          title: 'My First Post',
+          content: 'This is the post content.',
+          status: 'PUBLISHED',
+        },
       },
     },
   })
-  @ApiResponse({ status: 201, description: 'Post created successfully.' })
   @ApiResponse({
+    type: PostWriteResponseDto,
+    status: 201,
+    description: 'Post created successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
     status: 403,
     description: 'Only AUTHOR or ADMIN can create posts.',
   })
@@ -62,6 +80,7 @@ export class PostsController {
 
   @ApiOperation({ summary: 'Get published posts with pagination and filters' })
   @ApiResponse({
+    type: PostFeedResponseDto,
     status: 200,
     description: 'Published posts returned successfully.',
   })
@@ -80,8 +99,16 @@ export class PostsController {
 
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a post by database ID (admin only)' })
-  @ApiResponse({ status: 200, description: 'Post returned successfully.' })
-  @ApiResponse({ status: 403, description: 'Admin access required.' })
+  @ApiResponse({
+    type: PostDetailResponseDto,
+    status: 200,
+    description: 'Post returned successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'Admin access required.',
+  })
   @Get('by-id/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)
@@ -93,6 +120,7 @@ export class PostsController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get posts owned by the current author' })
   @ApiResponse({
+    type: MyPostsResponseDto,
     status: 200,
     description: 'Author posts returned successfully.',
   })
@@ -109,7 +137,11 @@ export class PostsController {
 
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get one post owned by the current author' })
-  @ApiResponse({ status: 200, description: 'Post returned successfully.' })
+  @ApiResponse({
+    type: PostDetailResponseDto,
+    status: 200,
+    description: 'Post returned successfully.',
+  })
   @Get('mine/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.AUTHOR, ROLE.ADMIN)
@@ -123,10 +155,12 @@ export class PostsController {
 
   @ApiOperation({ summary: 'Get a published post by slug' })
   @ApiResponse({
+    type: PostDetailResponseDto,
     status: 200,
     description: 'Published post returned successfully.',
   })
   @ApiResponse({
+    type: ErrorResponseDto,
     status: 404,
     description: 'Post not found or not publicly available.',
   })
@@ -138,18 +172,26 @@ export class PostsController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update a post owned by the current author' })
   @ApiBody({
-    schema: {
-      example: {
-        title: 'Updated Post Title',
-        content: 'Updated content.',
-        status: 'PUBLISHED',
-        categoryIds: ['550e8400-e29b-41d4-a716-446655440000'],
-        tagIds: ['550e8400-e29b-41d4-a716-446655440001'],
+    type: UpdatePostDto,
+    examples: {
+      default: {
+        value: {
+          title: 'Updated Post Title',
+          content: 'Updated content.',
+          status: 'PUBLISHED',
+          categoryIds: ['550e8400-e29b-41d4-a716-446655440000'],
+          tagIds: ['550e8400-e29b-41d4-a716-446655440001'],
+        },
       },
     },
   })
-  @ApiResponse({ status: 200, description: 'Post updated successfully.' })
   @ApiResponse({
+    type: PostWriteResponseDto,
+    status: 200,
+    description: 'Post updated successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
     status: 403,
     description: 'User is not allowed to update this post.',
   })
@@ -167,8 +209,13 @@ export class PostsController {
 
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Delete a post owned by the current author' })
-  @ApiResponse({ status: 200, description: 'Post deleted successfully.' })
   @ApiResponse({
+    type: MessageResponseDto,
+    status: 200,
+    description: 'Post deleted successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
     status: 403,
     description: 'User is not allowed to delete this post.',
   })

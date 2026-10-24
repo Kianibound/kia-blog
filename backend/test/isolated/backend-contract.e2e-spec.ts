@@ -10,6 +10,12 @@ import { PrismaService } from '../../src/database/prisma.service';
 import { MailService } from '../../src/mail/mail.service';
 import { CloudinaryService } from '../../src/media/cloudinary.service';
 import { userPublicSelect } from '../../src/users/user.select';
+import { setupSwagger } from '../../src/swagger';
+import type {
+  OpenAPIObject,
+  SchemaObject,
+  ReferenceObject,
+} from '@nestjs/swagger';
 
 const query = () => jest.fn<(args: unknown) => Promise<unknown>>();
 const taxonomy = () => ({
@@ -55,7 +61,7 @@ describe('Backend contracts with isolated I/O', () => {
     emailVerificationToken: { create: query() },
     category: taxonomy(),
     tag: taxonomy(),
-    post: { findFirst: query() },
+    post: { findFirst: query(), findUnique: query() },
     comment: { create: query() },
     bookmark: { create: query() },
     postLike: { create: query() },
@@ -101,6 +107,7 @@ describe('Backend contracts with isolated I/O', () => {
         transform: true,
       }),
     );
+    setupSwagger(app);
     await app.init();
     jwt = module.get(JwtService);
   });
@@ -124,6 +131,7 @@ describe('Backend contracts with isolated I/O', () => {
     persistence.refreshToken.create.mockResolvedValue({ id: 'session-1' });
     persistence.refreshToken.findMany.mockResolvedValue([]);
     persistence.post.findFirst.mockResolvedValue(null);
+    persistence.post.findUnique.mockReset();
     persistence.media.findUnique.mockResolvedValue(null);
     for (const delegate of [persistence.category, persistence.tag]) {
       Object.values(delegate).forEach((fn) => fn.mockReset());
@@ -148,6 +156,199 @@ describe('Backend contracts with isolated I/O', () => {
   });
   const auth = (role = 'ADMIN') =>
     jwt.sign({ sub: 'user-1', email: safeUser.email, role });
+
+  it('documents requests and declared responses with complete, resolvable schemas', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api-json')
+      .expect(200);
+    const document: OpenAPIObject = response.body;
+    const resolve = (schema: SchemaObject | ReferenceObject): SchemaObject =>
+      '$ref' in schema
+        ? resolve(document.components!.schemas![schema.$ref.split('/').pop()!])
+        : schema;
+    const checkSchema = (schema: SchemaObject | ReferenceObject): void => {
+      const resolved = resolve(schema);
+      expect(resolved).toBeDefined();
+      if (resolved.allOf || resolved.oneOf || resolved.anyOf) {
+        for (const variant of resolved.allOf ??
+          resolved.oneOf ??
+          resolved.anyOf ??
+          [])
+          checkSchema(variant);
+      } else {
+        expect(resolved.type).toBeDefined();
+      }
+      if (
+        resolved.type === 'object' &&
+        !resolved.allOf &&
+        !resolved.oneOf &&
+        !resolved.anyOf
+      ) {
+        if (!Object.keys(resolved.properties ?? {}).length)
+          throw new Error(`Empty object schema: ${JSON.stringify(schema)}`);
+        expect(Object.keys(resolved.properties ?? {}).length).toBeGreaterThan(
+          0,
+        );
+        for (const property of Object.values(resolved.properties!))
+          checkSchema(property);
+      }
+      if (resolved.type === 'array') {
+        expect(resolved.items).toBeDefined();
+        checkSchema(resolved.items!);
+      }
+    };
+    for (const item of Object.values(document.paths)) {
+      for (const method of ['get', 'post', 'patch', 'delete'] as const) {
+        const operation = item[method];
+        if (!operation) continue;
+        if (operation.requestBody && !('$ref' in operation.requestBody)) {
+          for (const media of Object.values(operation.requestBody.content)) {
+            expect(media.schema).toBeDefined();
+            checkSchema(media.schema!);
+          }
+        }
+        for (const result of Object.values(operation.responses)) {
+          if (!result || '$ref' in result) continue;
+          expect(Object.values(result.content ?? {})[0]?.schema).toBeDefined();
+          for (const media of Object.values(result.content!))
+            checkSchema(media.schema!);
+        }
+      }
+    }
+    const create = resolve(document.components!.schemas!.CreatePostDto);
+    expect(create.required).toEqual(['title', 'content']);
+    expect(create.properties!.categoryIds).toEqual({
+      type: 'array',
+      items: { type: 'string', format: 'uuid' },
+    });
+    expect(
+      resolve(document.components!.schemas!.UpdatePostDto).required ?? [],
+    ).toEqual([]);
+    expect(
+      resolve(document.components!.schemas!.UserResponseDto).properties,
+    ).not.toHaveProperty('passwordHash');
+    expect(create.properties!.status).toMatchObject({
+      enum: ['DRAFT', 'PUBLISHED', 'DEPRECATED'],
+      default: 'DRAFT',
+    });
+    const detail = resolve(document.components!.schemas!.PostDetailResponseDto);
+    expect(detail.required).toEqual(
+      expect.arrayContaining(['author', 'categories', 'tags']),
+    );
+    expect(detail.properties!.publishedAt).toMatchObject({
+      type: 'string',
+      format: 'date-time',
+      nullable: true,
+    });
+    const feed = resolve(document.components!.schemas!.PostFeedResponseDto);
+    expect(feed.properties!.data).toMatchObject({
+      type: 'array',
+      items: { $ref: '#/components/schemas/PostDetailResponseDto' },
+    });
+    expect(
+      resolve(document.components!.schemas!.MyPostsResponseDto).properties!
+        .data,
+    ).toMatchObject({
+      items: { $ref: '#/components/schemas/PostResponseDto' },
+    });
+    expect(document.paths['/posts/mine/{id}'].get!.security).toEqual([
+      { 'access-token': [] },
+    ]);
+    expect(document.paths['/posts'].get!.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'limit',
+          required: false,
+          schema: expect.objectContaining({ default: 10, maximum: 50 }),
+        }),
+        expect.objectContaining({
+          name: 'sort',
+          required: false,
+          schema: expect.objectContaining({ enum: ['newest', 'oldest'] }),
+        }),
+      ]),
+    );
+  });
+
+  describe('Private post detail', () => {
+    const categories = [
+      { id: 'category-1', name: 'Development', slug: 'development' },
+    ];
+    const tags = [{ id: 'tag-1', name: 'NestJS', slug: 'nestjs' }];
+    beforeEach(() => {
+      // Persistence test double honors requested relations so missing includes fail over HTTP.
+      persistence.post.findUnique.mockImplementation(async (args) => {
+        const include = (args as { include: Record<string, unknown> }).include;
+        return {
+          id: 'post-1',
+          authorId: 'user-1',
+          status: 'DRAFT',
+          author: {
+            id: 'user-1',
+            username: 'reader',
+            name: 'Reader',
+            avatarUrl: null,
+          },
+          ...(include.categories ? { categories } : {}),
+          ...(include.tags ? { tags } : {}),
+        };
+      });
+    });
+    it.each(['AUTHOR', 'ADMIN'])('returns taxonomy to %s', async (role) => {
+      const response = await request(app.getHttpServer())
+        .get('/posts/mine/post-1')
+        .auth(auth(role), { type: 'bearer' })
+        .expect(200);
+      expect(response.body.categories).toEqual(categories);
+      expect(response.body.tags).toEqual(tags);
+      expect(response.body.author).not.toHaveProperty('passwordHash');
+    });
+    it('keeps anonymous and ordinary users out', async () => {
+      await request(app.getHttpServer()).get('/posts/mine/post-1').expect(401);
+      await request(app.getHttpServer())
+        .get('/posts/mine/post-1')
+        .auth(auth('USER'), { type: 'bearer' })
+        .expect(403);
+      expect(persistence.post.findUnique).not.toHaveBeenCalled();
+    });
+    it('returns empty taxonomy arrays for an uncategorized post', async () => {
+      persistence.post.findUnique.mockResolvedValue({
+        id: 'post-1',
+        authorId: 'user-1',
+        categories: [],
+        tags: [],
+      });
+      const response = await request(app.getHttpServer())
+        .get('/posts/mine/post-1')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .expect(200);
+      expect(response.body.categories).toEqual([]);
+      expect(response.body.tags).toEqual([]);
+    });
+    it('denies another author while allowing an admin', async () => {
+      persistence.post.findUnique.mockResolvedValue({
+        id: 'post-1',
+        authorId: 'other',
+        categories,
+        tags,
+      });
+      await request(app.getHttpServer())
+        .get('/posts/mine/post-1')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .expect(403);
+      await request(app.getHttpServer())
+        .get('/posts/mine/post-1')
+        .auth(auth('ADMIN'), { type: 'bearer' })
+        .expect(200);
+    });
+    it('returns 404 for a missing post', async () => {
+      persistence.post.findUnique.mockResolvedValue(null);
+      await request(app.getHttpServer())
+        .get('/posts/mine/missing')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .expect(404);
+    });
+  });
 
   it('boots the real application without connecting to database or remote providers', async () => {
     await request(app.getHttpServer()).get('/health').expect(200);

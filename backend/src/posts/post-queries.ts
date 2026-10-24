@@ -195,7 +195,7 @@ export class PostQueries {
       where: {
         id: postId,
       },
-      include: { author: authorProjection },
+      include: detailProjection,
     });
 
     if (!post) {

@@ -1,3 +1,5 @@
+import { ErrorResponseDto } from '../common/dto/response.dto';
+import { UserResponseDto } from '../users/dto/user-response.dto';
 import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
 
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
@@ -26,8 +28,16 @@ export class AdminController {
   constructor(private readonly usersService: UsersService) {}
 
   @ApiOperation({ summary: 'Get all users (admin only)' })
-  @ApiResponse({ status: 200, description: 'Users returned successfully.' })
-  @ApiResponse({ status: 403, description: 'Admin access required.' })
+  @ApiResponse({
+    type: [UserResponseDto],
+    status: 200,
+    description: 'Users returned successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'Admin access required.',
+  })
   @Get('users')
   findUsers() {
     return this.usersService.findAll();
@@ -35,22 +45,41 @@ export class AdminController {
 
   @ApiOperation({ summary: 'Change a user role (admin only)' })
   @ApiBody({
-    schema: {
-      example: {
-        role: 'AUTHOR',
+    type: UpdateUserRoleDto,
+    examples: {
+      default: {
+        value: {
+          role: 'AUTHOR',
+        },
       },
     },
   })
-  @ApiResponse({ status: 200, description: 'User role updated successfully.' })
-  @ApiResponse({ status: 403, description: 'Admin access required.' })
+  @ApiResponse({
+    type: UserResponseDto,
+    status: 200,
+    description: 'User role updated successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'Admin access required.',
+  })
   @Patch('users/:id/role')
   updateUserRole(@Param('id') id: string, @Body() dto: UpdateUserRoleDto) {
     return this.usersService.updateRole(id, dto.role);
   }
 
   @ApiOperation({ summary: 'Get a user by ID (admin only)' })
-  @ApiResponse({ status: 200, description: 'User returned successfully.' })
-  @ApiResponse({ status: 404, description: 'User not found.' })
+  @ApiResponse({
+    type: UserResponseDto,
+    status: 200,
+    description: 'User returned successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 404,
+    description: 'User not found.',
+  })
   @Get('users/:id')
   findUserById(@Param('id') id: string) {
     return this.usersService.findById(id);

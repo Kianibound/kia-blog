@@ -1,4 +1,9 @@
 import {
+  PostLikeResponseDto,
+  LikeCountResponseDto,
+} from './dto/post-like-response.dto';
+import { MessageResponseDto } from '../common/dto/response.dto';
+import {
   Controller,
   Delete,
   Get,
@@ -26,7 +31,11 @@ export class PostLikesController {
 
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Like a published post' })
-  @ApiResponse({ status: 201, description: 'Post liked successfully.' })
+  @ApiResponse({
+    type: PostLikeResponseDto,
+    status: 201,
+    description: 'Post liked successfully.',
+  })
   @Post('posts/:postId/like')
   @UseGuards(JwtAuthGuard)
   create(
@@ -38,7 +47,11 @@ export class PostLikesController {
 
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Remove the current user’s like from a post' })
-  @ApiResponse({ status: 200, description: 'Like removed successfully.' })
+  @ApiResponse({
+    type: MessageResponseDto,
+    status: 200,
+    description: 'Like removed successfully.',
+  })
   @Delete('posts/:postId/like')
   @UseGuards(JwtAuthGuard)
   remove(
@@ -50,6 +63,7 @@ export class PostLikesController {
 
   @ApiOperation({ summary: 'Get the like count for a post' })
   @ApiResponse({
+    type: LikeCountResponseDto,
     status: 200,
     description: 'Like count returned successfully.',
   })
