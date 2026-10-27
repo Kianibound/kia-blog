@@ -44,3 +44,74 @@ test("a Visitor sees the first Published Posts in an accessible Persian public s
     await page.screenshot({ path: testInfo.outputPath(`homepage-${width}.png`), fullPage: true });
   }
 });
+
+test("a Visitor operates the mobile navigation with the keyboard", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/");
+  const navigation = page.getByRole("navigation", { name: "راهبری اصلی" });
+  const menu = navigation.getByRole("button", { name: "فهرست", exact: true });
+  const home = navigation.getByRole("link", { name: "خانه", exact: true });
+  const about = navigation.getByRole("link", { name: "درباره", exact: true });
+  await expect(menu).toHaveAttribute("aria-expanded", "false");
+  await expect(about).toBeHidden();
+  await menu.focus();
+  await page.keyboard.press("Enter");
+  await expect(menu).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("Tab");
+  await expect(home).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(about).toBeFocused();
+  await page.screenshot({ path: testInfo.outputPath("navigation-360.png") });
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveAttribute("aria-expanded", "false");
+  await expect(menu).toBeFocused();
+  await expect(about).toBeHidden();
+  await page.keyboard.press("Space");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/about$/);
+  await expect(menu).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("دربارهٔ کیا بلاگ");
+  for (const width of [360, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`about-${width}.png`), fullPage: true });
+  }
+  await menu.click();
+  await expect(about).toHaveAttribute("aria-current", "page");
+  await home.click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(menu).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("article")).toHaveCount(10);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(menu).toBeHidden();
+  await expect(home).toBeVisible();
+  await expect(about).toBeVisible();
+});
+
+test("a Visitor navigates from the Hero to articles and between Home and About", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/");
+  await page.getByRole("link", { name: "مشاهدهٔ مقاله‌ها", exact: true }).click();
+  await expect(page).toHaveURL(/#published-posts$/);
+  await expect(page.getByRole("heading", { name: "آخرین مقاله‌ها", exact: true })).toBeInViewport();
+
+  const navigation = page.getByRole("navigation", { name: "راهبری اصلی" });
+  const home = navigation.getByRole("link", { name: "خانه", exact: true });
+  const about = navigation.getByRole("link", { name: "درباره", exact: true });
+  await expect(home).toHaveAttribute("aria-current", "page");
+  await about.click();
+  await expect(page).toHaveURL(/\/about$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("دربارهٔ کیا بلاگ");
+  await expect(about).toHaveAttribute("aria-current", "page");
+  await expect(home).not.toHaveAttribute("aria-current", "page");
+  // Direct requests must also serve the About content, not just client navigation.
+  const response = await page.reload();
+  expect(response?.status()).toBe(200);
+  expect(await response!.text()).toContain("دربارهٔ کیا بلاگ");
+  await page.screenshot({ path: testInfo.outputPath("about-desktop.png"), fullPage: true });
+  await page.getByRole("link", { name: "بازگشت به مقاله‌ها", exact: true }).click();
+  await expect(page).toHaveURL(/\/#published-posts$/);
+  await expect(page.getByRole("article")).toHaveCount(10);
+});

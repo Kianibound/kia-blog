@@ -3,6 +3,10 @@
 Next.js App Router, strict TypeScript, Tailwind CSS v4, ESLint, npm, Persian
 and RTL. The public homepage reads the first 10 Published Posts from the separate
 Nest backend; pagination and dedicated loading/empty/error states are later work.
+The shared header links to Home and the public `/about` page. On mobile, its
+nonmodal disclosure supports Enter/Space, Escape with focus return, and closes
+after link selection. The homepage Hero links directly to the published feed;
+article cards remain informational until detail routes are implemented.
 
 Use Node.js 24 LTS (`.nvmrc`). From this directory:
 
@@ -33,10 +37,11 @@ npm run test:contract
 npm test
 ```
 
-The Playwright success test builds and starts Next on port 3101 and a minimal,
+The focused Playwright tests build and start Next on port 3101 and a minimal,
 clearly labeled test-only posts HTTP fixture on port 4101. Both ports must be
 free. It verifies server-rendered data, metadata fallbacks, escaped titles, basic
-keyboard/RTL semantics, and 360px/390px/desktop layouts. Screenshots and traces
+keyboard/RTL semantics, Hero and Home/About navigation, mobile disclosure,
+and 360px/390px/desktop layouts. Screenshots and traces
 go to ignored `test-results/`. The contract checks use Node's built-in runner
 and native TypeScript stripping (Node 24 as specified above). These checks do
 not connect to a real database or prove live Nest deployment interoperability.
@@ -53,7 +58,8 @@ not connect to a real database or prove live Nest deployment interoperability.
 - Use logical classes (`ps-*`, `me-*`, `text-start`); scope LTR to email/code.
 
 VibeFarsi 2.0.0 was initialized with the official CLI. The homepage uses the
-official, dependency-free Card primitive copied from its registry. Before each
+official Card and Button primitives copied from their registries. The mobile
+control uses the 48px Button size; no icon dependency is needed. Before each
 feature, query its MCP/registry, inspect the actual
 component API and install only the required slugs:
 
