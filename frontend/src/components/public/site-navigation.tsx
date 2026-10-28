@@ -13,6 +13,7 @@ import type { Category } from "@/lib/categories";
 const destinations = [
   { href: "/", label: messages.public.home },
   { href: "/about", label: messages.public.about },
+  { href: "/contact", label: messages.public.contact },
 ];
 
 export function SiteNavigation({ children, categories }: { children: ReactNode; categories: Category[] | null }) {
@@ -65,14 +66,14 @@ export function SiteNavigation({ children, categories }: { children: ReactNode; 
   return (
     <nav
       aria-label={messages.public.navigation}
-      className="flex flex-wrap items-center justify-between gap-x-6 md:grid md:grid-cols-3"
+      className="flex flex-wrap items-center justify-between gap-x-6 md:grid md:grid-cols-6"
       onClick={(event) => {
         if (expanded && event.target instanceof Element && event.target.closest("a")) closeMenu();
       }}
     >
       <div className="md:justify-self-start">{children}</div>
-      <ul className="hidden items-center gap-2 md:flex md:justify-self-center">
-        {links[0]}<li><CategoryDisclosure categories={categories} mobile={false} /></li>{links[1]}
+      <ul className="hidden items-center gap-2 md:col-span-4 md:flex md:justify-self-center">
+        {links[0]}<li><CategoryDisclosure categories={categories} mobile={false} /></li>{links.slice(1)}
       </ul>
       <div className="flex items-center gap-2 md:justify-self-end">
         <ThemeToggle />
@@ -96,7 +97,7 @@ export function SiteNavigation({ children, categories }: { children: ReactNode; 
           "md:hidden",
         )}
       >
-        {links[0]}<li><CategoryDisclosure categories={categories} mobile /></li>{links[1]}
+        {links[0]}<li><CategoryDisclosure categories={categories} mobile /></li>{links.slice(1)}
       </ul>
     </nav>
   );
