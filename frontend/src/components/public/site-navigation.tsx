@@ -18,6 +18,22 @@ export function SiteNavigation({ children }: { children: ReactNode }) {
   const [expanded, setExpanded] = useState(false);
   const linksId = useId();
   const triggerId = useId();
+  const links = destinations.map(({ href, label }) => (
+    <li key={href}>
+      <Link
+        href={href}
+        aria-current={pathname === href ? "page" : undefined}
+        className={cn(
+          "inline-flex min-h-12 items-center rounded-control px-4 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring",
+          pathname === href
+            ? "bg-secondary text-secondary-foreground"
+            : "text-foreground hover:bg-accent",
+        )}
+      >
+        {label}
+      </Link>
+    </li>
+  ));
 
   function closeMenu() {
     setExpanded(false);
@@ -47,13 +63,14 @@ export function SiteNavigation({ children }: { children: ReactNode }) {
   return (
     <nav
       aria-label={messages.public.navigation}
-      className="flex flex-wrap items-center justify-between gap-x-6"
+      className="flex flex-wrap items-center justify-between gap-x-6 md:grid md:grid-cols-3"
       onClick={(event) => {
         if (expanded && event.target instanceof Element && event.target.closest("a")) closeMenu();
       }}
     >
-      {children}
-      <div className="flex items-center gap-2">
+      <div className="md:justify-self-start">{children}</div>
+      <ul className="hidden items-center gap-2 md:flex md:justify-self-center">{links}</ul>
+      <div className="flex items-center gap-2 md:justify-self-end">
         <ThemeToggle />
         <Button
           id={triggerId}
@@ -70,27 +87,12 @@ export function SiteNavigation({ children }: { children: ReactNode }) {
       <ul
         id={linksId}
         className={cn(
-          "basis-full flex-col gap-2 border-t border-border py-4 md:basis-auto md:flex-row md:items-center md:border-0 md:py-0",
+          "basis-full flex-col gap-2 border-t border-border py-4",
           expanded ? "flex" : "hidden",
-          "md:flex",
+          "md:hidden",
         )}
       >
-        {destinations.map(({ href, label }) => (
-          <li key={href}>
-            <Link
-              href={href}
-              aria-current={pathname === href ? "page" : undefined}
-              className={cn(
-                "inline-flex min-h-12 items-center rounded-control px-4 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring",
-                pathname === href
-                  ? "bg-secondary text-secondary-foreground"
-                  : "text-foreground hover:bg-accent",
-              )}
-            >
-              {label}
-            </Link>
-          </li>
-        ))}
+        {links}
       </ul>
     </nav>
   );

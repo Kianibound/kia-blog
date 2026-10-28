@@ -101,6 +101,12 @@ test("a Visitor navigates from the Hero to articles and between Home and About",
   const home = navigation.getByRole("link", { name: "خانه", exact: true });
   const about = navigation.getByRole("link", { name: "درباره", exact: true });
   await expect(home).toHaveAttribute("aria-current", "page");
+  const alignment = await navigation.evaluate((nav) => {
+    const bounds = nav.getBoundingClientRect();
+    const links = nav.querySelector("ul:not([id])")!.getBoundingClientRect();
+    return Math.abs((bounds.left + bounds.right) / 2 - (links.left + links.right) / 2);
+  });
+  expect(alignment).toBeLessThan(1);
   await about.click();
   await expect(page).toHaveURL(/\/about$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("دربارهٔ کیا بلاگ");
