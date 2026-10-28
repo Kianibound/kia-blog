@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { messages } from "@/i18n/messages/fa";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "./theme-toggle";
 
 const destinations = [
   { href: "/", label: messages.public.home },
@@ -52,17 +53,20 @@ export function SiteNavigation({ children }: { children: ReactNode }) {
       }}
     >
       {children}
-      <Button
-        id={triggerId}
-        variant="outline"
-        size="lg"
-        className="motion-reduce:transition-none md:hidden"
-        aria-expanded={expanded}
-        aria-controls={linksId}
-        onClick={() => setExpanded(!expanded)}
-      >
-        {messages.public.menu}
-      </Button>
+      <div className="flex items-center gap-2">
+        <ThemeToggle />
+        <Button
+          id={triggerId}
+          variant="outline"
+          size="lg"
+          className="motion-reduce:transition-none md:hidden"
+          aria-expanded={expanded}
+          aria-controls={linksId}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {messages.public.menu}
+        </Button>
+      </div>
       <ul
         id={linksId}
         className={cn(

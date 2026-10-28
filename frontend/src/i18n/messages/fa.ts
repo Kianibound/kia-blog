@@ -7,6 +7,7 @@ export const messages = {
     home: "خانه",
     about: "درباره",
     menu: "فهرست",
+    lightMode: "حالت روشن",
     navigation: "راهبری اصلی",
     skipToContent: "رفتن به محتوای اصلی",
     footerDescription: "کیا بلاگ؛ جایی برای نوشتن، خواندن و به‌اشتراک‌گذاشتن تجربه‌ها.",

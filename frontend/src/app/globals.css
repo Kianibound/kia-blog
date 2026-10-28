@@ -54,6 +54,35 @@
 }
 /* --- vibefarsi:theme-graphite-end --- */
 
+/* Graphite-compatible light mode: retain the neutral hue, amber accent and geometry. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --background: oklch(0.98 0.002 285);
+  --foreground: oklch(0.2 0.004 285);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.004 285);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.004 285);
+  --primary: oklch(0.2 0.004 285);
+  --primary-foreground: oklch(0.98 0.002 285);
+  --secondary: oklch(0.93 0.004 285);
+  --secondary-foreground: oklch(0.2 0.004 285);
+  --muted: oklch(0.95 0.003 285);
+  --muted-foreground: oklch(0.45 0.008 285);
+  --accent: oklch(0.93 0.004 285);
+  --accent-foreground: oklch(0.2 0.004 285);
+  --destructive: oklch(0.5 0.18 25);
+  --success: oklch(0.43 0.11 160);
+  --warning: oklch(0.48 0.1 80);
+  --border: oklch(0.82 0.005 285);
+  --input: oklch(0.5 0.006 285);
+  --ring: oklch(0.42 0.006 285);
+  --brand: oklch(0.52 0.11 65);
+  --brand-foreground: oklch(1 0 0);
+  --depth-surface: 0 1px 0 0 oklch(0 0 0 / 4%) inset;
+  --depth-overlay: 0 20px 50px -20px oklch(0 0 0 / 20%);
+}
+
 /* --- vibefarsi:tailwind-map --- */
 @theme inline {
   --color-background: var(--background);
