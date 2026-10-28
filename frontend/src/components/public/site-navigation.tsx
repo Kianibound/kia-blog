@@ -7,13 +7,15 @@ import { messages } from "@/i18n/messages/fa";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "./theme-toggle";
+import { CategoryDisclosure } from "./category-disclosure";
+import type { Category } from "@/lib/categories";
 
 const destinations = [
   { href: "/", label: messages.public.home },
   { href: "/about", label: messages.public.about },
 ];
 
-export function SiteNavigation({ children }: { children: ReactNode }) {
+export function SiteNavigation({ children, categories }: { children: ReactNode; categories: Category[] | null }) {
   const pathname = usePathname();
   const [expanded, setExpanded] = useState(false);
   const linksId = useId();
@@ -69,7 +71,9 @@ export function SiteNavigation({ children }: { children: ReactNode }) {
       }}
     >
       <div className="md:justify-self-start">{children}</div>
-      <ul className="hidden items-center gap-2 md:flex md:justify-self-center">{links}</ul>
+      <ul className="hidden items-center gap-2 md:flex md:justify-self-center">
+        {links[0]}<li><CategoryDisclosure categories={categories} mobile={false} /></li>{links[1]}
+      </ul>
       <div className="flex items-center gap-2 md:justify-self-end">
         <ThemeToggle />
         <Button
@@ -92,7 +96,7 @@ export function SiteNavigation({ children }: { children: ReactNode }) {
           "md:hidden",
         )}
       >
-        {links}
+        {links[0]}<li><CategoryDisclosure categories={categories} mobile /></li>{links[1]}
       </ul>
     </nav>
   );

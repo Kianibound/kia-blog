@@ -60,6 +60,8 @@ test("a Visitor operates the mobile navigation with the keyboard", async ({ page
   await page.keyboard.press("Tab");
   await expect(home).toBeFocused();
   await page.keyboard.press("Tab");
+  await expect(navigation.getByRole("button", { name: "دسته‌بندی‌ها" })).toBeFocused();
+  await page.keyboard.press("Tab");
   await expect(about).toBeFocused();
   await page.screenshot({ path: testInfo.outputPath("navigation-360.png") });
   await page.keyboard.press("Escape");
@@ -67,6 +69,7 @@ test("a Visitor operates the mobile navigation with the keyboard", async ({ page
   await expect(menu).toBeFocused();
   await expect(about).toBeHidden();
   await page.keyboard.press("Space");
+  await page.keyboard.press("Tab");
   await page.keyboard.press("Tab");
   await page.keyboard.press("Tab");
   await page.keyboard.press("Enter");

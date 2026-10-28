@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { messages } from "@/i18n/messages/fa";
 import { SiteNavigation } from "./site-navigation";
+import { getPublicCategories } from "@/lib/categories";
 
-export function SiteHeader() {
+export async function SiteHeader() {
+  const categories = await getPublicCategories();
   return (
     <>
       <a
@@ -13,7 +15,7 @@ export function SiteHeader() {
       </a>
       <header className="border-b border-border bg-card">
         <div className="mx-auto w-full max-w-6xl px-4 py-4 sm:px-6">
-          <SiteNavigation>
+          <SiteNavigation categories={categories}>
             <Link href="/" className="inline-flex min-h-12 items-center rounded-md text-xl font-bold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
               {messages.metadata.title}
             </Link>

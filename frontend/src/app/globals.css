@@ -83,6 +83,9 @@
   --depth-overlay: 0 20px 50px -20px oklch(0 0 0 / 20%);
 }
 
+/* Official white social marks are shown in their permitted black variant on light surfaces. */
+:root[data-theme="light"] .social-brand-icon { filter: invert(1); }
+
 /* --- vibefarsi:tailwind-map --- */
 @theme inline {
   --color-background: var(--background);

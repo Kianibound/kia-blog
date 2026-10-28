@@ -7,6 +7,10 @@ The shared header links to Home and the public `/about` page. On mobile, its
 nonmodal disclosure supports Enter/Space, Escape with focus return, and closes
 after link selection. The homepage Hero links directly to the published feed;
 article cards remain informational until detail routes are implemented.
+The header reads public categories on the server; unavailable or empty category
+responses are shown only in the disclosure. Category names are informational.
+Footer brand icons remain decorative unless their optional `SOCIAL_GITHUB_URL`,
+`SOCIAL_LINKEDIN_URL`, or `SOCIAL_TWITTER_URL` HTTPS values are explicitly set.
 The header offers a light-mode toggle. Without a saved choice it follows the
 system color scheme; an explicit light/dark choice persists in browser storage.
 If storage is unavailable, switching still works for the current page session.
