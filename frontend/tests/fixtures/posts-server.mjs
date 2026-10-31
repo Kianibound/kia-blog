@@ -1,5 +1,9 @@
 import { createServer } from "node:http";
 import { publishedPosts } from "./posts.mjs";
+import { previewPosts } from "./preview-posts.mjs";
+
+// Opt-in manual preview keeps the deterministic automated-test dataset unchanged.
+const preview = process.env.POSTS_FIXTURE_PREVIEW === "true";
 
 // Category responses are test doubles matching the public Nest taxonomy DTO.
 let categoryMode = "success";
@@ -34,23 +38,29 @@ createServer((request, response) => {
     response.writeHead(200, { "Content-Type": "application/json" });
     return response.end(JSON.stringify(categoryMode === "empty" ? [] : categoryMode === "invalid" ? [{ id: 1 }] : categories));
   }
-  const page = Number(url.searchParams.get("page"));
+  const page = Number(url.searchParams.get("page") ?? "1");
+  const limit = Number(url.searchParams.get("limit") ?? "10");
+  const sort = url.searchParams.get("sort") ?? "newest";
   const expectedQuery = new URLSearchParams({ limit: "10", sort: "newest" });
   if (
     request.method !== "GET" ||
     url.pathname !== "/posts" ||
-    url.searchParams.size !== 3 ||
+    (preview
+      ? [...url.searchParams.keys()].some((key) => !["page", "limit", "sort"].includes(key) || url.searchParams.getAll(key).length !== 1)
+      : url.searchParams.size !== 3 || [...expectedQuery].some(([key, value]) => url.searchParams.get(key) !== value)) ||
     !Number.isSafeInteger(page) || page < 1 ||
-    [...expectedQuery].some(([key, value]) => url.searchParams.get(key) !== value) ||
+    !Number.isSafeInteger(limit) || limit < 1 || limit > 50 ||
+    !["newest", "oldest"].includes(sort) ||
     request.headers.authorization
   ) {
     response.writeHead(400).end("Unexpected posts request");
     return;
   }
   response.writeHead(200, { "Content-Type": "application/json" });
-  const posts = postsEmpty ? [] : publishedPosts;
+  const posts = postsEmpty ? [] : preview ? previewPosts : publishedPosts;
+  const ordered = sort === "oldest" ? [...posts].reverse() : posts;
   response.end(JSON.stringify({
-    data: posts.slice((page - 1) * 10, page * 10),
-    meta: { page, limit: 10, total: posts.length, totalPages: Math.ceil(posts.length / 10) },
+    data: ordered.slice((page - 1) * limit, page * limit),
+    meta: { page, limit, total: posts.length, totalPages: Math.ceil(posts.length / limit) },
   }));
 }).listen(4101, "127.0.0.1");
