@@ -24,8 +24,9 @@ test("a Visitor sees the first Published Posts in an accessible Persian public s
   await expect(articles.first()).toContainText("توسعهٔ وب");
   await expect(articles.nth(1)).toContainText("nima");
   await expect(articles.nth(1).locator("time")).toHaveCount(0);
-  await expect(articles.locator("a")).toHaveCount(0);
-  await expect(page.getByText("TEST DOUBLE BODY", { exact: false })).toHaveCount(0);
+  await expect(articles.getByRole("link")).toHaveCount(10);
+  await expect(articles.first().getByRole("link")).toHaveAttribute("href", "/posts/test-post-1");
+  await expect(page.getByText("از درخواست تا صفحه", { exact: false })).toHaveCount(0);
   await expect(page.locator("main strong")).toHaveCount(0);
   expect(backendRequests).toEqual([]);
 

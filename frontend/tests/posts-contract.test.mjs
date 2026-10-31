@@ -1,7 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parsePublishedPosts } from "../src/lib/posts-contract.ts";
+import { parsePublishedPost, parsePublishedPosts } from "../src/lib/posts-contract.ts";
 import { feed } from "./fixtures/posts.mjs";
+import { previewPosts } from "./fixtures/preview-posts.mjs";
+
+test("detail parsing preserves literal content and taxonomy slugs from all preview articles", () => {
+  for (const record of previewPosts) {
+    const detail = parsePublishedPost(record);
+    assert.equal(detail.content, record.content);
+    assert.equal(detail.id, record.id);
+    assert.equal(detail.slug, record.slug);
+    assert.deepEqual(detail.categories, record.categories);
+    assert.deepEqual(detail.tags, record.tags);
+  }
+});
+
+test("detail parsing rejects envelopes, non-public content and invalid consumed fields", () => {
+  const post = previewPosts[0];
+  for (const response of [feed, { ...post, status: "DRAFT" }, { ...post, status: "DEPRECATED" },
+    { ...post, content: 5 }, { ...post, tags: null }, { ...post, categories: [{ id: "id", name: "name" }] }]) {
+    assert.throws(() => parsePublishedPost(response), /Invalid public post response/);
+  }
+});
 
 test("the public posts boundary preserves pagination metadata, identifiers, and slugs", () => {
   const result = parsePublishedPosts(feed);

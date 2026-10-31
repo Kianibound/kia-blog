@@ -2,14 +2,8 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { messages } from "@/i18n/messages/fa";
 import type { PostSummary } from "@/lib/posts-contract";
 import { fa } from "@/lib/utils";
-
-// Intl applies the Tehran date boundary before formatting in the Jalali calendar.
-const publicationDate = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
-  timeZone: "Asia/Tehran",
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-});
+import { formatPublicationDate } from "@/lib/publication-date";
+import Link from "next/link";
 
 export function PostCard({ post }: { post: PostSummary }) {
   return (
@@ -26,7 +20,9 @@ export function PostCard({ post }: { post: PostSummary }) {
             </ul>
           )}
           <h3 id={`post-${post.id}`} className="text-xl leading-tight font-semibold wrap-anywhere">
-            {fa(post.title)}
+            <Link href={`/posts/${encodeURIComponent(post.slug)}`} className="inline-flex min-h-12 items-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
+              {fa(post.title)}
+            </Link>
           </h3>
         </CardHeader>
         <CardContent className="mt-auto">
@@ -34,7 +30,7 @@ export function PostCard({ post }: { post: PostSummary }) {
             <p className="min-w-0 wrap-anywhere">{fa(post.authorName)}</p>
             {post.publishedAt !== null && (
               <time dateTime={post.publishedAt}>
-                {publicationDate.format(new Date(post.publishedAt))}
+                {formatPublicationDate(post.publishedAt)}
               </time>
             )}
           </div>

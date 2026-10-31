@@ -1,4 +1,5 @@
 import { feed } from "./posts.mjs";
+import { articleContent } from "./article-content.mjs";
 
 // Synthetic development-preview articles only; never imported by application code.
 const titles = [
@@ -36,7 +37,8 @@ export const previewPosts = titles.map((title, index) => {
     id: `30000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
     slug: `preview-article-${index + 1}`,
     title,
-    content: `این مقالهٔ آزمایشی دربارهٔ «${title}» برای بررسی رابط و صفحه‌بندی آماده شده است.`,
+    content: articleContent[index],
+    tags: index % 3 === 0 ? [{ id: "40000000-0000-4000-8000-000000000001", name: "برنامه‌نویسی", slug: "programming" }] : [],
     publishedAt,
     createdAt: publishedAt,
     updatedAt: publishedAt,

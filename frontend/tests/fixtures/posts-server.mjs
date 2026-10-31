@@ -8,6 +8,11 @@ const preview = process.env.POSTS_FIXTURE_PREVIEW === "true";
 // Category responses are test doubles matching the public Nest taxonomy DTO.
 let categoryMode = "success";
 let postsMode = "success";
+let detailMode = "success";
+const privatePosts = [
+  { ...publishedPosts[0], id: "50000000-0000-4000-8000-000000000001", slug: "draft-post", status: "DRAFT", publishedAt: null, content: "PRIVATE TEST DOUBLE" },
+  { ...publishedPosts[0], id: "50000000-0000-4000-8000-000000000002", slug: "deprecated-post", status: "DEPRECATED", content: "PRIVATE TEST DOUBLE" },
+];
 const categories = [
   { id: "20000000-0000-4000-8000-000000000001", name: "توسعهٔ وب", slug: "web", createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" },
   // The backend slugifier can produce an empty slug for some names.
@@ -32,6 +37,29 @@ createServer((request, response) => {
     if (!["success", "empty", "error", "slow", "rate-limit", "malformed", "invalid", "disconnect", "timeout"].includes(mode)) return response.writeHead(400).end();
     postsMode = mode;
     return response.writeHead(204).end();
+  }
+  if (request.method === "POST" && url.pathname === "/__test/details") {
+    const mode = url.searchParams.get("mode");
+    if (!["success", "error", "rate-limit", "malformed", "invalid", "non-public", "disconnect", "timeout"].includes(mode)) return response.writeHead(400).end();
+    detailMode = mode;
+    return response.writeHead(204).end();
+  }
+  // Both test datasets share their list records with the detail response.
+  if (request.method === "GET" && url.pathname.startsWith("/posts/") && !url.search && !request.headers.authorization) {
+    let slug;
+    try { slug = decodeURIComponent(url.pathname.slice("/posts/".length)); }
+    catch { return response.writeHead(400).end(); }
+    const post = [...publishedPosts, ...previewPosts, ...privatePosts].find((post) => post.slug === slug);
+    if (!post || post.status !== "PUBLISHED") return response.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ statusCode: 404, message: "Post not found.", error: "Not Found" }));
+    if (detailMode === "error") return response.writeHead(503).end("TEST DOUBLE: private detail failure");
+    if (detailMode === "rate-limit") return response.writeHead(429).end();
+    if (detailMode === "disconnect") return request.socket.destroy();
+    if (detailMode === "timeout") return;
+    response.writeHead(200, { "Content-Type": "application/json" });
+    if (detailMode === "malformed") return response.end("{TEST DOUBLE");
+    if (detailMode === "invalid") return response.end(JSON.stringify({ ...post, content: 5 }));
+    if (detailMode === "non-public") return response.end(JSON.stringify({ ...post, status: "DRAFT", content: "PRIVATE TEST DOUBLE" }));
+    return response.end(JSON.stringify(post));
   }
   if (request.method === "GET" && url.pathname === "/categories" && !url.search && !request.headers.authorization) {
     if (categoryMode === "error") return response.writeHead(503).end();
