@@ -30,7 +30,7 @@ test("a Visitor browses Published Posts with reload and browser history", async 
 
 test("invalid pages normalize safely and an out-of-range page differs from an empty blog", async ({ page, request }) => {
   for (const query of ["page=abc", "page=0", "page=-2", "page=1.5", "page=9007199254740992", "page=2&page=1", "page=", "page=1e2"]) {
-    await page.goto(`/?${query}&limit=1&sort=oldest&category=ignored`);
+    await page.goto(`/?${query}&limit=1&author=ignored&unexpected=ignored`);
     await expect(page.getByRole("article")).toHaveCount(10);
     await expect(page.getByRole("navigation", { name: "صفحه‌بندی مقاله‌ها" })).toContainText("صفحهٔ ۱ از ۲");
   }

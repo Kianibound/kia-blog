@@ -1,5 +1,6 @@
 import "server-only";
 import { parsePublishedPost, parsePublishedPosts } from "./posts-contract";
+import { postsQueryParams, type PostsQuery } from "./posts-query";
 
 async function requestPosts(path: string, query?: URLSearchParams) {
   const configuredOrigin = process.env.API_BASE_URL;
@@ -23,8 +24,12 @@ async function requestPosts(path: string, query?: URLSearchParams) {
   });
 }
 
-export async function getPublishedPosts(page: number) {
-  const response = await requestPosts("/posts", new URLSearchParams({ page: String(page), limit: "10", sort: "newest" }));
+export async function getPublishedPosts(query: PostsQuery) {
+  const params = postsQueryParams(query);
+  params.set("page", String(query.page));
+  params.set("limit", "10");
+  params.set("sort", query.sort);
+  const response = await requestPosts("/posts", params);
   if (!response.ok) throw new Error("Unable to load public posts");
 
   const payload: unknown = await response.json();

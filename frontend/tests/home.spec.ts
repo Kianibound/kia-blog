@@ -17,15 +17,15 @@ test("a Visitor sees the first Published Posts in an accessible Persian public s
 
   const articles = page.getByRole("article");
   await expect(articles).toHaveCount(10);
-  await expect(articles.first().getByRole("heading")).toHaveText("راهنمای Next.js و معماری وب");
-  await expect(articles.nth(1).getByRole("heading")).toHaveText("عنوان <strong>مقاله</strong> باید متن بماند");
-  await expect(articles.first()).toContainText("نیما کیانی");
-  await expect(articles.first()).toContainText("۱ فروردین ۱۴۰۵");
-  await expect(articles.first()).toContainText("توسعهٔ وب");
-  await expect(articles.nth(1)).toContainText("nima");
-  await expect(articles.nth(1).locator("time")).toHaveCount(0);
+  await expect(articles.first().getByRole("heading")).toHaveText("عنوان <strong>مقاله</strong> باید متن بماند");
+  await expect(articles.nth(1).getByRole("heading")).toHaveText("راهنمای Next.js و معماری وب");
+  await expect(articles.nth(1)).toContainText("نیما کیانی");
+  await expect(articles.nth(1)).toContainText("۱ فروردین ۱۴۰۵");
+  await expect(articles.nth(1)).toContainText("توسعهٔ وب");
+  await expect(articles.first()).toContainText("nima");
+  await expect(articles.first().locator("time")).toHaveCount(0);
   await expect(articles.getByRole("link")).toHaveCount(10);
-  await expect(articles.first().getByRole("link")).toHaveAttribute("href", "/posts/test-post-1");
+  await expect(articles.first().getByRole("link")).toHaveAttribute("href", "/posts/test-post-2");
   await expect(page.getByText("از درخواست تا صفحه", { exact: false })).toHaveCount(0);
   await expect(page.locator("main strong")).toHaveCount(0);
   expect(backendRequests).toEqual([]);

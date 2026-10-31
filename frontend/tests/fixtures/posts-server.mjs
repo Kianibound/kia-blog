@@ -69,13 +69,14 @@ createServer((request, response) => {
   const page = Number(url.searchParams.get("page") ?? "1");
   const limit = Number(url.searchParams.get("limit") ?? "10");
   const sort = url.searchParams.get("sort") ?? "newest";
-  const expectedQuery = new URLSearchParams({ limit: "10", sort: "newest" });
+  const search = url.searchParams.get("search");
+  const category = url.searchParams.get("category");
+  const tag = url.searchParams.get("tag");
   if (
     request.method !== "GET" ||
     url.pathname !== "/posts" ||
-    (preview
-      ? [...url.searchParams.keys()].some((key) => !["page", "limit", "sort"].includes(key) || url.searchParams.getAll(key).length !== 1)
-      : url.searchParams.size !== 3 || [...expectedQuery].some(([key, value]) => url.searchParams.get(key) !== value)) ||
+    [...url.searchParams.keys()].some((key) => !["page", "limit", "sort", "search", "category", "tag"].includes(key) || url.searchParams.getAll(key).length !== 1) ||
+    (!preview && ["page", "limit", "sort"].some((key) => !url.searchParams.has(key))) ||
     !Number.isSafeInteger(page) || page < 1 ||
     !Number.isSafeInteger(limit) || limit < 1 || limit > 50 ||
     !["newest", "oldest"].includes(sort) ||
@@ -91,8 +92,19 @@ createServer((request, response) => {
   if (postsMode === "malformed") return response.writeHead(200, { "Content-Type": "application/json" }).end("{TEST DOUBLE");
   if (postsMode === "invalid") return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ data: [{ id: 1 }], meta: { page, limit, total: 1, totalPages: 1 } }));
   response.writeHead(200, { "Content-Type": "application/json" });
-  const posts = postsMode === "empty" ? [] : preview ? previewPosts : publishedPosts;
-  const ordered = sort === "oldest" ? [...posts].reverse() : posts;
+  const source = postsMode === "empty" ? [] : preview ? previewPosts : publishedPosts;
+  const posts = source.filter((post) =>
+    (!search || [post.title, post.content].some((text) => text.toLowerCase().includes(search.toLowerCase()))) &&
+    (!category || post.categories.some((item) => item.slug === category)) &&
+    (!tag || post.tags.some((item) => item.slug === tag)));
+  // PostgreSQL defaults: NULLS FIRST for DESC, NULLS LAST for ASC; ties retain fixture order.
+  const ordered = [...posts].sort((a, b) => {
+    if (a.publishedAt === b.publishedAt) return 0;
+    if (a.publishedAt === null) return sort === "newest" ? -1 : 1;
+    if (b.publishedAt === null) return sort === "newest" ? 1 : -1;
+    const difference = Date.parse(a.publishedAt) - Date.parse(b.publishedAt);
+    return sort === "oldest" ? difference : -difference;
+  });
   const body = JSON.stringify({
     data: ordered.slice((page - 1) * limit, page * limit),
     meta: { page, limit, total: posts.length, totalPages: Math.ceil(posts.length / limit) },

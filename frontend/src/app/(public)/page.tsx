@@ -3,14 +3,23 @@ import { PublishedFeed } from "@/components/posts/published-feed";
 import { FeedLoading } from "@/components/posts/feed-loading";
 import { Card } from "@/components/ui/card";
 import { messages } from "@/i18n/messages/fa";
+import { redirect } from "next/navigation";
+import { SearchForm } from "@/components/posts/search-form";
+import { normalizePostsQuery, postsHref, type PostsSearchParams } from "@/lib/posts-query";
 
 // Keep environment validation and public reads at request time, not during builds.
 export const dynamic = "force-dynamic";
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ page?: string | string[] }> }) {
-  const { page: input } = await searchParams;
-  const parsed = typeof input === "string" && /^\d+$/.test(input) ? Number(input) : 1;
-  const page = Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 1;
+export default async function Home({ searchParams }: { searchParams: Promise<PostsSearchParams> }) {
+  const params = await searchParams;
+  const query = normalizePostsQuery(params);
+  const href = postsHref(query);
+  const original = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (Array.isArray(value)) value.forEach((item) => original.append(key, item));
+    else if (value !== undefined) original.set(key, value);
+  }
+  if ((original.size ? `/?${original}` : "/") !== href) redirect(href);
 
   return (
     <div className="space-y-10 sm:space-y-12">
@@ -38,8 +47,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ p
           <h2 id="published-posts-title" className="text-2xl leading-tight font-semibold">{messages.home.title}</h2>
           <p>{messages.home.feedDescription}</p>
         </div>
-        <Suspense key={page} fallback={<FeedLoading />}>
-          <PublishedFeed page={page} />
+        <SearchForm query={query} />
+        <Suspense key={href} fallback={<FeedLoading />}>
+          <PublishedFeed query={query} />
         </Suspense>
       </section>
     </div>
