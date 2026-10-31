@@ -34,7 +34,7 @@ test("a Visitor sees the first Published Posts in an accessible Persian public s
   await expect(page.getByRole("link", { name: "رفتن به محتوای اصلی" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("main")).toBeFocused();
-  await page.getByRole("navigation").getByRole("link", { name: "خانه", exact: true }).click();
+  await page.getByRole("navigation", { name: "راهبری اصلی" }).getByRole("link", { name: "خانه", exact: true }).click();
   await expect(articles).toHaveCount(10);
 
   for (const width of [360, 390, 1280]) {

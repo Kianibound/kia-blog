@@ -3,6 +3,7 @@ type PostFeedResponse = {
   data: {
     id: string;
     title: string;
+    slug: string;
     status: "PUBLISHED";
     publishedAt: string | null;
     author: { username: string; name: string | null };
@@ -14,6 +15,7 @@ type PostFeedResponse = {
 export type PostSummary = {
   id: string;
   title: string;
+  slug: string;
   publishedAt: string | null;
   authorName: string;
   categories: { id: string; name: string }[];
@@ -36,6 +38,7 @@ function isPost(value: unknown): value is PostFeedResponse["data"][number] {
     isRecord(value) &&
     isText(value.id) &&
     isText(value.title) &&
+    typeof value.slug === "string" &&
     value.status === "PUBLISHED" &&
     (value.publishedAt === null ||
       (typeof value.publishedAt === "string" &&
@@ -65,14 +68,18 @@ function isPostFeed(value: unknown): value is PostFeedResponse {
 }
 
 /** Validate the HTTP response before exposing only feed-safe presentation data. */
-export function parsePublishedPosts(payload: unknown): PostSummary[] {
+export function parsePublishedPosts(payload: unknown): { data: PostSummary[]; meta: PostFeedResponse["meta"] } {
   if (!isPostFeed(payload)) throw new Error("Invalid public posts response");
 
-  return payload.data.map((post) => ({
-    id: post.id,
-    title: post.title,
-    publishedAt: post.publishedAt,
-    authorName: post.author.name?.trim() || post.author.username,
-    categories: post.categories.map(({ id, name }) => ({ id, name })),
-  }));
+  return {
+    data: payload.data.map((post) => ({
+      id: post.id,
+      title: post.title,
+      slug: post.slug,
+      publishedAt: post.publishedAt,
+      authorName: post.author.name?.trim() || post.author.username,
+      categories: post.categories.map(({ id, name }) => ({ id, name })),
+    })),
+    meta: { ...payload.meta },
+  };
 }

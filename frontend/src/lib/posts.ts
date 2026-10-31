@@ -1,7 +1,7 @@
 import "server-only";
 import { parsePublishedPosts } from "./posts-contract";
 
-export async function getFirstPublishedPosts() {
+export async function getPublishedPosts(page: number) {
   const configuredOrigin = process.env.API_BASE_URL;
   if (!configuredOrigin) throw new Error("Missing posts API configuration");
 
@@ -15,7 +15,7 @@ export async function getFirstPublishedPosts() {
   }
 
   const url = new URL("/posts", origin);
-  url.search = new URLSearchParams({ page: "1", limit: "10", sort: "newest" }).toString();
+  url.search = new URLSearchParams({ page: String(page), limit: "10", sort: "newest" }).toString();
   const response = await fetch(url, {
     headers: { Accept: "application/json" },
     cache: "no-store",

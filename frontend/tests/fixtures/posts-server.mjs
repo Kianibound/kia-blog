@@ -1,8 +1,9 @@
 import { createServer } from "node:http";
-import { feed } from "./posts.mjs";
+import { publishedPosts } from "./posts.mjs";
 
 // Category responses are test doubles matching the public Nest taxonomy DTO.
 let categoryMode = "success";
+let postsEmpty = false;
 const categories = [
   { id: "20000000-0000-4000-8000-000000000001", name: "توسعهٔ وب", slug: "web", createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" },
   // The backend slugifier can produce an empty slug for some names.
@@ -22,16 +23,24 @@ createServer((request, response) => {
     categoryMode = mode;
     return response.writeHead(204).end();
   }
+  if (request.method === "POST" && url.pathname === "/__test/posts") {
+    const mode = url.searchParams.get("mode");
+    if (!["success", "empty"].includes(mode)) return response.writeHead(400).end();
+    postsEmpty = mode === "empty";
+    return response.writeHead(204).end();
+  }
   if (request.method === "GET" && url.pathname === "/categories" && !url.search && !request.headers.authorization) {
     if (categoryMode === "error") return response.writeHead(503).end();
     response.writeHead(200, { "Content-Type": "application/json" });
     return response.end(JSON.stringify(categoryMode === "empty" ? [] : categoryMode === "invalid" ? [{ id: 1 }] : categories));
   }
-  const expectedQuery = new URLSearchParams({ page: "1", limit: "10", sort: "newest" });
+  const page = Number(url.searchParams.get("page"));
+  const expectedQuery = new URLSearchParams({ limit: "10", sort: "newest" });
   if (
     request.method !== "GET" ||
     url.pathname !== "/posts" ||
     url.searchParams.size !== 3 ||
+    !Number.isSafeInteger(page) || page < 1 ||
     [...expectedQuery].some(([key, value]) => url.searchParams.get(key) !== value) ||
     request.headers.authorization
   ) {
@@ -39,5 +48,9 @@ createServer((request, response) => {
     return;
   }
   response.writeHead(200, { "Content-Type": "application/json" });
-  response.end(JSON.stringify(feed));
+  const posts = postsEmpty ? [] : publishedPosts;
+  response.end(JSON.stringify({
+    data: posts.slice((page - 1) * 10, page * 10),
+    meta: { page, limit: 10, total: posts.length, totalPages: Math.ceil(posts.length / 10) },
+  }));
 }).listen(4101, "127.0.0.1");

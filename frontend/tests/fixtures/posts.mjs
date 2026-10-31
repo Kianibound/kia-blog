@@ -36,5 +36,15 @@ export const feed = {
         : [{ id: "20000000-0000-4000-8000-000000000001", name: "توسعهٔ وب", slug: "web" }],
     tags: [],
   })),
-  meta: { page: 1, limit: 10, total: 10, totalPages: 1 },
+  meta: { page: 1, limit: 10, total: 12, totalPages: 2 },
 };
+
+export const publishedPosts = [
+  ...feed.data,
+  ...["خواندن مقاله‌های بیشتر", "پایان این مجموعه"].map((title, index) => ({
+    ...feed.data[0],
+    id: `00000000-0000-4000-8000-${String(index + 11).padStart(12, "0")}`,
+    slug: `test-post-${index + 11}`,
+    title,
+  })),
+];
