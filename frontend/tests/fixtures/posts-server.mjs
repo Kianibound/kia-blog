@@ -7,7 +7,7 @@ const preview = process.env.POSTS_FIXTURE_PREVIEW === "true";
 
 // Category responses are test doubles matching the public Nest taxonomy DTO.
 let categoryMode = "success";
-let postsEmpty = false;
+let postsMode = "success";
 const categories = [
   { id: "20000000-0000-4000-8000-000000000001", name: "توسعهٔ وب", slug: "web", createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" },
   // The backend slugifier can produce an empty slug for some names.
@@ -29,8 +29,8 @@ createServer((request, response) => {
   }
   if (request.method === "POST" && url.pathname === "/__test/posts") {
     const mode = url.searchParams.get("mode");
-    if (!["success", "empty"].includes(mode)) return response.writeHead(400).end();
-    postsEmpty = mode === "empty";
+    if (!["success", "empty", "error", "slow", "rate-limit", "malformed", "invalid", "disconnect", "timeout"].includes(mode)) return response.writeHead(400).end();
+    postsMode = mode;
     return response.writeHead(204).end();
   }
   if (request.method === "GET" && url.pathname === "/categories" && !url.search && !request.headers.authorization) {
@@ -56,11 +56,19 @@ createServer((request, response) => {
     response.writeHead(400).end("Unexpected posts request");
     return;
   }
+  if (postsMode === "error") return response.writeHead(503).end("TEST DOUBLE: private upstream error");
+  if (postsMode === "rate-limit") return response.writeHead(429).end("TEST DOUBLE: rate limit details");
+  if (postsMode === "disconnect") return request.socket.destroy();
+  if (postsMode === "timeout") return; // The application's real request timeout aborts this socket.
+  if (postsMode === "malformed") return response.writeHead(200, { "Content-Type": "application/json" }).end("{TEST DOUBLE");
+  if (postsMode === "invalid") return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ data: [{ id: 1 }], meta: { page, limit, total: 1, totalPages: 1 } }));
   response.writeHead(200, { "Content-Type": "application/json" });
-  const posts = postsEmpty ? [] : preview ? previewPosts : publishedPosts;
+  const posts = postsMode === "empty" ? [] : preview ? previewPosts : publishedPosts;
   const ordered = sort === "oldest" ? [...posts].reverse() : posts;
-  response.end(JSON.stringify({
+  const body = JSON.stringify({
     data: ordered.slice((page - 1) * limit, page * limit),
     meta: { page, limit, total: posts.length, totalPages: Math.ceil(posts.length / limit) },
-  }));
+  });
+  if (postsMode === "slow") setTimeout(() => response.end(body), 2000);
+  else response.end(body);
 }).listen(4101, "127.0.0.1");

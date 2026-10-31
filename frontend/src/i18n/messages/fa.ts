@@ -23,6 +23,10 @@ export const messages = {
     footerDescription: "کیا بلاگ؛ جایی برای نوشتن، خواندن و به‌اشتراک‌گذاشتن تجربه‌ها.",
   },
   home: {
+    feedLoading: "در حال دریافت مقاله‌ها…",
+    feedError: "دریافت مقاله‌ها ممکن نشد.",
+    feedErrorHelp: "لطفاً کمی بعد دوباره تلاش کنید.",
+    retry: "تلاش دوباره",
     pagination: "صفحه‌بندی مقاله‌ها",
     previousPage: "صفحهٔ قبل",
     nextPage: "صفحهٔ بعد",
