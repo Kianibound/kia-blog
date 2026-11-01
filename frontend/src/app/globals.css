@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Keep shared UI discovery stable when the separate test host builds this sheet. */
+@source "../";
 
 /* --- vibefarsi:theme-graphite --- */
 /* گرافیت، مینیمال فنی و تم پیش‌فرض. این بلوک را در :root بگذارید. */

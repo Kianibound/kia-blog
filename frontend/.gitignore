@@ -17,6 +17,8 @@
 
 # next.js
 /.next/
+/tests/dashboard-preview/.next/
+/tests/dashboard-preview/public/
 /out/
 
 # production

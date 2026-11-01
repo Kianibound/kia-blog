@@ -8,7 +8,8 @@
     "start": "next start --port 3001",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "npm run test:contract && playwright test",
+    "test": "npm run test:contract && playwright test && npm run test:dashboard",
+    "test:dashboard": "playwright test --config playwright.dashboard.config.ts",
     "test:contract": "node --experimental-strip-types --test tests/posts-contract.test.mjs",
     "test:home": "playwright test tests/home.spec.ts"
   },

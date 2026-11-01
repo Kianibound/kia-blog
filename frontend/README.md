@@ -56,6 +56,22 @@ not connect to a real database or prove live Nest deployment interoperability.
 
 ## Conventions
 
+### Dashboard shell preview (Issue #14)
+
+`npm run test:dashboard` builds a separate test-only Next application on port
+3102 against the resettable loopback HTTP fixture on 4101. Its pages compose the
+real shared dashboard modules for USER, AUTHOR and ADMIN; identity selection is
+only available through fixture setup. Every preview page identifies the data as
+test doubles. The workspace links demonstrate shell navigation, not future
+article/account features or permission enforcement.
+
+The production application has no dashboard or preview routes, role switches,
+authentication bypass or fixture fallback. The preview reuses the root theme,
+Vazirmatn, Graphite stylesheet and public homepage. Dashboard checks cover role
+presentation, responsive keyboard navigation, loading/error/retry and both
+themes. `npm test` runs existing public checks and then the dashboard suite.
+Real sessions, authorization and private dashboard activation remain later work.
+
 - `src/app/`: routes and layouts. Keep Server Components as the default.
 - `src/i18n/config.ts`: current document language/direction.
 - `src/i18n/messages/fa.ts`: app copy and metadata. No language switch or

@@ -1,0 +1,16 @@
+export const dashboardMessages = {
+  title: "پیشخوان",
+  description: "فضای کار شما در کیا بلاگ",
+  navigation: "راهبری پیشخوان",
+  menu: "فهرست پیشخوان",
+  identity: "هویت حساب",
+  identityUnavailable: "اطلاعات حساب",
+  navigationUnavailable: "پیوندهای پیشخوان در دسترس نیستند.",
+  returnToBlog: "بازگشت به وبلاگ",
+  browse: "خواندن مقاله‌ها",
+  skipToContent: "رفتن به محتوای پیشخوان",
+  roles: { USER: "خواننده", AUTHOR: "نویسنده", ADMIN: "مدیر" },
+  loading: "در حال دریافت پیشخوان…",
+  unavailable: "دریافت اطلاعات پیشخوان ممکن نشد.",
+  retry: "تلاش دوباره",
+};
