@@ -4,6 +4,92 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard");
 });
 
+test("an Author browses only their own Posts with persisted pagination and no premature actions", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts");
+  await expect(page.getByRole("heading", { level: 1, name: "مقاله‌های من" })).toBeVisible();
+  await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(10);
+  await expect(page.getByRole("main")).toContainText("پیش‌نویس");
+  await expect(page.getByRole("main")).toContainText("منتشرشده");
+  await expect(page.getByRole("main")).toContainText("کنارگذاشته‌شده");
+  await page.getByRole("link", { name: "صفحهٔ بعد" }).click();
+  await expect(page).toHaveURL(/\/dashboard\/posts\?page=2$/);
+  await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(1);
+  await page.reload();
+  await expect(page.getByRole("main")).toContainText("صفحهٔ ۲ از ۲");
+  await expect(page.getByRole("main").getByRole("link", { name: /ویرایش|ایجاد|حذف|انتشار/ })).toHaveCount(0);
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&author=nima");
+  await page.goto("/dashboard/posts");
+  await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(1);
+  await expect(page.getByRole("main")).toContainText("پایان این مجموعه");
+  await expect(page.getByRole("main")).not.toContainText("راهنمای Next.js");
+});
+
+test("own-Post loading, empty, invalid and failed reads recover at the selected page", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&postsMode=slow");
+  await page.goto("/dashboard/posts", { waitUntil: "commit" });
+  await expect(page.getByRole("status")).toHaveText("در حال دریافت مقاله‌های شما…");
+  await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(10);
+  for (const mode of ["error", "invalid", "foreign"]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&postsMode=${mode}`);
+    await page.goto("/dashboard/posts?page=2");
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("دریافت مقاله‌های شما ممکن نشد.");
+    await expect(page.getByRole("list", { name: "مقاله‌های من" })).toHaveCount(0);
+    await expect(page.getByRole("main")).not.toContainText("TEST DOUBLE");
+  }
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.getByRole("button", { name: "تلاش دوباره" }).click();
+  await expect(page).toHaveURL(/page=2$/);
+  await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(1);
+  for (const mode of ["error", "invalid"]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&mode=${mode}`);
+    await page.goto("/dashboard/posts?page=2");
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("دریافت مقاله‌های شما ممکن نشد.");
+    await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+    await page.getByRole("button", { name: "تلاش دوباره" }).click();
+    await expect(page).toHaveURL(/page=2$/);
+    await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(1);
+  }
+  await page.goto("/dashboard/posts?page=999");
+  await expect(page.getByRole("status")).toHaveText("در این صفحه مقاله‌ای وجود ندارد.");
+  await page.getByRole("link", { name: "بازگشت به صفحهٔ اول" }).click();
+  await expect(page).toHaveURL(/\/dashboard\/posts$/);
+  for (const query of ["page=-1", "page=2&page=3", "page=9007199254740992"]) {
+    await page.goto(`/dashboard/posts?${query}`);
+    await expect(page.getByRole("main")).toContainText("صفحهٔ ۱ از ۲");
+  }
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&postsMode=empty");
+  await page.reload();
+  await expect(page.getByRole("status")).toHaveText("هنوز مقاله‌ای ندارید.");
+  await expect(page.getByRole("navigation", { name: "صفحه‌بندی مقاله‌های من" })).toHaveCount(0);
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER");
+  await page.goto("/dashboard/posts");
+  await expect(page.getByRole("list", { name: "مقاله‌های من" })).toHaveCount(0);
+});
+
+test("author list remains readable and keyboard-paginated on mobile in both themes", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  for (const width of [360, 390, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/dashboard/posts");
+    await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(10);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await expect(page.getByRole("heading", { name: "عنوان <strong>مقاله</strong> باید متن بماند" })).toBeVisible();
+    for (const theme of ["light", "dark"]) {
+      await page.getByRole("button", { name: theme === "light" ? "فعال‌کردن حالت روشن" : "فعال‌کردن حالت تاریک" }).click();
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      await page.screenshot({ path: testInfo.outputPath(`author-posts-${theme}-${width}.png`), fullPage: true });
+    }
+    const next = page.getByRole("link", { name: "صفحهٔ بعد" });
+    await next.focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/page=2$/);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/dashboard\/posts$/);
+  }
+});
+
 test("each fixture Role gets an honest RTL dashboard with working role navigation", async ({ page, request }) => {
   for (const [role, name, label] of [
     ["USER", "نرگس رضایی", "فضای خواندن"],

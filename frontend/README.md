@@ -72,6 +72,13 @@ presentation, responsive keyboard navigation, loading/error/retry and both
 themes. `npm test` runs existing public checks and then the dashboard suite.
 Real sessions, authorization and private dashboard activation remain later work.
 
+Issue #18 adds `/dashboard/posts` in this same test-only host. Select AUTHOR in
+fixture setup; `author=sara` (default) or `author=nima` selects the test author.
+The reset endpoint also accepts `postsMode=empty|error|invalid|foreign|slow`;
+omitting it resets to success. The list follows Nest's scalar own-Post envelope
+and fixed ten-record pages, without create/edit/publish/delete actions. These
+scenarios demonstrate presentation and failure handling, not real authorization.
+
 - `src/app/`: routes and layouts. Keep Server Components as the default.
 - `src/i18n/config.ts`: current document language/direction.
 - `src/i18n/messages/fa.ts`: app copy and metadata. No language switch or

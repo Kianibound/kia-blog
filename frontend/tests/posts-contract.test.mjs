@@ -3,6 +3,21 @@ import test from "node:test";
 import { parsePublishedPost, parsePublishedPosts } from "../src/lib/posts-contract.ts";
 import { feed } from "./fixtures/posts.mjs";
 import { previewPosts } from "./fixtures/preview-posts.mjs";
+import { parseOwnPosts } from "../src/lib/own-posts-contract.ts";
+
+test("own-Post parsing preserves scalar records and rejects invalid status or pagination", () => {
+  const { author, categories, tags, ...post } = feed.data[0];
+  void author; void categories; void tags;
+  const response = { data: [{ ...post, status: "DRAFT", publishedAt: null }], meta: { page: 1, limit: 10, total: 1, totalPages: 1 } };
+  assert.deepEqual(parseOwnPosts(response, 1, 10), response);
+  for (const invalid of [
+    { ...response, data: [{ ...post, status: ["DRAFT"] }] },
+    { ...response, data: [{ ...post, authorId: null }] },
+    { ...response, data: [{ ...post, updatedAt: "not-a-date" }] },
+    { ...response, meta: { ...response.meta, page: 2 } },
+    { ...response, meta: { ...response.meta, totalPages: -1 } },
+  ]) assert.throws(() => parseOwnPosts(invalid, 1, 10));
+});
 
 test("detail parsing preserves literal content and taxonomy slugs from all preview articles", () => {
   for (const record of previewPosts) {

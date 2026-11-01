@@ -1,0 +1,18 @@
+export const authorPostsMessages = {
+  title: "مقاله‌های من",
+  description: "پیش‌نویس‌ها و مقاله‌های خود را مرور کنید.",
+  loading: "در حال دریافت مقاله‌های شما…",
+  empty: "هنوز مقاله‌ای ندارید.",
+  unavailable: "دریافت مقاله‌های شما ممکن نشد.",
+  retry: "تلاش دوباره",
+  outOfRange: "در این صفحه مقاله‌ای وجود ندارد.",
+  firstPage: "بازگشت به صفحهٔ اول",
+  pagination: "صفحه‌بندی مقاله‌های من",
+  previous: "صفحهٔ قبل",
+  next: "صفحهٔ بعد",
+  page: "صفحهٔ",
+  of: "از",
+  updated: "آخرین تغییر",
+  slug: "نشانی مقاله",
+  states: { DRAFT: "پیش‌نویس", PUBLISHED: "منتشرشده", DEPRECATED: "کنارگذاشته‌شده" },
+};

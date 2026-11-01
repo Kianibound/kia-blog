@@ -2,7 +2,7 @@ import "server-only";
 import type { DashboardIdentity } from "@/components/dashboard/types";
 
 // Test-preview I/O only. This is not an authentication or Nest account contract.
-export async function readFixtureIdentity(): Promise<DashboardIdentity | null> {
+export async function readFixtureIdentity(): Promise<(DashboardIdentity & { id: string }) | null> {
   try {
     const origin = new URL(process.env.API_BASE_URL ?? "");
     if (origin.protocol !== "http:" || origin.hostname !== "127.0.0.1" || origin.port !== "4101" || origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash) throw new Error("Invalid fixture origin");
@@ -10,9 +10,10 @@ export async function readFixtureIdentity(): Promise<DashboardIdentity | null> {
     if (!response.ok) return null;
     const data: unknown = await response.json();
     if (typeof data !== "object" || data === null || !("name" in data) || !("username" in data) || !("role" in data)) return null;
+    if (!("id" in data) || typeof data.id !== "string" || !data.id.trim()) return null;
     const { name, username, role } = data;
     if ((name !== null && typeof name !== "string") || typeof username !== "string" || !username.trim() || (role !== "USER" && role !== "AUTHOR" && role !== "ADMIN")) return null;
-    return { name, username, role };
+    return { id: data.id, name, username, role };
   } catch {
     return null;
   }
