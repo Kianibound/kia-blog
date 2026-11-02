@@ -6,12 +6,14 @@ import { authorPostsMessages as copy } from "@/i18n/messages/author-posts.fa";
 import { formatPublicationDate } from "@/lib/publication-date";
 import { fa } from "@/lib/utils";
 import type { OwnPosts } from "@/lib/own-posts-contract";
+import { articleFormMessages as formCopy } from "@/i18n/messages/article-form.fa";
 
 const controlClass = "inline-flex min-h-12 items-center justify-center rounded-control border border-border px-4 font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring";
 
-export function AuthorPostList({ posts, href }: { posts: OwnPosts; href: (page: number) => string }) {
+export function AuthorPostList({ posts, href, formLinks }: { posts: OwnPosts; href: (page: number) => string; formLinks?: { create: string; edit: (id: string) => string } }) {
   const { data, meta } = posts;
   return <section className="min-h-64 space-y-6" aria-label={copy.title}>
+    {formLinks && <Link href={formLinks.create} className={controlClass}>{formCopy.create}</Link>}
     {data.length > 0 && <ul aria-label={copy.title} className="space-y-4">{data.map(post => <li key={post.id}>
       <Card className="space-y-4 p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -20,6 +22,7 @@ export function AuthorPostList({ posts, href }: { posts: OwnPosts; href: (page: 
         </div>
         <p className="text-sm text-muted-foreground">{copy.updated}: <time dateTime={post.updatedAt}>{formatPublicationDate(post.updatedAt)}</time></p>
         <p className="text-sm wrap-anywhere">{copy.slug}: <bdi>{post.slug}</bdi></p>
+        {formLinks && <Link href={formLinks.edit(post.id)} className={controlClass}>{formCopy.edit}</Link>}
       </Card>
     </li>)}</ul>}
     {meta.total === 0 ? <Card className="min-h-64 p-6"><p role="status">{copy.empty}</p></Card> : data.length === 0 ? <Card className="min-h-64 space-y-4 p-6"><p role="status">{copy.outOfRange}</p><Link href={href(1)} className={controlClass}>{copy.firstPage}</Link></Card> :

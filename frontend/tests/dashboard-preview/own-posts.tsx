@@ -15,5 +15,5 @@ export async function PreviewOwnPosts({ page, authorId }: { page: number; author
   } catch {
     return <AuthorPostsUnavailable page={page} />;
   }
-  return <AuthorPostList posts={posts} href={ownPostsHref} />;
+  return <AuthorPostList posts={posts} href={ownPostsHref} formLinks={{ create: "/dashboard/posts/new", edit: id => `/dashboard/posts/${encodeURIComponent(id)}/edit` }} />;
 }

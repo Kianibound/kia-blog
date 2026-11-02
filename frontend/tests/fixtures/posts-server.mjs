@@ -23,7 +23,7 @@ const categories = [
 // Minimal external API test double. Strict query handling checks the real wire boundary.
 createServer((request, response) => {
   const url = new URL(request.url, "http://127.0.0.1:4101");
-  if (handleDashboardFixture(request, response, url)) return;
+  if (handleDashboardFixture(request, response, url, categories)) return;
   if (request.method === "GET" && url.pathname === "/health") {
     response.end("ok");
     return;
