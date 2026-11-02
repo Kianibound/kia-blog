@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ type Props = {
   categories: ArticleTaxonomy[];
   tags: ArticleTaxonomy[];
   saveAction?: (id: string | undefined, input: ArticleInput) => Promise<ArticleSaveResult>;
+  renderContent?: (field: { id: string; label: string; editable: boolean; error?: string; onChange: (text: string) => void }) => ReactNode;
 };
 
 export function ArticleFormLoading() {
@@ -42,7 +43,7 @@ function TaxonomyChoices({ label, choices, original, selected, onChange }: { lab
 }
 
 /** Presentation only. Without an explicitly supplied adapter, saving is unavailable. */
-export function ArticleForm({ article, categories, tags, saveAction }: Props) {
+export function ArticleForm({ article, categories, tags, saveAction, renderContent }: Props) {
   const [saved, setSaved] = useState(article);
   const [title, setTitle] = useState(article?.title ?? "");
   const [content, setContent] = useState(article?.content ?? "");
@@ -80,7 +81,7 @@ export function ArticleForm({ article, categories, tags, saveAction }: Props) {
     <form noValidate onSubmit={submit} className="space-y-6" aria-busy={state === "saving"}>
       <fieldset disabled={!saveAction || state === "saving"} className="min-w-0 space-y-6">
         <Field label={copy.title} htmlFor="article-title"><Input id="article-title" value={title} onChange={event => { setTitle(event.target.value); if (state === "saved") setState("idle"); }} required aria-invalid={errors.title} aria-describedby={errors.title ? "article-title-error" : undefined} className="min-h-12" />{errors.title && <p id="article-title-error" className="text-sm text-destructive">{copy.requiredTitle}</p>}</Field>
-        <Field label={copy.content} htmlFor="article-content" hint={copy.plain}><Textarea id="article-content" value={content} onChange={event => { setContent(event.target.value); if (state === "saved") setState("idle"); }} required rows={10} aria-invalid={errors.content} aria-describedby={errors.content ? "article-content-error" : undefined} />{errors.content && <p id="article-content-error" className="text-sm text-destructive">{copy.requiredContent}</p>}</Field>
+        {renderContent ? <Field label={copy.content} htmlFor="article-content">{renderContent({ id: "article-content", label: copy.content, editable: Boolean(saveAction) && state !== "saving", error: errors.content ? copy.requiredContent : undefined, onChange: text => { setContent(text); if (state === "saved") setState("idle"); } })}</Field> : <Field label={copy.content} htmlFor="article-content" hint={copy.plain}><Textarea id="article-content" value={content} onChange={event => { setContent(event.target.value); if (state === "saved") setState("idle"); }} required rows={10} aria-invalid={errors.content} aria-describedby={errors.content ? "article-content-error" : undefined} />{errors.content && <p id="article-content-error" className="text-sm text-destructive">{copy.requiredContent}</p>}</Field>}
         <TaxonomyChoices label={copy.categories} choices={categories} original={article?.categories ?? []} selected={selectedCategories} onChange={value => { setCategories(value); if (state === "saved") setState("idle"); }} />
         <TaxonomyChoices label={copy.tags} choices={tags} original={article?.tags ?? []} selected={selectedTags} onChange={value => { setTags(value); if (state === "saved") setState("idle"); }} />
       </fieldset>

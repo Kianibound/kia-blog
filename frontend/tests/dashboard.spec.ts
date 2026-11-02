@@ -5,6 +5,119 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+test("the Persian rich editor formats a selection and reloads its fixture-only UI document", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts/new");
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("سند آزمایشی ویرایشگر");
+  const editor = page.getByRole("textbox", { name: "متن مقاله", exact: true });
+  await expect(editor).toHaveAttribute("contenteditable", "true");
+  await editor.fill("فارسی 123 و ۱۲۳");
+  await editor.press("ControlOrMeta+a");
+  await page.getByRole("button", { name: "پررنگ", exact: true }).click();
+  await expect(editor.locator("strong")).toHaveText("فارسی 123 و ۱۲۳");
+  await page.getByRole("button", { name: "تیتر ۲", exact: true }).click();
+  await expect(editor.locator("h2")).toContainText("فارسی 123 و ۱۲۳");
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("ذخیره شد");
+  await page.reload();
+  await expect(editor.locator("h2 strong")).toHaveText("فارسی 123 و ۱۲۳");
+});
+
+test("editor toolbar keyboard access preserves selection and history across unrelated form changes", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts/new");
+  const editor = page.getByRole("textbox", { name: "متن مقاله", exact: true });
+  await editor.fill("انتخاب پایدار 42");
+  await editor.press("ControlOrMeta+a");
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("تغییر عنوان");
+  await page.getByRole("checkbox", { name: "توسعهٔ وب" }).check();
+  await page.getByRole("button", { name: "پررنگ", exact: true }).click();
+  await expect(editor.locator("strong")).toHaveText("انتخاب پایدار 42");
+  await editor.press("Alt+F10");
+  await expect(page.getByRole("button", { name: "بند معمولی", exact: true })).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.getByRole("button", { name: "تیتر ۲", exact: true })).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("button", { name: "بند معمولی", exact: true })).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(page.getByRole("button", { name: "واگرد", exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(editor).toBeFocused();
+  await expect(editor.locator("strong")).toHaveCount(0);
+  await page.getByRole("button", { name: "ازنو", exact: true }).click();
+  await expect(editor.locator("strong")).toHaveText("انتخاب پایدار 42");
+  await editor.press("Alt+F10");
+  await page.keyboard.press("Escape");
+  await expect(editor).toBeFocused();
+});
+
+test("rich editor supports reviewed headings, lists, block direction, LTR code and composition text", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts/new");
+  const editor = page.getByRole("textbox", { name: "متن مقاله", exact: true });
+  await expect(editor).toHaveAttribute("dir", "rtl");
+  await editor.fill("متن فارسی 123 و ۱۲۳");
+  await editor.press("ControlOrMeta+a");
+  for (const level of [2, 3, 4]) {
+    await page.getByRole("button", { name: `تیتر ${["", "", "۲", "۳", "۴"][level]}`, exact: true }).click();
+    await expect(editor.locator(`h${level}`)).toHaveText("متن فارسی 123 و ۱۲۳");
+  }
+  await page.getByRole("button", { name: "بند معمولی", exact: true }).click();
+  await page.getByRole("button", { name: "کج", exact: true }).click();
+  await expect(editor.locator("em")).toHaveText("متن فارسی 123 و ۱۲۳");
+  for (const [name, tag] of [["فهرست نشانه‌دار", "ul"], ["فهرست شماره‌دار", "ol"]]) {
+    await page.getByRole("button", { name, exact: true }).click();
+    await expect(editor.locator(`${tag} li`)).toContainText("متن فارسی 123 و ۱۲۳");
+    await page.getByRole("button", { name, exact: true }).click();
+  }
+  await page.getByRole("button", { name: "جهت بند چپ‌به‌راست", exact: true }).click();
+  await expect(editor.locator("p")).toHaveAttribute("dir", "ltr");
+  await page.getByRole("button", { name: "جهت بند راست‌به‌چپ", exact: true }).click();
+  await expect(editor.locator("p")).toHaveAttribute("dir", "rtl");
+  await editor.press("ControlOrMeta+End");
+  await editor.press("Enter");
+  await page.getByRole("button", { name: "بلوک کد", exact: true }).click();
+  await page.keyboard.insertText('const count = 123; // فارسی ۱۲۳');
+  await expect(editor.locator("pre")).toHaveCSS("direction", "ltr");
+  await expect(editor.locator("pre code")).toHaveText('const count = 123; // فارسی ۱۲۳');
+  await editor.dispatchEvent("compositionstart", { data: "" });
+  await page.keyboard.insertText(" می‌نویسم");
+  await editor.dispatchEvent("compositionend", { data: " می‌نویسم" });
+  await expect(editor).toContainText("می‌نویسم");
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("فارسی و کد");
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("ذخیره شد");
+  await page.reload();
+  await expect(editor.locator("pre")).toHaveCSS("direction", "ltr");
+  await expect(editor).toContainText('const count = 123; // فارسی ۱۲۳ می‌نویسم');
+});
+
+test("link editing gives safe Persian feedback and restores the selected text", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts/new");
+  const editor = page.getByRole("textbox", { name: "متن مقاله", exact: true });
+  await editor.fill("پیوند انتخاب‌شده");
+  await editor.press("ControlOrMeta+End");
+  await page.getByRole("button", { name: "ویرایش پیوند", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("ابتدا بخشی از متن را انتخاب کنید");
+  await editor.press("ControlOrMeta+a");
+  await page.getByRole("button", { name: "ویرایش پیوند", exact: true }).click();
+  const url = page.getByLabel("نشانی پیوند", { exact: true });
+  await expect(url).toBeFocused();
+  await url.fill("javascript:alert(1)");
+  await page.getByRole("button", { name: "اعمال پیوند", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("یک نشانی کامل");
+  await expect(editor.locator("a")).toHaveCount(0);
+  await url.fill("https://example.test/guide");
+  await url.press("Enter");
+  await expect(editor.locator("a")).toHaveAttribute("href", "https://example.test/guide");
+  await expect(editor.locator("a")).toHaveText("پیوند انتخاب‌شده");
+  await page.getByRole("button", { name: "ویرایش پیوند", exact: true }).click();
+  await page.getByRole("button", { name: "حذف پیوند", exact: true }).click();
+  await expect(editor.locator("a")).toHaveCount(0);
+  await expect(editor).toHaveText("پیوند انتخاب‌شده");
+});
+
 test("an Author explicitly creates a fixture draft and edits plain content with persisted taxonomy", async ({ page, request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
   await page.goto("/dashboard/posts");
@@ -23,7 +136,7 @@ test("an Author explicitly creates a fixture draft and edits plain content with 
   const row = page.getByRole("listitem").filter({ hasText: "پیش‌نویس تازه" });
   await expect(row).toContainText("پیش‌نویس");
   await row.getByRole("link", { name: "ویرایش مقاله" }).click();
-  await expect(page.getByLabel("متن مقاله", { exact: true })).toHaveValue("متن ساده <strong>بدون تبدیل</strong>\nخط دوم");
+  await expect(page.getByLabel("متن مقاله", { exact: true })).toHaveText("متن ساده <strong>بدون تبدیل</strong>\nخط دوم", { useInnerText: true });
   await expect(page.getByRole("checkbox", { name: "توسعهٔ وب" })).toBeChecked();
   await expect(page.getByRole("checkbox", { name: "برنامه‌نویسی" })).toBeChecked();
   await page.getByLabel("عنوان مقاله", { exact: true }).fill("عنوان ویرایش‌شده");
@@ -71,7 +184,7 @@ test("fixture saves are explicit, prevent duplicate submission and preserve inpu
   await save.click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText("ذخیره انجام نشد.");
   await expect(page.getByLabel("عنوان مقاله", { exact: true })).toHaveValue("حفظ ورودی‌ها");
-  await expect(page.getByLabel("متن مقاله", { exact: true })).toHaveValue("متن حفظ می‌شود.");
+  await expect(page.getByLabel("متن مقاله", { exact: true })).toHaveText("متن حفظ می‌شود.");
   await expect(page.getByRole("checkbox", { name: "یادگیری ۲۰۲۶" })).toBeChecked();
   await request.post(`${control}&saveMode=slow`);
   await save.dblclick();
@@ -95,10 +208,13 @@ test("fixture saves are explicit, prevent duplicate submission and preserve inpu
 test("fixture HTTP contracts keep detail/write responses distinct and reset list/detail together", async ({ request }) => {
   const base = "http://127.0.0.1:4101";
   await request.post(`${base}/__test/dashboard?role=AUTHOR`);
-  const input = { title: "قرارداد آزمایشی", content: "متن ساده\nبدون JSON", categoryIds: ["20000000-0000-4000-8000-000000000001"], tagIds: ["40000000-0000-4000-8000-000000000001"] };
+  const previewDocument = { format: "tiptap-ui-proposal-1", document: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "متن ساده" }] }, { type: "paragraph", content: [{ type: "text", text: "بدون JSON" }] }] } };
+  const input = { title: "قرارداد آزمایشی", content: "متن ساده\nبدون JSON", categoryIds: ["20000000-0000-4000-8000-000000000001"], tagIds: ["40000000-0000-4000-8000-000000000001"], previewDocument };
   const response = await request.post(`${base}/dashboard-posts`, { data: input });
   expect(response.status()).toBe(201);
   const payload = await response.json();
+  expect(payload.content).toBe("متن ساده\nبدون JSON");
+  expect(payload.previewDocument).toEqual(previewDocument);
   const saved = parseArticleWrite(payload);
   expect(saved).toMatchObject({ title: input.title, content: input.content, status: "DRAFT", publishedAt: null });
   expect(saved.id).toMatch(/^[0-9a-f-]{36}$/);
@@ -107,6 +223,7 @@ test("fixture HTTP contracts keep detail/write responses distinct and reset list
   expect(payload.categories[0]).toHaveProperty("createdAt");
   expect(() => parseArticleDetail(payload)).toThrow();
   const detail = await (await request.get(`${base}/dashboard-posts/${saved.id}`)).json();
+  expect(detail.previewDocument).toEqual(previewDocument);
   expect(parseArticleDetail(detail)).toEqual(saved);
   expect(detail.categories[0]).not.toHaveProperty("createdAt");
   expect(() => parseArticleWrite(detail)).toThrow();
@@ -114,6 +231,8 @@ test("fixture HTTP contracts keep detail/write responses distinct and reset list
   const list = await (await request.get(`${base}/dashboard-posts?page=1&limit=10`)).json();
   expect(list.data[0]).toMatchObject({ id: saved.id, slug: saved.slug, title: input.title });
   expect(list.data[0]).not.toHaveProperty("categories");
+  expect(list.data[0]).not.toHaveProperty("previewDocument");
+  expect((await request.patch(`${base}/dashboard-posts/${saved.id}`, { data: { ...input, previewDocument: { ...previewDocument, format: "unknown" } } })).status()).toBe(400);
   expect((await request.patch(`${base}/dashboard-posts/${saved.id}`, { data: { ...input, status: "PUBLISHED" } })).status()).toBe(400);
   await request.post(`${base}/__test/dashboard?role=AUTHOR&reset=1`);
   expect((await request.get(`${base}/dashboard-posts/${saved.id}`)).status()).toBe(404);
@@ -133,6 +252,8 @@ test("article forms remain accessible on mobile and saving is unavailable withou
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.getByLabel("عنوان مقاله", { exact: true }).focus();
+      await page.keyboard.press("Tab");
+      await expect(page.getByRole("button", { name: "بند معمولی", exact: true })).toBeFocused();
       await page.keyboard.press("Tab");
       await expect(page.getByLabel("متن مقاله", { exact: true })).toBeFocused();
       await page.screenshot({ path: testInfo.outputPath(`article-form-${width}-${theme}.png`), fullPage: true });

@@ -22,7 +22,7 @@ let ownPosts = structuredClone(initialPosts);
 let saveMode = "success";
 let formMode = "success";
 let writes = 0;
-const scalar = ({ categories, tags, ...post }) => { void categories; void tags; return post; };
+const scalar = ({ categories, tags, previewDocument, ...post }) => { void categories; void tags; void previewDocument; return post; };
 const json = (response, status, payload) => response.writeHead(status, { "Content-Type": "application/json" }).end(JSON.stringify(payload));
 const fullTaxonomy = item => ({ ...item, createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" });
 
@@ -75,13 +75,16 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     request.on("end", () => {
       let input;
       try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
-      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(key => !["title", "content", "categoryIds", "tagIds"].includes(key)) || typeof input.title !== "string" || !input.title.trim() || typeof input.content !== "string" || !input.content.trim() || !Array.isArray(input.categoryIds) || !Array.isArray(input.tagIds)) { response.writeHead(400).end(); return; }
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(key => !["title", "content", "categoryIds", "tagIds", "previewDocument"].includes(key)) || typeof input.title !== "string" || !input.title.trim() || typeof input.content !== "string" || !input.content.trim() || !Array.isArray(input.categoryIds) || !Array.isArray(input.tagIds)) { response.writeHead(400).end(); return; }
+      // Envelope check for UI review only, not canonical rich-content validation.
+      if (input.previewDocument !== undefined && (input.previewDocument?.format !== "tiptap-ui-proposal-1" || input.previewDocument?.document?.type !== "doc" || !Array.isArray(input.previewDocument?.document?.content))) { response.writeHead(400).end(); return; }
       const categories = [...categoryChoices, ...ownPosts.flatMap(item => item.categories).map(fullTaxonomy)];
       if (input.categoryIds.some(id => !categories.some(item => item.id === id)) || input.tagIds.some(id => !tags.some(item => item.id === id))) { response.writeHead(400).end(); return; }
       writes++;
       if (saveMode === "error") { response.writeHead(422).end(); return; }
       const now = new Date().toISOString();
       const saved = { ...(post ?? { id: randomUUID(), slug: `fixture-draft-${randomUUID()}`, authorId: authorIds[author], status: "DRAFT", publishedAt: null, createdAt: now }), title: input.title, content: input.content, updatedAt: now, categories: [...new Set(input.categoryIds)].map(id => categories.find(item => item.id === id)), tags: [...new Set(input.tagIds)].map(id => tags.find(item => item.id === id)) };
+      if (input.previewDocument !== undefined) saved.previewDocument = input.previewDocument;
       if (post) ownPosts[ownPosts.indexOf(post)] = saved; else ownPosts.unshift(saved);
       if (saveMode === "uncertain") { request.socket.destroy(); return; }
       const send = () => json(response, post ? 200 : 201, { ...saved, categories: saved.categories.map(fullTaxonomy), tags: saved.tags.map(fullTaxonomy) });
