@@ -5,12 +5,12 @@ import { readFixtureIdentity } from "./identity";
 import type { PreviewDocument } from "./editor-document";
 
 // Test-only HTTP adapter. No production API, credentials or auth policy.
-export async function saveFixtureArticle(id: string | undefined, input: ArticleInput, previewDocument?: PreviewDocument): Promise<ArticleSaveResult> {
+async function writeFixtureArticle(id: string | undefined, body: ArticleInput | { status: "DRAFT" | "PUBLISHED" } | (ArticleInput & { previewDocument: PreviewDocument })): Promise<ArticleSaveResult> {
   const identity = await readFixtureIdentity();
   if (identity?.role !== "AUTHOR") return { state: "error" };
   try {
     const response = await fetch(`http://127.0.0.1:4101/dashboard-posts${id ? `/${encodeURIComponent(id)}` : ""}`, {
-      method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...input, ...(previewDocument ? { previewDocument } : {}) }), cache: "no-store", signal: AbortSignal.timeout(2500),
+      method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), cache: "no-store", signal: AbortSignal.timeout(2500),
     });
     if (response.status >= 400 && response.status < 500) return { state: "error" };
     if (!response.ok) return { state: "uncertain" };
@@ -18,4 +18,15 @@ export async function saveFixtureArticle(id: string | undefined, input: ArticleI
     if (post.authorId !== identity.id || (id && post.id !== id)) return { state: "uncertain" };
     return { state: "saved", post };
   } catch { return { state: "uncertain" }; }
+}
+
+export async function saveFixtureArticle(id: string | undefined, input: ArticleInput, previewDocument?: PreviewDocument): Promise<ArticleSaveResult> {
+  return writeFixtureArticle(id, { ...input, ...(previewDocument ? { previewDocument } : {}) });
+}
+
+export async function changeFixturePublication(id: string, status: "DRAFT" | "PUBLISHED"): Promise<ArticleSaveResult> {
+  if (status !== "DRAFT" && status !== "PUBLISHED") return { state: "error" };
+  const result = await writeFixtureArticle(id, { status });
+  if (result.state === "saved" && (result.post.status !== status || (status === "DRAFT" && result.post.publishedAt !== null) || (status === "PUBLISHED" && result.post.publishedAt === null))) return { state: "uncertain" };
+  return result;
 }

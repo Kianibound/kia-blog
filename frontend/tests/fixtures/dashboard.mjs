@@ -25,6 +25,11 @@ let writes = 0;
 const scalar = ({ categories, tags, previewDocument, ...post }) => { void categories; void tags; void previewDocument; return post; };
 const json = (response, status, payload) => response.writeHead(status, { "Content-Type": "application/json" }).end(JSON.stringify(payload));
 const fullTaxonomy = item => ({ ...item, createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" });
+function writeResponse(request, response, post, status = 200) {
+  if (saveMode === "uncertain") { request.socket.destroy(); return; }
+  const send = () => json(response, status, { ...post, categories: post.categories.map(fullTaxonomy), tags: post.tags.map(fullTaxonomy) });
+  if (saveMode === "slow") setTimeout(send, 1500); else send();
+}
 
 export function handleDashboardFixture(request, response, url, categoryChoices) {
   if (request.method === "POST" && url.pathname === "/__test/dashboard") {
@@ -49,6 +54,19 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     return true;
   }
   const tags = [...new Map(publishedPosts.flatMap(post => post.tags).map(item => [item.id, fullTaxonomy(item)])).values()];
+  // Test-host reading only: never used by the production public Posts adapter.
+  if (request.method === "GET" && (url.pathname === "/dashboard-public-posts" || url.pathname.startsWith("/dashboard-public-posts/"))) {
+    const rows = ownPosts.filter(post => post.status === "PUBLISHED");
+    if (url.pathname === "/dashboard-public-posts") json(response, 200, rows.map(scalar));
+    else {
+      let slug;
+      try { slug = decodeURIComponent(url.pathname.slice("/dashboard-public-posts/".length)); }
+      catch { response.writeHead(400).end(); return true; }
+      const post = rows.find(post => post.slug === slug);
+      if (post) json(response, 200, scalar(post)); else response.writeHead(404).end();
+    }
+    return true;
+  }
   if (request.method === "GET" && url.pathname === "/__test/dashboard-writes") { json(response, 200, { writes }); return true; }
   if (url.pathname === "/dashboard-taxonomy" && request.method === "GET") {
     if (role !== "AUTHOR") response.writeHead(403).end();
@@ -75,6 +93,17 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     request.on("end", () => {
       let input;
       try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
+      if (post && request.method === "PATCH" && input && typeof input === "object" && !Array.isArray(input) && Object.keys(input).length === 1 && ["DRAFT", "PUBLISHED"].includes(input.status)) {
+        // UI category checks are feedback only. The test double adds no category enforcement.
+        writes++;
+        if (saveMode === "error") { response.writeHead(422).end(); return; }
+        const now = new Date().toISOString();
+        const publishedAt = input.status === "DRAFT" ? null : post.status === "PUBLISHED" ? post.publishedAt : now;
+        const saved = { ...post, status: input.status, publishedAt, updatedAt: now };
+        ownPosts[ownPosts.indexOf(post)] = saved;
+        writeResponse(request, response, saved);
+        return;
+      }
       if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(key => !["title", "content", "categoryIds", "tagIds", "previewDocument"].includes(key)) || typeof input.title !== "string" || !input.title.trim() || typeof input.content !== "string" || !input.content.trim() || !Array.isArray(input.categoryIds) || !Array.isArray(input.tagIds)) { response.writeHead(400).end(); return; }
       // Envelope check for UI review only, not canonical rich-content validation.
       if (input.previewDocument !== undefined && (input.previewDocument?.format !== "tiptap-ui-proposal-1" || input.previewDocument?.document?.type !== "doc" || !Array.isArray(input.previewDocument?.document?.content))) { response.writeHead(400).end(); return; }
@@ -86,9 +115,7 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
       const saved = { ...(post ?? { id: randomUUID(), slug: `fixture-draft-${randomUUID()}`, authorId: authorIds[author], status: "DRAFT", publishedAt: null, createdAt: now }), title: input.title, content: input.content, updatedAt: now, categories: [...new Set(input.categoryIds)].map(id => categories.find(item => item.id === id)), tags: [...new Set(input.tagIds)].map(id => tags.find(item => item.id === id)) };
       if (input.previewDocument !== undefined) saved.previewDocument = input.previewDocument;
       if (post) ownPosts[ownPosts.indexOf(post)] = saved; else ownPosts.unshift(saved);
-      if (saveMode === "uncertain") { request.socket.destroy(); return; }
-      const send = () => json(response, post ? 200 : 201, { ...saved, categories: saved.categories.map(fullTaxonomy), tags: saved.tags.map(fullTaxonomy) });
-      if (saveMode === "slow") setTimeout(send, 1500); else send();
+      writeResponse(request, response, saved, post ? 200 : 201);
     });
     return true;
   }

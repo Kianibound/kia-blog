@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -9,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { articleFormMessages as copy } from "@/i18n/messages/article-form.fa";
 import { fa } from "@/lib/utils";
+import { PublicationControls, type PublicationAction } from "./publication-controls";
 import type { ArticleInput, ArticleRecord, ArticleSaveResult, ArticleTaxonomy } from "@/lib/article-form-contract";
 
 type Props = {
@@ -17,6 +17,8 @@ type Props = {
   tags: ArticleTaxonomy[];
   saveAction?: (id: string | undefined, input: ArticleInput) => Promise<ArticleSaveResult>;
   renderContent?: (field: { id: string; label: string; editable: boolean; error?: string; onChange: (text: string) => void }) => ReactNode;
+  publicationAction?: PublicationAction;
+  readingHref?: (slug: string) => string;
 };
 
 export function ArticleFormLoading() {
@@ -43,7 +45,7 @@ function TaxonomyChoices({ label, choices, original, selected, onChange }: { lab
 }
 
 /** Presentation only. Without an explicitly supplied adapter, saving is unavailable. */
-export function ArticleForm({ article, categories, tags, saveAction, renderContent }: Props) {
+export function ArticleForm({ article, categories, tags, saveAction, renderContent, publicationAction, readingHref }: Props) {
   const [saved, setSaved] = useState(article);
   const [title, setTitle] = useState(article?.title ?? "");
   const [content, setContent] = useState(article?.content ?? "");
@@ -52,10 +54,16 @@ export function ArticleForm({ article, categories, tags, saveAction, renderConte
   const [errors, setErrors] = useState({ title: false, content: false });
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error" | "uncertain">("idle");
   const pending = useRef(false);
+  const [dirty, setDirty] = useState(false);
+  const [lifecyclePending, setLifecyclePending] = useState(false);
+  const [lifecycleBlocked, setLifecycleBlocked] = useState(false);
+  const busy = state === "saving" || lifecyclePending;
+
+  function edited() { setDirty(true); if (state === "saved") setState("idle"); }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!saveAction || pending.current || state === "uncertain") return;
+    if (!saveAction || pending.current || lifecycleBlocked || state === "uncertain") return;
     const invalid = { title: !title.trim(), content: !content.trim() };
     setErrors(invalid);
     if (invalid.title || invalid.content) {
@@ -69,6 +77,7 @@ export function ArticleForm({ article, categories, tags, saveAction, renderConte
       setState(result.state);
       if (result.state === "saved") {
         setSaved(result.post);
+        setDirty(false);
         if (!saved) window.history.replaceState(null, "", `/dashboard/posts/${encodeURIComponent(result.post.id)}/edit`);
       }
     } catch {
@@ -78,19 +87,20 @@ export function ArticleForm({ article, categories, tags, saveAction, renderConte
 
   return <Card className="min-h-64 space-y-6 p-6 sm:p-8">
     <p>{saveAction ? copy.preview : copy.unavailable}</p>
-    <form noValidate onSubmit={submit} className="space-y-6" aria-busy={state === "saving"}>
-      <fieldset disabled={!saveAction || state === "saving"} className="min-w-0 space-y-6">
-        <Field label={copy.title} htmlFor="article-title"><Input id="article-title" value={title} onChange={event => { setTitle(event.target.value); if (state === "saved") setState("idle"); }} required aria-invalid={errors.title} aria-describedby={errors.title ? "article-title-error" : undefined} className="min-h-12" />{errors.title && <p id="article-title-error" className="text-sm text-destructive">{copy.requiredTitle}</p>}</Field>
-        {renderContent ? <Field label={copy.content} htmlFor="article-content">{renderContent({ id: "article-content", label: copy.content, editable: Boolean(saveAction) && state !== "saving", error: errors.content ? copy.requiredContent : undefined, onChange: text => { setContent(text); if (state === "saved") setState("idle"); } })}</Field> : <Field label={copy.content} htmlFor="article-content" hint={copy.plain}><Textarea id="article-content" value={content} onChange={event => { setContent(event.target.value); if (state === "saved") setState("idle"); }} required rows={10} aria-invalid={errors.content} aria-describedby={errors.content ? "article-content-error" : undefined} />{errors.content && <p id="article-content-error" className="text-sm text-destructive">{copy.requiredContent}</p>}</Field>}
-        <TaxonomyChoices label={copy.categories} choices={categories} original={article?.categories ?? []} selected={selectedCategories} onChange={value => { setCategories(value); if (state === "saved") setState("idle"); }} />
-        <TaxonomyChoices label={copy.tags} choices={tags} original={article?.tags ?? []} selected={selectedTags} onChange={value => { setTags(value); if (state === "saved") setState("idle"); }} />
+    <form noValidate onSubmit={submit} className="space-y-6" aria-busy={busy}>
+      <fieldset disabled={!saveAction || busy} className="min-w-0 space-y-6">
+        <Field label={copy.title} htmlFor="article-title"><Input id="article-title" value={title} onChange={event => { setTitle(event.target.value); edited(); }} required aria-invalid={errors.title} aria-describedby={errors.title ? "article-title-error" : undefined} className="min-h-12" />{errors.title && <p id="article-title-error" className="text-sm text-destructive">{copy.requiredTitle}</p>}</Field>
+        {renderContent ? <Field label={copy.content} htmlFor="article-content">{renderContent({ id: "article-content", label: copy.content, editable: Boolean(saveAction) && !busy, error: errors.content ? copy.requiredContent : undefined, onChange: text => { setContent(text); edited(); } })}</Field> : <Field label={copy.content} htmlFor="article-content" hint={copy.plain}><Textarea id="article-content" value={content} onChange={event => { setContent(event.target.value); edited(); }} required rows={10} aria-invalid={errors.content} aria-describedby={errors.content ? "article-content-error" : undefined} />{errors.content && <p id="article-content-error" className="text-sm text-destructive">{copy.requiredContent}</p>}</Field>}
+        <TaxonomyChoices label={copy.categories} choices={categories} original={article?.categories ?? []} selected={selectedCategories} onChange={value => { setCategories(value); edited(); }} />
+        <TaxonomyChoices label={copy.tags} choices={tags} original={article?.tags ?? []} selected={selectedTags} onChange={value => { setTags(value); edited(); }} />
       </fieldset>
       {(state === "error" || state === "uncertain") && <p role="alert">{copy[state]}</p>}
       <p role="status" aria-live="polite">{state === "saved" ? copy.saved : state === "saving" ? copy.saving : ""}</p>
       <div className="flex flex-wrap items-center gap-4">
-        <Button type="submit" size="lg" disabled={!saveAction || state === "saving" || state === "uncertain"} className="motion-reduce:transition-none">{state === "saving" ? copy.saving : copy.save}</Button>
-        <Link href="/dashboard/posts" className="inline-flex min-h-12 items-center rounded-control px-4 underline focus-visible:outline-2 focus-visible:outline-ring">{copy.back}</Link>
+        <Button type="submit" size="lg" disabled={!saveAction || busy || lifecycleBlocked || state === "uncertain"} className="motion-reduce:transition-none">{state === "saving" ? copy.saving : copy.save}</Button>
+        <a href="/dashboard/posts" className="inline-flex min-h-12 items-center rounded-control px-4 underline focus-visible:outline-2 focus-visible:outline-ring">{copy.back}</a>
       </div>
     </form>
+    <PublicationControls key={saved?.id ?? "new"} article={saved} action={publicationAction} readingHref={readingHref} busy={busy} dirty={dirty} blocked={lifecycleBlocked || state === "uncertain"} onSaved={post => { setSaved(post); setState("idle"); }} onPending={value => { pending.current = value; setLifecyclePending(value); }} onUncertain={() => setLifecycleBlocked(true)} />
   </Card>;
 }
