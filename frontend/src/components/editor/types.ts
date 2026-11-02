@@ -12,6 +12,7 @@ export type RichEditorProps = {
   label: string;
   initialDocument: EditorDocument;
   editable: boolean;
+  readOnly?: boolean;
   error?: string;
   onChange: (value: { document: EditorDocument; plainText: string }) => void;
 };

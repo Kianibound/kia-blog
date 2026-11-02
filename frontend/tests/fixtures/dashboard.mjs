@@ -63,7 +63,7 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
       try { slug = decodeURIComponent(url.pathname.slice("/dashboard-public-posts/".length)); }
       catch { response.writeHead(400).end(); return true; }
       const post = rows.find(post => post.slug === slug);
-      if (post) json(response, 200, scalar(post)); else response.writeHead(404).end();
+      if (post) json(response, 200, { ...scalar(post), ...(post.previewDocument ? { previewDocument: post.previewDocument } : {}) }); else response.writeHead(404).end();
     }
     return true;
   }

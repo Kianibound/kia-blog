@@ -5,6 +5,73 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+test("publication actions share an RTL row and use a centered keyboard-accessible confirmation modal", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts/new");
+  const save = page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true });
+  const publish = page.getByRole("button", { name: "انتشار مقاله", exact: true });
+  await expect(publish).toBeVisible();
+  await expect(publish).toBeDisabled();
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("مقاله برای تأیید انتشار");
+  await page.getByRole("textbox", { name: "متن مقاله", exact: true }).fill("محتوای حفظ‌شده");
+  await page.getByRole("checkbox", { name: "توسعهٔ وب" }).check();
+  await expect(publish).toBeDisabled();
+  await save.click();
+  await expect(publish).toBeEnabled();
+  const actions = page.getByRole("group", { name: "عملیات مقاله" });
+  const modal = page.getByRole("dialog", { name: "تأیید تغییر وضعیت" });
+  for (const width of [360, 390, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(actions.getByRole("button")).toHaveCount(2);
+    const saveBox = await save.boundingBox();
+    const publishBox = await publish.boundingBox();
+    expect(publishBox!.x + publishBox!.width).toBeLessThanOrEqual(saveBox!.x);
+    expect(Math.abs(publishBox!.y - saveBox!.y)).toBeLessThanOrEqual(1);
+    await publish.click();
+    await expect(modal).toHaveAttribute("aria-modal", "true");
+    const confirm = modal.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true });
+    const cancel = modal.getByRole("button", { name: "انصراف", exact: true });
+    await expect(confirm).toBeFocused();
+    const panel = await modal.boundingBox();
+    expect(Math.abs(panel!.x + panel!.width / 2 - width / 2)).toBeLessThanOrEqual(2);
+    expect(Math.abs(panel!.y + panel!.height / 2 - 450)).toBeLessThanOrEqual(2);
+    await page.keyboard.press("Tab");
+    await expect(cancel).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(modal.getByRole("button", { name: "بستن", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(confirm).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(modal.getByRole("button", { name: "بستن", exact: true })).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(cancel).toBeFocused();
+    await page.screenshot({ path: testInfo.outputPath(`publication-modal-${width}.png`), fullPage: true });
+    await page.keyboard.press("Escape");
+    await expect(modal).toBeHidden();
+    await expect(publish).toBeFocused();
+    await expect(page.getByRole("region", { name: "وضعیت انتشار آزمایشی" })).toContainText("پیش‌نویس");
+  }
+  await publish.click();
+  await modal.getByRole("button", { name: "بستن", exact: true }).click();
+  await expect(modal).toBeHidden();
+  await expect(publish).toBeFocused();
+  await publish.click();
+  await page.mouse.click(4, 4);
+  await expect(modal).toBeHidden();
+  await expect(publish).toBeFocused();
+  await publish.click();
+  await modal.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
+  const unpublish = page.getByRole("button", { name: "بازگشت به پیش‌نویس", exact: true });
+  await expect(unpublish).toBeVisible();
+  await unpublish.click();
+  await modal.getByRole("button", { name: "انصراف", exact: true }).click();
+  await expect(modal).toBeHidden();
+  await expect(unpublish).toBeFocused();
+  await unpublish.click();
+  await modal.getByRole("button", { name: "تأیید لغو انتشار آزمایشی", exact: true }).click();
+  await expect(publish).toBeVisible();
+});
+
 test("an Author publishes, unpublishes and republishes only through the fixture reading views", async ({ page, request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
   const edit = "/dashboard/posts/00000000-0000-4000-8000-000000000001/edit";
@@ -13,12 +80,12 @@ test("an Author publishes, unpublishes and republishes only through the fixture 
   await page.getByRole("listitem").filter({ hasText: "راهنمای Next.js" }).getByRole("link", { name: "ویرایش مقاله" }).click();
   const lifecycle = page.getByRole("region", { name: "وضعیت انتشار آزمایشی" });
   await expect(lifecycle).toContainText("پیش‌نویس");
-  await page.getByRole("button", { name: "انتشار آزمایشی", exact: true }).click();
-  await expect(page.getByRole("group", { name: "تأیید تغییر وضعیت" })).toBeVisible();
+  await page.getByRole("button", { name: "انتشار مقاله", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "تأیید تغییر وضعیت" })).toBeVisible();
   await page.getByRole("button", { name: "انصراف", exact: true }).click();
   await expect(lifecycle).toContainText("پیش‌نویس");
   expect((await request.get(reading)).status()).toBe(404);
-  await page.getByRole("button", { name: "انتشار آزمایشی", exact: true }).click();
+  await page.getByRole("button", { name: "انتشار مقاله", exact: true }).click();
   await page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
   await expect(lifecycle).toContainText("در داده‌های آزمایشی منتشر شد");
   await page.reload();
@@ -28,11 +95,11 @@ test("an Author publishes, unpublishes and republishes only through the fixture 
   await page.goto(reading);
   await expect(page.getByRole("article")).toContainText("راهنمای Next.js");
   await page.goto(edit);
-  await page.getByRole("button", { name: "لغو انتشار آزمایشی", exact: true }).click();
+  await page.getByRole("button", { name: "بازگشت به پیش‌نویس", exact: true }).click();
   await page.getByRole("button", { name: "تأیید لغو انتشار آزمایشی", exact: true }).click();
   await expect(lifecycle).toContainText("به پیش‌نویس برگشت");
   expect((await request.get(reading)).status()).toBe(404);
-  await page.getByRole("button", { name: "انتشار آزمایشی", exact: true }).click();
+  await page.getByRole("button", { name: "انتشار مقاله", exact: true }).click();
   await page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
   await expect(lifecycle).toContainText("در داده‌های آزمایشی منتشر شد");
   expect((await request.get(reading)).status()).toBe(200);
@@ -44,14 +111,14 @@ test("publication feedback requires a saved Category, keeps Tags optional and re
   await page.setViewportSize({ width: 360, height: 900 });
   await page.goto("/dashboard/posts/new");
   await page.getByLabel("عنوان مقاله", { exact: true }).fill("مقاله با قالب حفظ‌شده");
-  const editor = page.getByRole("textbox", { name: "متن مقاله", exact: true });
+  const editor = page.getByRole("textbox", { name: "متن مقاله", exact: true, includeHidden: true });
   await editor.fill("متن فارسی 123");
   await editor.press("ControlOrMeta+a");
   await page.getByRole("button", { name: "پررنگ", exact: true }).click();
   await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("ذخیره شد");
   const lifecycle = page.getByRole("region", { name: "وضعیت انتشار آزمایشی" });
-  const publish = page.getByRole("button", { name: "انتشار آزمایشی", exact: true });
+  const publish = page.getByRole("button", { name: "انتشار مقاله", exact: true });
   await expect(publish).toBeDisabled();
   await expect(lifecycle).toContainText("دست‌کم یک دسته‌بندی");
   await page.getByRole("checkbox", { name: "توسعهٔ وب" }).check();
@@ -68,15 +135,19 @@ test("publication feedback requires a saved Category, keeps Tags optional and re
   const confirm = page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true });
   await expect(confirm).toBeFocused();
   await confirm.click();
-  await expect(lifecycle.getByRole("alert")).toContainText("تغییر وضعیت انجام نشد");
+  const modal = page.getByRole("dialog", { name: "تأیید تغییر وضعیت" });
+  await expect(modal.getByRole("alert")).toContainText("تغییر وضعیت انجام نشد");
   await expect(editor.locator("strong")).toHaveText("متن فارسی 123");
-  await expect(lifecycle).toContainText("پیش‌نویس");
   await request.post(`${control}&saveMode=slow`);
   const count = async () => (await (await request.get("http://127.0.0.1:4101/__test/dashboard-writes")).json()).writes;
   const before = await count();
   await confirm.dblclick();
-  await expect(lifecycle.getByRole("status")).toHaveText("در حال تغییر وضعیت…");
-  await expect(page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true })).toBeDisabled();
+  await expect(modal.getByRole("status")).toHaveText("در حال تغییر وضعیت…");
+  await page.keyboard.press("Escape");
+  await expect(modal).toBeVisible();
+  await expect(modal.getByRole("button", { name: "انصراف", exact: true })).toBeDisabled();
+  await expect(modal.getByRole("button", { name: "بستن", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true, includeHidden: true })).toBeDisabled();
   await expect(page.getByLabel("عنوان مقاله", { exact: true })).toBeDisabled();
   await expect(lifecycle.getByRole("status")).toContainText("در داده‌های آزمایشی منتشر شد");
   expect(await count()).toBe(before + 1);
@@ -86,7 +157,7 @@ test("publication feedback requires a saved Category, keeps Tags optional and re
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("publication-mobile.png"), fullPage: true });
   await request.post(`${control}&saveMode=uncertain`);
-  await page.getByRole("button", { name: "لغو انتشار آزمایشی", exact: true }).click();
+  await page.getByRole("button", { name: "بازگشت به پیش‌نویس", exact: true }).click();
   await page.getByRole("button", { name: "تأیید لغو انتشار آزمایشی", exact: true }).click();
   await expect(lifecycle.getByRole("alert")).toContainText("نتیجهٔ تغییر وضعیت مشخص نیست");
   await expect(page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true })).toBeDisabled();
@@ -120,7 +191,9 @@ test("status-only fixture contracts preserve article data, model publication tim
   expect(stableFields(again)).toEqual(stableFields(saved));
   const visible = await (await request.get(`${base}/dashboard-public-posts/${saved.slug}`)).json();
   expect(visible).toMatchObject({ id: saved.id, content: "محتوای حفظ‌شده", status: "PUBLISHED" });
-  expect(visible).not.toHaveProperty("previewDocument");
+  expect(visible.previewDocument).toEqual(document);
+  const publishedList = await (await request.get(`${base}/dashboard-public-posts`)).json();
+  expect(publishedList.find((post: { id: string }) => post.id === saved.id)).not.toHaveProperty("previewDocument");
   expect((await request.get(`${base}/posts/${saved.slug}`)).status()).toBe(404);
   expect((await request.patch(url, { data: { status: "DEPRECATED" } })).status()).toBe(400);
   await request.post(`${base}/__test/dashboard?role=AUTHOR&reset=1`);
@@ -132,6 +205,7 @@ test("the Persian rich editor formats a selection and reloads its fixture-only U
   await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
   await page.goto("/dashboard/posts/new");
   await page.getByLabel("عنوان مقاله", { exact: true }).fill("سند آزمایشی ویرایشگر");
+  await page.getByRole("checkbox", { name: "توسعهٔ وب" }).check();
   const editor = page.getByRole("textbox", { name: "متن مقاله", exact: true });
   await expect(editor).toHaveAttribute("contenteditable", "true");
   await editor.fill("فارسی 123 و ۱۲۳");
@@ -144,6 +218,75 @@ test("the Persian rich editor formats a selection and reloads its fixture-only U
   await expect(page.getByRole("status")).toContainText("ذخیره شد");
   await page.reload();
   await expect(editor.locator("h2 strong")).toHaveText("فارسی 123 و ۱۲۳");
+  await page.getByRole("button", { name: "انتشار مقاله", exact: true }).click();
+  await page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
+  await expect(page.getByRole("region", { name: "وضعیت انتشار آزمایشی" })).toContainText("در داده‌های آزمایشی منتشر شد");
+  await page.getByRole("link", { name: "مشاهده در خواندن آزمایشی" }).click();
+  const reading = page.getByRole("document", { name: "متن مقاله", exact: true });
+  await expect(reading).toHaveAttribute("contenteditable", "false");
+  await expect(reading.locator("h2 strong")).toHaveText("فارسی 123 و ۱۲۳");
+  await expect(page.getByRole("article").getByRole("toolbar")).toHaveCount(0);
+  await expect(page.getByRole("article").locator("button, input, textarea, [contenteditable=true]")).toHaveCount(0);
+  const rendered = await reading.innerHTML();
+  await reading.focus();
+  await reading.press("ControlOrMeta+b");
+  await reading.press("ControlOrMeta+Alt+3");
+  await page.keyboard.type("cannot edit");
+  expect(await reading.innerHTML()).toBe(rendered);
+  await page.reload();
+  await expect(reading.locator("h2 strong")).toHaveText("فارسی 123 و ۱۲۳");
+});
+
+test("published preview reading preserves rich blocks, safe links and literal markup without editing controls", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  // Test-only UI document seeded through the existing HTTP fixture, then saved in the real form.
+  const sampleDocument = { type: "doc", content: [
+    { type: "heading", attrs: { level: 2, dir: "rtl" }, content: [{ type: "text", text: "تیتر دوم", marks: [{ type: "bold" }] }] },
+    { type: "heading", attrs: { level: 3, dir: "rtl" }, content: [{ type: "text", text: "تیتر سوم", marks: [{ type: "italic" }] }] },
+    { type: "heading", attrs: { level: 4, dir: "rtl" }, content: [{ type: "text", text: "تیتر چهارم" }] },
+    { type: "bulletList", content: [{ type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "نشانه" }] }] }] },
+    { type: "orderedList", content: [{ type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "شماره" }] }] }] },
+    { type: "paragraph", attrs: { dir: "ltr" }, content: [{ type: "text", text: "English 123" }] },
+    { type: "paragraph", attrs: { dir: "rtl" }, content: [{ type: "text", text: "پیوند امن", marks: [{ type: "link", attrs: { href: "https://example.test/guide" } }] }] },
+    { type: "paragraph", content: [{ type: "text", text: "پیوند ناامن", marks: [{ type: "link", attrs: { href: "javascript:window.previewExecuted=true" } }] }] },
+    { type: "codeBlock", attrs: { dir: "ltr" }, content: [{ type: "text", text: 'const n = 123; // فارسی ۱۲۳' }] },
+    { type: "paragraph", content: [{ type: "text", text: '<img src=x onerror="window.previewExecuted=true">' }] },
+  ] };
+  const saved = await (await request.post("http://127.0.0.1:4101/dashboard-posts", { data: {
+    title: "نمایش سند قالب‌دار", content: "تیتر دوم\nتیتر سوم\nتیتر چهارم\nنشانه\nشماره\nEnglish 123\nپیوند امن\nپیوند ناامن\nconst n = 123; // فارسی ۱۲۳\n<img src=x onerror=\"window.previewExecuted=true\">",
+    categoryIds: ["20000000-0000-4000-8000-000000000001"], tagIds: [], previewDocument: { format: "tiptap-ui-proposal-1", document: sampleDocument },
+  } })).json();
+  await page.goto(`/dashboard/posts/${saved.id}/edit`);
+  await expect(page.getByRole("textbox", { name: "متن مقاله", exact: true }).locator("h2 strong")).toHaveText("تیتر دوم");
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("سند ذخیره‌شده و منتشرشده");
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("ذخیره شد");
+  await page.getByRole("button", { name: "انتشار مقاله", exact: true }).click();
+  await page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
+  await expect(page.getByRole("region", { name: "وضعیت انتشار آزمایشی" })).toContainText("در داده‌های آزمایشی منتشر شد");
+  await page.getByRole("link", { name: "مشاهده در خواندن آزمایشی" }).click();
+  const reading = page.getByRole("document", { name: "متن مقاله", exact: true });
+  await expect(reading).toHaveAttribute("contenteditable", "false");
+  await expect(reading.locator("h2 strong")).toHaveText("تیتر دوم");
+  await expect(reading.locator("h3 em")).toHaveText("تیتر سوم");
+  await expect(reading.locator("h4")).toHaveText("تیتر چهارم");
+  await expect(reading.locator("ul li")).toHaveText("نشانه");
+  await expect(reading.locator("ol li")).toHaveText("شماره");
+  await expect(reading.getByText("English 123", { exact: true })).toHaveAttribute("dir", "ltr");
+  await expect(reading.locator("h2")).toHaveAttribute("dir", "rtl");
+  await expect(reading.getByRole("link", { name: "پیوند امن", exact: true })).toHaveAttribute("href", "https://example.test/guide");
+  await expect(reading.locator('a[href^="javascript:"]')).toHaveCount(0);
+  await expect(reading.locator("pre")).toHaveCSS("direction", "ltr");
+  await expect(reading.locator("pre code")).toHaveText('const n = 123; // فارسی ۱۲۳');
+  await expect(reading).toContainText('<img src=x onerror="window.previewExecuted=true">');
+  await expect(reading.locator("img, script, button, input, textarea")).toHaveCount(0);
+  await expect(page.getByRole("article").getByRole("toolbar")).toHaveCount(0);
+  expect(await page.evaluate(() => "previewExecuted" in window)).toBe(false);
+  await page.setViewportSize({ width: 360, height: 900 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("readonly-reading-mobile.png"), fullPage: true });
+  await page.reload();
+  await expect(reading.locator("h3 em")).toHaveText("تیتر سوم");
 });
 
 test("editor toolbar keyboard access preserves selection and history across unrelated form changes", async ({ page, request }) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
@@ -46,6 +46,7 @@ function TaxonomyChoices({ label, choices, original, selected, onChange }: { lab
 
 /** Presentation only. Without an explicitly supplied adapter, saving is unavailable. */
 export function ArticleForm({ article, categories, tags, saveAction, renderContent, publicationAction, readingHref }: Props) {
+  const formId = useId();
   const [saved, setSaved] = useState(article);
   const [title, setTitle] = useState(article?.title ?? "");
   const [content, setContent] = useState(article?.content ?? "");
@@ -87,7 +88,7 @@ export function ArticleForm({ article, categories, tags, saveAction, renderConte
 
   return <Card className="min-h-64 space-y-6 p-6 sm:p-8">
     <p>{saveAction ? copy.preview : copy.unavailable}</p>
-    <form noValidate onSubmit={submit} className="space-y-6" aria-busy={busy}>
+    <form id={formId} noValidate onSubmit={submit} className="space-y-6" aria-busy={busy}>
       <fieldset disabled={!saveAction || busy} className="min-w-0 space-y-6">
         <Field label={copy.title} htmlFor="article-title"><Input id="article-title" value={title} onChange={event => { setTitle(event.target.value); edited(); }} required aria-invalid={errors.title} aria-describedby={errors.title ? "article-title-error" : undefined} className="min-h-12" />{errors.title && <p id="article-title-error" className="text-sm text-destructive">{copy.requiredTitle}</p>}</Field>
         {renderContent ? <Field label={copy.content} htmlFor="article-content">{renderContent({ id: "article-content", label: copy.content, editable: Boolean(saveAction) && !busy, error: errors.content ? copy.requiredContent : undefined, onChange: text => { setContent(text); edited(); } })}</Field> : <Field label={copy.content} htmlFor="article-content" hint={copy.plain}><Textarea id="article-content" value={content} onChange={event => { setContent(event.target.value); edited(); }} required rows={10} aria-invalid={errors.content} aria-describedby={errors.content ? "article-content-error" : undefined} />{errors.content && <p id="article-content-error" className="text-sm text-destructive">{copy.requiredContent}</p>}</Field>}
@@ -96,11 +97,9 @@ export function ArticleForm({ article, categories, tags, saveAction, renderConte
       </fieldset>
       {(state === "error" || state === "uncertain") && <p role="alert">{copy[state]}</p>}
       <p role="status" aria-live="polite">{state === "saved" ? copy.saved : state === "saving" ? copy.saving : ""}</p>
-      <div className="flex flex-wrap items-center gap-4">
-        <Button type="submit" size="lg" disabled={!saveAction || busy || lifecycleBlocked || state === "uncertain"} className="motion-reduce:transition-none">{state === "saving" ? copy.saving : copy.save}</Button>
-        <a href="/dashboard/posts" className="inline-flex min-h-12 items-center rounded-control px-4 underline focus-visible:outline-2 focus-visible:outline-ring">{copy.back}</a>
-      </div>
     </form>
-    <PublicationControls key={saved?.id ?? "new"} article={saved} action={publicationAction} readingHref={readingHref} busy={busy} dirty={dirty} blocked={lifecycleBlocked || state === "uncertain"} onSaved={post => { setSaved(post); setState("idle"); }} onPending={value => { pending.current = value; setLifecyclePending(value); }} onUncertain={() => setLifecycleBlocked(true)} />
+    <PublicationControls article={saved} action={publicationAction} readingHref={readingHref} busy={busy} dirty={dirty} blocked={lifecycleBlocked || state === "uncertain"} onSaved={post => { setSaved(post); setState("idle"); }} onPending={value => { pending.current = value; setLifecyclePending(value); }} onUncertain={() => setLifecycleBlocked(true)}
+      saveControl={<Button type="submit" form={formId} size="md" disabled={!saveAction || busy || lifecycleBlocked || state === "uncertain"} className="min-h-12 w-full motion-reduce:transition-none sm:w-auto">{state === "saving" ? copy.saving : copy.save}</Button>} />
+    <a href="/dashboard/posts" className="inline-flex min-h-12 items-center rounded-control px-4 underline focus-visible:outline-2 focus-visible:outline-ring">{copy.back}</a>
   </Card>;
 }

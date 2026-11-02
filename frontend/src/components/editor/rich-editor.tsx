@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { editorMessages as copy } from "@/i18n/messages/editor.fa";
-import type { RichEditorProps } from "./types";
+import type { EditorDocument, RichEditorProps } from "./types";
 import "./rich-editor.css";
 
 function safeLink(value: string) {
@@ -23,7 +23,8 @@ const extensions = [StarterKit.configure({
 })];
 
 /** Tiptap stays internal; initialDocument is consumed once per mounted document. */
-export function RichEditor({ id, label, initialDocument, editable, error, onChange }: RichEditorProps) {
+export function RichEditor({ id, label, initialDocument, editable, readOnly = false, error, onChange }: RichEditorProps) {
+  const canEdit = editable && !readOnly;
   const toolbar = useRef<HTMLDivElement>(null);
   const [linkSelection, setLinkSelection] = useState<{ from: number; to: number } | null>(null);
   const [activeTool, setActiveTool] = useState(0);
@@ -31,9 +32,9 @@ export function RichEditor({ id, label, initialDocument, editable, error, onChan
   const [href, setHref] = useState("");
   const [linkError, setLinkError] = useState("");
   const editor = useEditor({
-    extensions, content: initialDocument, immediatelyRender: false, shouldRerenderOnTransaction: false, textDirection: "rtl", editable,
-    editorProps: { attributes: { id, role: "textbox", "aria-label": label, "aria-multiline": "true" } },
-    onUpdate: ({ editor }) => onChange({ document: editor.getJSON(), plainText: editor.getText({ blockSeparator: "\n" }) }),
+    extensions, content: initialDocument, immediatelyRender: false, shouldRerenderOnTransaction: false, textDirection: "rtl", editable: canEdit,
+    editorProps: { attributes: { id, role: readOnly ? "document" : "textbox", "aria-label": label, ...(readOnly ? { tabindex: "0" } : { "aria-multiline": "true" }) } },
+    onUpdate: ({ editor }) => { if (canEdit) onChange({ document: editor.getJSON(), plainText: editor.getText({ blockSeparator: "\n" }) }); },
   });
   const state = useEditorState({ editor, selector: ({ editor }) => editor ? {
     bold: editor.isActive("bold"), italic: editor.isActive("italic"), paragraph: editor.isActive("paragraph"),
@@ -42,13 +43,22 @@ export function RichEditor({ id, label, initialDocument, editable, error, onChan
     undo: editor.can().undo(), redo: editor.can().redo(),
   } : null });
 
-  useEffect(() => { editor?.setEditable(editable, false); }, [editor, editable]);
+  useEffect(() => { editor?.setEditable(canEdit, false); }, [editor, canEdit]);
   useEffect(() => {
     if (!editor) return;
+    if (readOnly) {
+      for (const attribute of ["aria-invalid", "aria-readonly", "aria-describedby"]) editor.view.dom.removeAttribute(attribute);
+      return;
+    }
     editor.view.dom.setAttribute("aria-invalid", String(Boolean(error)));
     editor.view.dom.setAttribute("aria-readonly", String(!editable));
     editor.view.dom.setAttribute("aria-describedby", `${id}-help${error ? ` ${id}-error` : ""}`);
-  }, [editor, error, editable, id]);
+  }, [editor, error, editable, id, readOnly]);
+
+  if (readOnly) return <div className="min-h-64">
+    {!editor && <div role="status"><span className="sr-only">{copy.loading}</span><Skeleton className="h-64 w-full motion-reduce:animate-none" /></div>}
+    <EditorContent editor={editor} className="rich-editor" />
+  </div>;
 
   function openLink() {
     if (!editor) return;
@@ -116,4 +126,9 @@ export function RichEditor({ id, label, initialDocument, editable, error, onChan
     <EditorContent editor={editor} className="rich-editor" />
     {error && <p id={`${id}-error`} className="text-sm text-destructive">{error}</p>}
   </div>;
+}
+
+/** Read-only rendering through the same schema, direction styles and link validation. */
+export function RichDocument({ id, label, document }: { id: string; label: string; document: EditorDocument }) {
+  return <RichEditor id={id} label={label} initialDocument={document} editable={false} readOnly onChange={() => {}} />;
 }
