@@ -5,6 +5,104 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+test("Author status filters restore selection and results through URLs and history", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts?page=2");
+  const filters = page.getByRole("navigation", { name: "وضعیت مقاله‌ها" });
+  const rows = page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem");
+  const draft = filters.getByRole("link", { name: "پیش‌نویس", exact: true });
+  await draft.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL("/dashboard/posts?status=DRAFT");
+  await expect(draft).toHaveAttribute("aria-current", "page");
+  await expect(rows).toHaveCount(4);
+  await expect(rows.filter({ hasText: "منتشرشده" })).toHaveCount(0);
+  await expect(rows.filter({ hasText: "کنارگذاشته‌شده" })).toHaveCount(0);
+  await page.reload();
+  await expect(draft).toHaveAttribute("aria-current", "page");
+  await expect(rows).toHaveCount(4);
+  await filters.getByRole("link", { name: "منتشرشده", exact: true }).click();
+  await expect(page).toHaveURL("/dashboard/posts?status=PUBLISHED");
+  await expect(rows).toHaveCount(4);
+  await expect(rows.filter({ hasText: "پیش‌نویس" })).toHaveCount(0);
+  await page.goBack();
+  await expect(draft).toHaveAttribute("aria-current", "page");
+  await page.goForward();
+  await expect(filters.getByRole("link", { name: "منتشرشده", exact: true })).toHaveAttribute("aria-current", "page");
+  await filters.getByRole("link", { name: "همه", exact: true }).click();
+  await expect(page).toHaveURL("/dashboard/posts");
+  await expect(rows).toHaveCount(10);
+  await expect(rows.filter({ hasText: "کنارگذاشته‌شده" })).toHaveCount(3);
+  for (const query of ["status=DEPRECATED", "status=unknown", "status=DRAFT&status=PUBLISHED"]) {
+    await page.goto(`/dashboard/posts?${query}`);
+    await expect(filters.getByRole("link", { name: "همه", exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(rows).toHaveCount(10);
+  }
+});
+
+test("Author status filters paginate filtered records and preserve selection through recovery", async ({ page, request }) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=AUTHOR";
+  await request.post(control);
+  // Test-only drafts use the existing fixture write seam to span two filtered pages.
+  for (let index = 0; index < 7; index++) {
+    const response = await request.post("http://127.0.0.1:4101/dashboard-posts", { data: { title: `پیش‌نویس آزمایشی ${index}`, content: "متن آزمایشی", categoryIds: [], tagIds: [] } });
+    expect(response.status()).toBe(201);
+  }
+  const filtered = await (await request.get("http://127.0.0.1:4101/dashboard-posts?page=2&limit=10&status=DRAFT")).json();
+  expect(filtered.meta).toEqual({ page: 2, limit: 10, total: 11, totalPages: 2 });
+  expect(filtered.data).toHaveLength(1);
+  expect(filtered.data[0].status).toBe("DRAFT");
+  const rows = page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem");
+  await page.goto("/dashboard/posts?status=DRAFT");
+  await expect(rows).toHaveCount(10);
+  await page.getByRole("link", { name: "صفحهٔ بعد" }).click();
+  await expect(page).toHaveURL("/dashboard/posts?page=2&status=DRAFT");
+  await expect(rows).toHaveCount(1);
+  await page.reload();
+  await expect(page.getByRole("main")).toContainText("صفحهٔ ۲ از ۲");
+  await page.getByRole("link", { name: "صفحهٔ قبل" }).click();
+  await expect(page).toHaveURL("/dashboard/posts?status=DRAFT");
+  await page.goBack();
+  await expect(rows).toHaveCount(1);
+  await page.getByRole("navigation", { name: "وضعیت مقاله‌ها" }).getByRole("link", { name: "منتشرشده", exact: true }).click();
+  await expect(page).toHaveURL("/dashboard/posts?status=PUBLISHED");
+  await expect(rows).toHaveCount(4);
+  await page.goto("/dashboard/posts?page=999&status=DRAFT");
+  await expect(page.getByRole("status")).toHaveText("در این صفحه مقاله‌ای وجود ندارد.");
+  await page.getByRole("link", { name: "بازگشت به صفحهٔ اول" }).click();
+  await expect(page).toHaveURL("/dashboard/posts?status=DRAFT");
+  await expect(rows).toHaveCount(10);
+  for (const failure of ["postsMode=error", "postsMode=invalid", "postsMode=foreign", "mode=error"]) {
+    await request.post(`${control}&${failure}`);
+    await page.goto("/dashboard/posts?page=2&status=DRAFT");
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("دریافت مقاله‌های شما ممکن نشد.");
+    await request.post(control);
+    await page.getByRole("button", { name: "تلاش دوباره" }).click();
+    await expect(page).toHaveURL("/dashboard/posts?page=2&status=DRAFT");
+    await expect(rows).toHaveCount(1);
+    await expect(page.getByRole("navigation", { name: "وضعیت مقاله‌ها" }).getByRole("link", { name: "پیش‌نویس", exact: true })).toHaveAttribute("aria-current", "page");
+  }
+});
+
+test("Author status filters remain available during loading and distinguish an empty status", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&postsMode=slow");
+  await page.goto("/dashboard/posts?status=PUBLISHED", { waitUntil: "commit" });
+  await expect(page.getByRole("status")).toHaveText("در حال دریافت مقاله‌های شما…");
+  const filters = page.getByRole("navigation", { name: "وضعیت مقاله‌ها" });
+  await expect(filters.getByRole("link", { name: "منتشرشده", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(4);
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&author=nima");
+  await page.goto("/dashboard/posts?status=DRAFT");
+  await expect(page.getByRole("status")).toHaveText("مقاله‌ای با این وضعیت ندارید.");
+  await expect(page.getByRole("navigation", { name: "صفحه‌بندی مقاله‌های من" })).toHaveCount(0);
+  await filters.getByRole("link", { name: "همه", exact: true }).click();
+  await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(1);
+  await expect(page.getByRole("main")).toContainText("کنارگذاشته‌شده");
+  for (const query of ["status=DEPRECATED", "status=DRAFT&status=PUBLISHED"]) {
+    expect((await request.get(`http://127.0.0.1:4101/dashboard-posts?page=1&limit=10&${query}`)).status()).toBe(400);
+  }
+});
+
 test("an Author starts a new article and browses own articles from the workspace", async ({ page, request }, testInfo) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
@@ -651,6 +749,12 @@ test("author list remains readable and keyboard-paginated on mobile in both them
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/dashboard/posts");
     await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(10);
+    const filters = page.getByRole("navigation", { name: "وضعیت مقاله‌ها" });
+    for (const link of await filters.getByRole("link").all()) {
+      const bounds = await link.boundingBox();
+      expect(bounds!.width).toBeGreaterThanOrEqual(44);
+      expect(bounds!.height).toBeGreaterThanOrEqual(44);
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await expect(page.getByRole("heading", { name: "عنوان <strong>مقاله</strong> باید متن بماند" })).toBeVisible();
     for (const theme of ["light", "dark"]) {

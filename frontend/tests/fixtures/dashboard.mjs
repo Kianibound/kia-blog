@@ -122,10 +122,11 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
   if (request.method === "GET" && url.pathname === "/dashboard-posts") {
     const page = Number(url.searchParams.get("page"));
     const limit = Number(url.searchParams.get("limit"));
+    const status = url.searchParams.get("status");
     if (role !== "AUTHOR") { response.writeHead(403).end(); return true; }
-    if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(limit) || limit < 1 || limit > 50 || [...url.searchParams.keys()].some(key => !["page", "limit"].includes(key) || url.searchParams.getAll(key).length !== 1)) { response.writeHead(400).end(); return true; }
+    if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(limit) || limit < 1 || limit > 50 || (status !== null && !["DRAFT", "PUBLISHED"].includes(status)) || [...url.searchParams.keys()].some(key => !["page", "limit", "status"].includes(key) || url.searchParams.getAll(key).length !== 1)) { response.writeHead(400).end(); return true; }
     if (postsMode === "error") { response.writeHead(503).end("TEST DOUBLE: own Posts unavailable"); return true; }
-    const rows = postsMode === "empty" ? [] : ownPosts.filter(post => post.authorId === authorIds[author]).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const rows = postsMode === "empty" ? [] : ownPosts.filter(post => post.authorId === authorIds[author] && (!status || post.status === status)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
     const payload = { data: rows.slice((page - 1) * limit, page * limit).map(scalar), meta: { page, limit, total: rows.length, totalPages: Math.ceil(rows.length / limit) } };
     if (postsMode === "invalid") payload.meta.totalPages = -1;
     if (postsMode === "foreign") payload.data = ownPosts.filter(post => post.authorId !== authorIds[author]).slice(0, 1);

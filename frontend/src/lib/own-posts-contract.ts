@@ -4,6 +4,7 @@ export type OwnPost = {
   authorId: string; publishedAt: string | null; createdAt: string; updatedAt: string;
 };
 export type OwnPosts = { data: OwnPost[]; meta: { page: number; limit: number; total: number; totalPages: number } };
+export type OwnPostStatusFilter = "DRAFT" | "PUBLISHED";
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
