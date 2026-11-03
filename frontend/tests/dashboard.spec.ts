@@ -5,6 +5,51 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+test("an Author starts a new article and browses own articles from the workspace", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  for (const width of [360, 390, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/dashboard/workspace");
+    const main = page.getByRole("main");
+    const create = main.getByRole("link", { name: "مقاله جدید", exact: true });
+    const posts = main.getByRole("link", { name: "مقاله‌های من", exact: true });
+    await expect(create).toBeVisible();
+    await expect(posts).toBeVisible();
+    for (const theme of ["light", "dark"]) {
+      await page.getByRole("button", { name: theme === "light" ? "فعال‌کردن حالت روشن" : "فعال‌کردن حالت تاریک" }).click();
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      for (const link of [create, posts]) {
+        const bounds = await link.boundingBox();
+        expect(bounds!.width).toBeGreaterThanOrEqual(44);
+        expect(bounds!.height).toBeGreaterThanOrEqual(44);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`author-workspace-${theme}-${width}.png`), fullPage: true });
+    }
+    await create.focus();
+    await expect(create).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/dashboard\/posts\/new$/);
+    await expect(page.getByLabel("عنوان مقاله", { exact: true })).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/dashboard\/workspace$/);
+    await create.focus();
+    await page.keyboard.press("Tab");
+    await expect(posts).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/dashboard\/posts$/);
+    await expect(page.getByRole("heading", { level: 1, name: "مقاله‌های من" })).toBeVisible();
+    await expect(page.getByRole("listitem").filter({ hasText: "راهنمای Next.js" })).toBeVisible();
+  }
+  for (const role of ["USER", "ADMIN"]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=${role}`);
+    await page.goto("/dashboard/workspace");
+    await expect(page.getByRole("main").getByRole("link", { name: "مقاله جدید", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("main").getByRole("link", { name: "مقاله‌های من", exact: true })).toHaveCount(0);
+  }
+});
+
 test("publication actions share an RTL row and use a centered keyboard-accessible confirmation modal", async ({ page, request }, testInfo) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
   await page.goto("/dashboard/posts/new");
