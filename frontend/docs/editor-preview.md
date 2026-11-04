@@ -40,3 +40,15 @@ and [link URI validation interface](https://tiptap.dev/docs/editor/extensions/ma
 Browser evidence is fixture-backed; synthetic composition events do not replace
 manual testing with a real Persian IME. Images, collaboration, real persistence,
 canonical validation, and public rich-content rendering remain outside Issue #20.
+
+Issue #22 adds the official Tiptap image node and an explicitly supplied upload
+adapter in this preview. Choose PNG/JPEG/WebP (up to 5 MB), enter alt text, then
+insert; select an inserted image to remove it. The image panel blocks saving and
+publication until insertion or cancellation. Failed requests retain file and alt
+text for retry; cancellation aborts the request and ignores late completion.
+The resettable HTTP fixture stores selected bytes in memory and returns a
+`/fixture-images/<id>` reference served through test-host routes. Blob/data URLs
+are never inserted; fixture saves reject unknown image references. References
+survive article save/reload and published test reading until fixture reset or
+process restart. These routes and the upload adapter exist only in the test host.
+Run `npm run test:dashboard -- --grep 'article images|image fixture'` to verify.

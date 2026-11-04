@@ -19,6 +19,7 @@ type Props = {
   renderContent?: (field: { id: string; label: string; editable: boolean; error?: string; onChange: (text: string) => void }) => ReactNode;
   publicationAction?: PublicationAction;
   readingHref?: (slug: string) => string;
+  contentBlocked?: boolean;
 };
 
 export function ArticleFormLoading() {
@@ -45,7 +46,7 @@ function TaxonomyChoices({ label, choices, original, selected, onChange }: { lab
 }
 
 /** Presentation only. Without an explicitly supplied adapter, saving is unavailable. */
-export function ArticleForm({ article, categories, tags, saveAction, renderContent, publicationAction, readingHref }: Props) {
+export function ArticleForm({ article, categories, tags, saveAction, renderContent, publicationAction, readingHref, contentBlocked = false }: Props) {
   const formId = useId();
   const [saved, setSaved] = useState(article);
   const [title, setTitle] = useState(article?.title ?? "");
@@ -64,7 +65,7 @@ export function ArticleForm({ article, categories, tags, saveAction, renderConte
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!saveAction || pending.current || lifecycleBlocked || state === "uncertain") return;
+    if (!saveAction || pending.current || lifecycleBlocked || contentBlocked || state === "uncertain") return;
     const invalid = { title: !title.trim(), content: !content.trim() };
     setErrors(invalid);
     if (invalid.title || invalid.content) {
@@ -98,8 +99,8 @@ export function ArticleForm({ article, categories, tags, saveAction, renderConte
       {(state === "error" || state === "uncertain") && <p role="alert">{copy[state]}</p>}
       <p role="status" aria-live="polite">{state === "saved" ? copy.saved : state === "saving" ? copy.saving : ""}</p>
     </form>
-    <PublicationControls article={saved} action={publicationAction} readingHref={readingHref} busy={busy} dirty={dirty} blocked={lifecycleBlocked || state === "uncertain"} onSaved={post => { setSaved(post); setState("idle"); }} onPending={value => { pending.current = value; setLifecyclePending(value); }} onUncertain={() => setLifecycleBlocked(true)}
-      saveControl={<Button type="submit" form={formId} size="md" disabled={!saveAction || busy || lifecycleBlocked || state === "uncertain"} className="min-h-12 w-full motion-reduce:transition-none sm:w-auto">{state === "saving" ? copy.saving : copy.save}</Button>} />
+    <PublicationControls article={saved} action={publicationAction} readingHref={readingHref} busy={busy} dirty={dirty} blocked={lifecycleBlocked || contentBlocked || state === "uncertain"} onSaved={post => { setSaved(post); setState("idle"); }} onPending={value => { pending.current = value; setLifecyclePending(value); }} onUncertain={() => setLifecycleBlocked(true)}
+      saveControl={<Button type="submit" form={formId} size="md" disabled={!saveAction || busy || lifecycleBlocked || contentBlocked || state === "uncertain"} className="min-h-12 w-full motion-reduce:transition-none sm:w-auto">{state === "saving" ? copy.saving : copy.save}</Button>} />
     <a href="/dashboard/posts" className="inline-flex min-h-12 items-center rounded-control px-4 underline focus-visible:outline-2 focus-visible:outline-ring">{copy.back}</a>
   </Card>;
 }

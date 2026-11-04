@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { ArticleForm } from "@/components/dashboard/article-form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { documentFromText } from "@/components/editor/types";
@@ -16,11 +16,19 @@ const RichEditor = dynamic(() => import("@/components/editor/rich-editor").then(
 });
 
 export function PreviewRichArticleForm({ article, categories, tags, initialDocument, unavailable }: { article?: ArticleRecord; categories: ArticleTaxonomy[]; tags: ArticleTaxonomy[]; initialDocument?: PreviewDocument; unavailable: boolean }) {
+  const [imagePending, setImagePending] = useState(false);
   const document = useRef<PreviewDocument>(initialDocument ?? { format: "tiptap-ui-proposal-1", document: documentFromText(article?.content ?? "") });
   return <div className="space-y-4"><p>{copy.preview}</p><ArticleForm article={article} categories={categories} tags={tags}
-    saveAction={unavailable ? undefined : (id, input) => saveFixtureArticle(id, input, document.current)}
+    contentBlocked={imagePending}
+    saveAction={unavailable ? undefined : (id, input) => saveFixtureArticle(id, input, JSON.parse(JSON.stringify(document.current)))}
     publicationAction={unavailable ? undefined : changeFixturePublication}
     readingHref={slug => `/preview/posts/${encodeURIComponent(slug)}`}
-    renderContent={field => <RichEditor {...field} initialDocument={document.current.document} onChange={value => { document.current = { format: "tiptap-ui-proposal-1", document: value.document }; field.onChange(value.plainText); }} />}
+    renderContent={field => <RichEditor {...field} uploadImage={async (file, signal) => {
+      const response = await fetch("/fixture-images", { method: "POST", headers: { "Content-Type": file.type }, body: file, signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) });
+      if (!response.ok) throw new Error("Fixture image upload failed");
+      const result = await response.json();
+      if (typeof result.src !== "string" || !/^\/fixture-images\/[a-f0-9-]+$/.test(result.src)) throw new Error("Invalid fixture image reference");
+      return result.src;
+    }} onImagePending={setImagePending} initialDocument={document.current.document} onChange={value => { document.current = { format: "tiptap-ui-proposal-1", document: value.document }; field.onChange(value.plainText); }} />}
   /></div>;
 }

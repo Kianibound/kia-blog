@@ -5,6 +5,111 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+test("article images survive save, reload and published reading without losing text", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts/new");
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("مقالهٔ تصویری");
+  const text = page.getByRole("textbox", { name: "متن مقاله", exact: true });
+  await text.fill("متن پیش از تصویر");
+  await text.press("End");
+  await page.getByRole("checkbox", { name: "توسعهٔ وب" }).check();
+  await page.getByRole("button", { name: "افزودن تصویر", exact: true }).click();
+  await page.getByLabel("فایل تصویر", { exact: true }).setInputFiles("public/social/linkedin.png");
+  await page.getByLabel("متن جایگزین تصویر", { exact: true }).fill("نشان لینکدین");
+  await page.getByRole("button", { name: "درج تصویر", exact: true }).click();
+  const image = page.getByRole("img", { name: "نشان لینکدین", exact: true });
+  await expect(image).toHaveAttribute("src", /^\/fixture-images\/[a-f0-9-]+$/);
+  await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+  await expect(text).toContainText("متن پیش از تصویر");
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page).toHaveURL(/\/edit$/);
+  await page.reload();
+  await expect(image).toBeVisible();
+  await expect(text).toContainText("متن پیش از تصویر");
+  await page.getByRole("button", { name: "انتشار مقاله", exact: true }).click();
+  await page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
+  await page.getByRole("link", { name: "مشاهده در خواندن آزمایشی", exact: true }).click();
+  await expect(image).toBeVisible();
+  await expect(page.getByRole("document", { name: "متن مقاله", exact: true })).toContainText("متن پیش از تصویر");
+});
+
+test("article images support validation, retry, cancel and removal on mobile and desktop", async ({ page, request }, testInfo) => {
+  test.setTimeout(60000);
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=AUTHOR";
+  await request.post(control);
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/dashboard/posts/new");
+    const text = page.getByRole("textbox", { name: "متن مقاله", exact: true });
+    const save = page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true });
+    const add = page.getByRole("button", { name: "افزودن تصویر", exact: true });
+    await page.getByLabel("عنوان مقاله", { exact: true }).fill("تصویر آزمایشی");
+    await text.fill("متن حفظ‌شده");
+    await add.click();
+    await expect(save).toBeDisabled();
+    await page.getByRole("button", { name: "درج تصویر", exact: true }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("فایل تصویر و متن جایگزین را وارد کنید.");
+    const file = page.getByLabel("فایل تصویر", { exact: true });
+    await file.setInputFiles({ name: "invalid.txt", mimeType: "text/plain", buffer: Buffer.from("test double") });
+    await page.getByLabel("متن جایگزین تصویر", { exact: true }).fill("تصویر انتخابی");
+    await page.getByRole("button", { name: "درج تصویر", exact: true }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("یک فایل PNG، JPEG یا WebP غیرخالی تا ۵ مگابایت انتخاب کنید.");
+    await file.setInputFiles("public/social/linkedin.png");
+    await request.post(`${control}&imageMode=error`);
+    await page.getByRole("button", { name: "درج تصویر", exact: true }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("بارگذاری تصویر ممکن نشد.");
+    await expect(save).toBeDisabled();
+    await expect(page.getByLabel("متن جایگزین تصویر", { exact: true })).toHaveValue("تصویر انتخابی");
+    await request.post(`${control}&imageMode=slow`);
+    await page.getByRole("button", { name: "تلاش دوباره برای تصویر", exact: true }).click();
+    await expect(page.getByRole("status", { name: "" }).filter({ hasText: "در حال بارگذاری تصویر…" })).toBeVisible();
+    await page.getByRole("button", { name: "انصراف از تصویر", exact: true }).click();
+    await expect(save).toBeEnabled();
+    await expect(page.locator(".rich-editor img")).toHaveCount(0);
+    await request.post(control);
+    await add.click();
+    await file.setInputFiles("public/social/linkedin.png");
+    await page.getByLabel("متن جایگزین تصویر", { exact: true }).fill("تصویر نهایی");
+    await request.post(`${control}&imageMode=error`);
+    await page.getByRole("button", { name: "درج تصویر", exact: true }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("بارگذاری تصویر ممکن نشد.");
+    await request.post(control);
+    await page.getByRole("button", { name: "تلاش دوباره برای تصویر", exact: true }).click();
+    const image = page.getByRole("img", { name: "تصویر نهایی", exact: true });
+    await expect(image).toBeVisible();
+    await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`article-image-${width}.png`), fullPage: true });
+    await image.click();
+    await page.getByRole("button", { name: "حذف تصویر انتخاب‌شده", exact: true }).click();
+    await expect(page.locator(".rich-editor img")).toHaveCount(0);
+    await expect(text).toContainText("متن حفظ‌شده");
+    await save.click();
+    await expect(page).toHaveURL(/\/edit$/);
+    await page.reload();
+    await expect(page.locator(".rich-editor img")).toHaveCount(0);
+    await expect(text).toContainText("متن حفظ‌شده");
+  }
+  for (const role of ["USER", "ADMIN"]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=${role}`);
+    for (const width of [360, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/dashboard/posts/new");
+      await expect(page.getByRole("button", { name: "افزودن تصویر", exact: true })).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    }
+  }
+});
+
+test("image fixture rejects transient and unknown image references", async ({ request }) => {
+  const base = "http://127.0.0.1:4101";
+  await request.post(`${base}/__test/dashboard?role=AUTHOR`);
+  for (const src of ["blob:http://127.0.0.1/image", "data:image/png;base64,AAAA", "/fixture-images/missing"]) {
+    const response = await request.post(`${base}/dashboard-posts`, { data: { title: "تصویر", content: "متن", categoryIds: [], tagIds: [], previewDocument: { format: "tiptap-ui-proposal-1", document: { type: "doc", content: [{ type: "image", attrs: { src, alt: "تصویر" } }] } } } });
+    expect(response.status()).toBe(400);
+  }
+});
+
 test("Author status filters restore selection and results through URLs and history", async ({ page, request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
   await page.goto("/dashboard/posts?page=2");

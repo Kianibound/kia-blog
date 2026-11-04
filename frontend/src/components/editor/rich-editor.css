@@ -19,3 +19,5 @@
 .rich-editor a { color: var(--brand); text-decoration: underline; }
 .rich-editor pre { direction: ltr; text-align: start; overflow-x: auto; white-space: pre-wrap; background: var(--muted); padding: 1rem; border-radius: var(--shape-field); }
 .rich-editor code { font-family: monospace; unicode-bidi: plaintext; }
+.rich-editor img { display: block; max-width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: contain; margin-block: 1rem; }
+.rich-editor img.ProseMirror-selectednode { outline: 2px solid var(--ring); }

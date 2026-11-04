@@ -14,6 +14,8 @@ export type RichEditorProps = {
   editable: boolean;
   readOnly?: boolean;
   error?: string;
+  uploadImage?: (file: File, signal: AbortSignal) => Promise<string>;
+  onImagePending?: (pending: boolean) => void;
   onChange: (value: { document: EditorDocument; plainText: string }) => void;
 };
 

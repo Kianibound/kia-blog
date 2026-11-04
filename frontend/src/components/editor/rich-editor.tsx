@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import Image from "@tiptap/extension-image";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,13 +18,25 @@ function safeLink(value: string) {
   } catch { return false; }
 }
 
-const extensions = [StarterKit.configure({
+function safeImage(value: unknown): value is string {
+  return typeof value === "string" && (/^\/(?!\/)[\w/-]+$/.test(value) || safeLink(value));
+}
+
+const ArticleImage = Image.extend({
+  addInputRules() { return []; },
+  parseHTML() { return [{ tag: "img[src]", getAttrs: element => safeImage(element.getAttribute("src")) ? null : false }]; },
+  addAttributes() {
+    return { ...this.parent?.(), src: { default: null, renderHTML: attrs => safeImage(attrs.src) ? { src: attrs.src } : {} } };
+  },
+});
+
+const extensions = [ArticleImage.configure({ allowBase64: false }), StarterKit.configure({
   heading: { levels: [2, 3, 4] }, blockquote: false, horizontalRule: false, strike: false, underline: false, code: false, trailingNode: false,
   link: { openOnClick: false, autolink: false, linkOnPaste: false, isAllowedUri: (url, context) => context.defaultValidate(url) && safeLink(url) },
 })];
 
 /** Tiptap stays internal; initialDocument is consumed once per mounted document. */
-export function RichEditor({ id, label, initialDocument, editable, readOnly = false, error, onChange }: RichEditorProps) {
+export function RichEditor({ id, label, initialDocument, editable, readOnly = false, error, onChange, uploadImage, onImagePending }: RichEditorProps) {
   const canEdit = editable && !readOnly;
   const toolbar = useRef<HTMLDivElement>(null);
   const [linkSelection, setLinkSelection] = useState<{ from: number; to: number } | null>(null);
@@ -31,6 +44,14 @@ export function RichEditor({ id, label, initialDocument, editable, readOnly = fa
   const [linkOpen, setLinkOpen] = useState(false);
   const [href, setHref] = useState("");
   const [linkError, setLinkError] = useState("");
+  const [imageOpen, setImageOpen] = useState(false);
+  const [imageFile, setImageFile] = useState<File>();
+  const [imageAlt, setImageAlt] = useState("");
+  const [imageError, setImageError] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const imageRequest = useRef<AbortController | null>(null);
+  const [imagePosition, setImagePosition] = useState(0);
+  useEffect(() => () => { imageRequest.current?.abort(); }, []);
   const editor = useEditor({
     extensions, content: initialDocument, immediatelyRender: false, shouldRerenderOnTransaction: false, textDirection: "rtl", editable: canEdit,
     editorProps: { attributes: { id, role: readOnly ? "document" : "textbox", "aria-label": label, ...(readOnly ? { tabindex: "0" } : { "aria-multiline": "true" }) } },
@@ -41,6 +62,7 @@ export function RichEditor({ id, label, initialDocument, editable, readOnly = fa
     heading: [2, 3, 4].find(level => editor.isActive("heading", { level })), bullet: editor.isActive("bulletList"), ordered: editor.isActive("orderedList"),
     code: editor.isActive("codeBlock"), link: editor.isActive("link"), rtl: editor.isActive({ dir: "rtl" }), ltr: editor.isActive({ dir: "ltr" }),
     undo: editor.can().undo(), redo: editor.can().redo(),
+    image: editor.isActive("image"),
   } : null });
 
   useEffect(() => { editor?.setEditable(canEdit, false); }, [editor, canEdit]);
@@ -78,6 +100,49 @@ export function RichEditor({ id, label, initialDocument, editable, readOnly = fa
     setLinkError("");
   }
 
+  function closeImage() {
+    imageRequest.current?.abort();
+    imageRequest.current = null;
+    setUploading(false);
+    onImagePending?.(false);
+    setImageOpen(false);
+    setImageFile(undefined);
+    setImageAlt("");
+    setImageError("");
+    editor?.commands.focus();
+  }
+
+  function openImage() {
+    if (!editor) return;
+    setImagePosition(editor.state.selection.from);
+    setLinkOpen(false);
+    setImageOpen(true);
+    onImagePending?.(true);
+  }
+
+  async function insertImage() {
+    if (!editor || !canEdit || !uploadImage || imageRequest.current) return;
+    if (!imageFile || !imageAlt.trim()) { setImageError(copy.imageRequired); return; }
+    if (!["image/png", "image/jpeg", "image/webp"].includes(imageFile.type) || !imageFile.size || imageFile.size > 5 * 1024 * 1024) { setImageError(copy.imageInvalid); return; }
+    const controller = new AbortController();
+    imageRequest.current = controller;
+    setUploading(true);
+    setImageError("");
+    onImagePending?.(true);
+    try {
+      const src = await uploadImage(imageFile, controller.signal);
+      if (controller.signal.aborted || editor.isDestroyed) return;
+      if (!safeImage(src)) throw new Error("Invalid image reference");
+      editor.chain().focus().setTextSelection(imagePosition).setImage({ src, alt: imageAlt.trim() }).run();
+      closeImage();
+    } catch {
+      if (!controller.signal.aborted) setImageError(copy.imageError);
+    } finally {
+      if (imageRequest.current === controller) { imageRequest.current = null; setUploading(false); }
+      // Failed uploads remain unresolved until retry or cancel.
+    }
+  }
+
   const tools = [
     { label: copy.paragraph, pressed: state?.paragraph, run: () => editor?.chain().focus().setParagraph().run() },
     ...([2, 3, 4] as const).map(level => ({ label: copy[`heading${level}`], pressed: state?.heading === level, run: () => editor?.chain().focus().toggleHeading({ level }).run() })),
@@ -86,6 +151,10 @@ export function RichEditor({ id, label, initialDocument, editable, readOnly = fa
     { label: copy.bullet, pressed: state?.bullet, run: () => editor?.chain().focus().toggleBulletList().run() },
     { label: copy.ordered, pressed: state?.ordered, run: () => editor?.chain().focus().toggleOrderedList().run() },
     { label: copy.link, pressed: state?.link, run: openLink },
+    ...(uploadImage ? [
+      { label: copy.image, disabled: imageOpen, run: openImage },
+      { label: copy.imageRemove, disabled: !state?.image || imageOpen, run: () => editor?.chain().focus().deleteSelection().run() },
+    ] : []),
     { label: copy.code, pressed: state?.code, run: () => editor?.chain().focus().toggleCodeBlock().setTextDirection("ltr").run() },
     { label: copy.rtl, pressed: state?.rtl && !state.code, disabled: state?.code, run: () => editor?.chain().focus().setTextDirection("rtl").run() },
     { label: copy.ltr, pressed: state?.ltr || state?.code, disabled: state?.code, run: () => editor?.chain().focus().setTextDirection("ltr").run() },
@@ -112,7 +181,7 @@ export function RichEditor({ id, label, initialDocument, editable, readOnly = fa
   }}>
     <p id={`${id}-help`} className="text-sm text-muted-foreground">{copy.help}</p>
     <div ref={toolbar} role="toolbar" aria-label={copy.toolbar} aria-orientation="horizontal" className="flex flex-wrap gap-2" onKeyDown={toolbarKey}>
-      {tools.map((tool, index) => <Button key={tool.label} size="lg" variant="outline" tabIndex={index === tabTool ? 0 : -1} aria-pressed={tool.pressed} disabled={!editor || !editable || tool.disabled} onFocus={() => setActiveTool(index)} onMouseDown={event => event.preventDefault()} onClick={tool.run} className="motion-reduce:transition-none aria-pressed:bg-accent">{tool.label}</Button>)}
+        {tools.map((tool, index) => <Button key={tool.label} size="lg" variant="outline" tabIndex={index === tabTool ? 0 : -1} aria-pressed={tool.pressed} disabled={!editor || !editable || imageOpen || tool.disabled} onFocus={() => setActiveTool(index)} onMouseDown={event => event.preventDefault()} onClick={tool.run} className="motion-reduce:transition-none aria-pressed:bg-accent">{tool.label}</Button>)}
     </div>
     {linkOpen && <div role="group" aria-label={copy.link} className="space-y-4 rounded-field border border-border p-4" onKeyDown={event => {
       if (event.key === "Escape") { event.preventDefault(); setLinkOpen(false); editor?.commands.focus(); }
@@ -122,8 +191,18 @@ export function RichEditor({ id, label, initialDocument, editable, readOnly = fa
       <div className="flex flex-wrap gap-2"><Button size="lg" onClick={() => applyLink()}>{copy.apply}</Button><Button size="lg" variant="outline" onClick={() => applyLink(true)}>{copy.remove}</Button><Button size="lg" variant="outline" onClick={() => { setLinkOpen(false); editor?.commands.focus(); }}>{copy.cancel}</Button></div>
     </div>}
     {linkError && <p id={`${id}-link-error`} role="alert" className="text-sm text-destructive">{linkError}</p>}
+    {imageOpen && <div role="group" aria-label={copy.image} className="min-h-64 space-y-4 rounded-field border border-border p-4" onKeyDown={event => {
+      if (event.key === "Escape") { event.preventDefault(); closeImage(); }
+      if (event.key === "Enter" && event.target instanceof HTMLInputElement && !event.nativeEvent.isComposing) { event.preventDefault(); void insertImage(); }
+    }}>
+      <p id={`${id}-image-help`} className="text-sm text-muted-foreground">{copy.imageHelp}</p>
+      <Field label={copy.imageFile} htmlFor={`${id}-image-file`}><Input autoFocus id={`${id}-image-file`} type="file" accept="image/png,image/jpeg,image/webp" disabled={uploading} aria-describedby={`${id}-image-help ${id}-image-error`} aria-invalid={Boolean(imageError)} onChange={event => { setImageFile(event.target.files?.[0]); setImageError(""); }} className="min-h-12 min-w-0 max-w-full" /></Field>
+      <Field label={copy.imageAlt} htmlFor={`${id}-image-alt`}><Input id={`${id}-image-alt`} value={imageAlt} disabled={uploading} aria-describedby={`${id}-image-error`} aria-invalid={Boolean(imageError)} onChange={event => { setImageAlt(event.target.value); setImageError(""); }} className="min-h-12" /></Field>
+      <div className="min-h-12" aria-live="polite">{uploading && <div role="status"><p>{copy.imageUploading}</p><Skeleton className="h-12 w-full motion-reduce:animate-none" /></div>}<p id={`${id}-image-error`} role={imageError ? "alert" : undefined}>{imageError}</p></div>
+      <div className="flex flex-wrap gap-2"><Button size="lg" disabled={uploading} onClick={() => void insertImage()} className="motion-reduce:transition-none">{imageError === copy.imageError ? copy.imageRetry : copy.imageInsert}</Button><Button size="lg" variant="outline" onClick={closeImage} className="motion-reduce:transition-none">{copy.imageCancel}</Button></div>
+    </div>}
     {!editor && <div role="status" className="min-h-64 space-y-4"><p>{copy.loading}</p><Skeleton className="h-64 w-full motion-reduce:animate-none" /></div>}
-    <EditorContent editor={editor} className="rich-editor" />
+    <EditorContent editor={editor} className="rich-editor" inert={imageOpen} />
     {error && <p id={`${id}-error`} className="text-sm text-destructive">{error}</p>}
   </div>;
 }

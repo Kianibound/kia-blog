@@ -22,6 +22,11 @@ let ownPosts = structuredClone(initialPosts);
 let saveMode = "success";
 let formMode = "success";
 let writes = 0;
+let imageMode = "success";
+const images = new Map(); // Selected bytes live only in this resettable test process.
+function validImages(node) {
+  return node && typeof node === "object" && (node.type !== "image" || (typeof node.attrs?.alt === "string" && node.attrs.alt.trim() && images.has(node.attrs?.src))) && (!node.content || (Array.isArray(node.content) && node.content.every(validImages)));
+}
 const scalar = ({ categories, tags, previewDocument, ...post }) => { void categories; void tags; void previewDocument; return post; };
 const json = (response, status, payload) => response.writeHead(status, { "Content-Type": "application/json" }).end(JSON.stringify(payload));
 const fullTaxonomy = item => ({ ...item, createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" });
@@ -39,6 +44,8 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     const nextPostsMode = url.searchParams.get("postsMode") ?? "success";
     const nextSaveMode = url.searchParams.get("saveMode") ?? "success";
     const nextFormMode = url.searchParams.get("formMode") ?? "success";
+    const nextImageMode = url.searchParams.get("imageMode") ?? "success";
+    if (!["success", "error", "slow"].includes(nextImageMode)) { response.writeHead(400).end(); return true; }
     if (!Object.hasOwn(identities, nextRole) || !Object.hasOwn(authorIds, nextAuthor) || !["success", "empty", "error", "invalid", "slow", "foreign"].includes(nextPostsMode) || !["success", "error", "invalid", "slow"].includes(nextMode) || !["success", "error", "slow", "uncertain"].includes(nextSaveMode) || !["success", "missing", "error", "invalid", "detail-error"].includes(nextFormMode)) {
       response.writeHead(400).end();
     } else {
@@ -48,9 +55,38 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
       postsMode = nextPostsMode;
       saveMode = nextSaveMode;
       formMode = nextFormMode;
-      if (url.searchParams.get("reset") === "1") { ownPosts = structuredClone(initialPosts); writes = 0; }
+      imageMode = nextImageMode;
+      if (url.searchParams.get("reset") === "1") { ownPosts = structuredClone(initialPosts); writes = 0; images.clear(); }
       response.writeHead(204).end();
     }
+    return true;
+  }
+  if (request.method === "POST" && url.pathname === "/fixture-images") {
+    if (role !== "AUTHOR") { response.writeHead(403).end(); return true; }
+    const type = request.headers["content-type"];
+    if (!["image/png", "image/jpeg", "image/webp"].includes(type)) { response.writeHead(415).end(); return true; }
+    const chunks = [];
+    let size = 0;
+    request.on("data", chunk => {
+      size += chunk.length;
+      if (size <= 5 * 1024 * 1024) chunks.push(chunk);
+    });
+    request.on("end", () => {
+      if (!size || size > 5 * 1024 * 1024) { response.writeHead(413).end(); return; }
+      if (imageMode === "error") { response.writeHead(503).end(); return; }
+      const send = () => {
+        const src = `/fixture-images/${randomUUID()}`;
+        images.set(src, { type, bytes: Buffer.concat(chunks) });
+        json(response, 201, { src });
+      };
+      if (imageMode === "slow") setTimeout(send, 1500); else send();
+    });
+    return true;
+  }
+  if (request.method === "GET" && url.pathname.startsWith("/fixture-images/")) {
+    const image = images.get(url.pathname);
+    if (image) response.writeHead(200, { "Content-Type": image.type, "Cache-Control": "no-store" }).end(image.bytes);
+    else response.writeHead(404).end();
     return true;
   }
   const tags = [...new Map(publishedPosts.flatMap(post => post.tags).map(item => [item.id, fullTaxonomy(item)])).values()];
@@ -107,6 +143,7 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
       if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(key => !["title", "content", "categoryIds", "tagIds", "previewDocument"].includes(key)) || typeof input.title !== "string" || !input.title.trim() || typeof input.content !== "string" || !input.content.trim() || !Array.isArray(input.categoryIds) || !Array.isArray(input.tagIds)) { response.writeHead(400).end(); return; }
       // Envelope check for UI review only, not canonical rich-content validation.
       if (input.previewDocument !== undefined && (input.previewDocument?.format !== "tiptap-ui-proposal-1" || input.previewDocument?.document?.type !== "doc" || !Array.isArray(input.previewDocument?.document?.content))) { response.writeHead(400).end(); return; }
+      if (input.previewDocument && !validImages(input.previewDocument.document)) { response.writeHead(400).end(); return; }
       const categories = [...categoryChoices, ...ownPosts.flatMap(item => item.categories).map(fullTaxonomy)];
       if (input.categoryIds.some(id => !categories.some(item => item.id === id)) || input.tagIds.some(id => !tags.some(item => item.id === id))) { response.writeHead(400).end(); return; }
       writes++;
