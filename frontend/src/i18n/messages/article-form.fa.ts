@@ -1,4 +1,11 @@
 export const articleFormMessages = {
+  cover: "تصویر جلد (اختیاری)",
+  coverHelp: "جلد در کارت مقاله نمایش داده می‌شود و از تصویرهای داخل متن جداست.",
+  coverFile: "فایل تصویر جلد",
+  coverAlt: "متن جایگزین جلد",
+  coverChoose: "انتخاب تصویر جلد",
+  coverRemove: "حذف تصویر جلد",
+  coverCancel: "انصراف از انتخاب جلد",
   create: "ایجاد مقالهٔ آزمایشی",
   edit: "ویرایش مقاله",
   title: "عنوان مقاله",

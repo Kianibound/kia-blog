@@ -5,6 +5,7 @@ type PostFeedResponse = {
     title: string;
     slug: string;
     status: "PUBLISHED";
+    coverImage?: CoverImage | null;
     publishedAt: string | null;
     author: { username: string; name: string | null };
     categories: { id: string; name: string }[];
@@ -13,6 +14,7 @@ type PostFeedResponse = {
 };
 
 export type PostSummary = {
+  coverImage?: CoverImage | null;
   id: string;
   title: string;
   slug: string;
@@ -20,6 +22,14 @@ export type PostSummary = {
   authorName: string;
   categories: { id: string; name: string }[];
 };
+
+// Optional frontend fixture projection; no backend media contract is implied.
+export type CoverImage = { src: string; alt: string };
+export function parseCoverImage(value: unknown): CoverImage | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value) || typeof value.src !== "string" || !/^\/fixture-images\/[a-f0-9-]+$/.test(value.src) || !isText(value.alt)) throw new Error("Invalid cover image");
+  return { src: value.src, alt: value.alt };
+}
 
 type Taxonomy = { id: string; name: string; slug: string };
 export type PostDetail = PostSummary & {
@@ -85,6 +95,7 @@ export function parsePublishedPosts(payload: unknown): { data: PostSummary[]; me
   return {
     data: payload.data.map((post) => ({
       id: post.id,
+      coverImage: parseCoverImage(post.coverImage),
       title: post.title,
       slug: post.slug,
       publishedAt: post.publishedAt,
@@ -105,6 +116,7 @@ export function parsePublishedPost(payload: unknown): PostDetail {
   }
   return {
     id: payload.id,
+    coverImage: parseCoverImage(payload.coverImage),
     title: payload.title,
     slug: payload.slug,
     content,

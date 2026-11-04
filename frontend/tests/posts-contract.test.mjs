@@ -5,6 +5,16 @@ import { feed } from "./fixtures/posts.mjs";
 import { previewPosts } from "./fixtures/preview-posts.mjs";
 import { parseOwnPosts } from "../src/lib/own-posts-contract.ts";
 
+test("public cards preserve optional covers and reject unsafe cover references", () => {
+  const cover = { src: "/fixture-images/12345678-abcd", alt: "تصویر جلد مقاله" };
+  const withCover = { ...feed, data: [{ ...feed.data[0], coverImage: cover }] };
+  assert.deepEqual(parsePublishedPosts(withCover).data[0].coverImage, cover);
+  assert.equal(parsePublishedPosts(feed).data[0].coverImage, null);
+  for (const invalid of [{ src: "javascript:alert(1)", alt: "تصویر" }, { src: cover.src, alt: " " }, "bad"]) {
+    assert.throws(() => parsePublishedPosts({ ...feed, data: [{ ...feed.data[0], coverImage: invalid }] }));
+  }
+});
+
 test("own-Post parsing preserves scalar records and rejects invalid status or pagination", () => {
   const { author, categories, tags, ...post } = feed.data[0];
   void author; void categories; void tags;

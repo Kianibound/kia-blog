@@ -5,6 +5,97 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+test("optional cover can be selected, replaced, saved and removed independently of body images", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts/new");
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("مقالهٔ جلددار");
+  await page.getByRole("textbox", { name: "متن مقاله", exact: true }).fill("متن مستقل مقاله");
+  await page.getByRole("checkbox", { name: "توسعهٔ وب" }).check();
+  await page.getByRole("button", { name: "افزودن تصویر", exact: true }).click();
+  await page.getByLabel("فایل تصویر", { exact: true }).setInputFiles("public/social/linkedin.png");
+  await page.getByLabel("متن جایگزین تصویر", { exact: true }).fill("تصویر داخل متن");
+  await page.getByRole("button", { name: "درج تصویر", exact: true }).click();
+  await page.getByLabel("فایل تصویر جلد", { exact: true }).setInputFiles("public/social/linkedin.png");
+  await page.getByLabel("متن جایگزین جلد", { exact: true }).fill("جلد نخست");
+  await page.getByRole("button", { name: "انتخاب تصویر جلد", exact: true }).click();
+  await expect(page.getByRole("img", { name: "جلد نخست", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page).toHaveURL(/\/edit$/);
+  const editorUrl = page.url();
+  await page.reload();
+  await expect(page.getByRole("img", { name: "جلد نخست", exact: true })).toBeVisible();
+  await page.getByLabel("فایل تصویر جلد", { exact: true }).setInputFiles("public/social/linkedin.png");
+  await page.getByLabel("متن جایگزین جلد", { exact: true }).fill("جلد جایگزین");
+  await page.getByRole("button", { name: "انتخاب تصویر جلد", exact: true }).click();
+  await expect(page.getByRole("img", { name: "جلد جایگزین", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "مقاله در داده‌های آزمایشی ذخیره شد." })).toBeVisible();
+  await page.getByRole("button", { name: "انتشار مقاله", exact: true }).click();
+  await page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
+  await expect(page.getByRole("link", { name: "مشاهده در خواندن آزمایشی", exact: true })).toBeVisible();
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/preview/posts");
+    const cover = page.getByRole("img", { name: "جلد جایگزین", exact: true });
+    await expect(cover).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath(`cover-cards-${width}.png`), fullPage: true });
+    await expect.poll(() => cover.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+    await expect(page.getByRole("img", { name: "تصویر داخل متن", exact: true })).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await page.goto(editorUrl);
+  await page.getByRole("button", { name: "حذف تصویر جلد", exact: true }).click();
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "مقاله در داده‌های آزمایشی ذخیره شد." })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("img", { name: "جلد جایگزین", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("img", { name: "تصویر داخل متن", exact: true })).toBeVisible();
+  await page.goto("/preview/posts");
+  const card = page.getByRole("article").filter({ hasText: "مقالهٔ جلددار" });
+  await expect(card).toBeVisible();
+  await expect(card.getByRole("img")).toHaveCount(0);
+});
+
+test("cover validation, upload retry and cancellation preserve the article on mobile", async ({ page, request }) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=AUTHOR";
+  await request.post(control);
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/dashboard/posts/00000000-0000-4000-8000-000000000001/edit");
+  const save = page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true });
+  const choose = page.getByRole("button", { name: "انتخاب تصویر جلد", exact: true });
+  const file = page.getByLabel("فایل تصویر جلد", { exact: true });
+  await file.setInputFiles({ name: "invalid.txt", mimeType: "text/plain", buffer: Buffer.from("test double") });
+  await page.getByLabel("متن جایگزین جلد", { exact: true }).fill("جلد حفظ‌شده");
+  await choose.click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("یک فایل PNG، JPEG یا WebP غیرخالی تا ۵ مگابایت انتخاب کنید.");
+  await expect(save).toBeDisabled();
+  await file.setInputFiles("public/social/linkedin.png");
+  await request.post(`${control}&imageMode=error`);
+  await choose.click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("بارگذاری تصویر ممکن نشد.");
+  await expect(page.getByLabel("متن جایگزین جلد", { exact: true })).toHaveValue("جلد حفظ‌شده");
+  await request.post(control);
+  await choose.click();
+  await expect(page.getByRole("img", { name: "جلد حفظ‌شده", exact: true })).toBeVisible();
+  await request.post(`${control}&saveMode=error`);
+  await save.click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("ذخیره انجام نشد.");
+  await expect(page.getByRole("img", { name: "جلد حفظ‌شده", exact: true })).toBeVisible();
+  await request.post(control);
+  await save.click();
+  await expect(page.getByRole("status").filter({ hasText: "مقاله در داده‌های آزمایشی ذخیره شد." })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("img", { name: "جلد حفظ‌شده", exact: true })).toBeVisible();
+  await file.setInputFiles("public/social/linkedin.png");
+  await page.getByLabel("متن جایگزین جلد", { exact: true }).fill("جلد لغوشده");
+  await request.post(`${control}&imageMode=slow`);
+  await choose.click();
+  await page.getByRole("button", { name: "انصراف از انتخاب جلد", exact: true }).click();
+  await expect(save).toBeEnabled();
+  await expect(page.getByRole("img", { name: "جلد حفظ‌شده", exact: true })).toBeVisible();
+  await expect(page.getByRole("img", { name: "جلد لغوشده", exact: true })).toHaveCount(0);
+});
+
 test("article images survive save, reload and published reading without losing text", async ({ page, request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
   await page.goto("/dashboard/posts/new");
@@ -105,6 +196,8 @@ test("image fixture rejects transient and unknown image references", async ({ re
   const base = "http://127.0.0.1:4101";
   await request.post(`${base}/__test/dashboard?role=AUTHOR`);
   for (const src of ["blob:http://127.0.0.1/image", "data:image/png;base64,AAAA", "/fixture-images/missing"]) {
+    const coverResponse = await request.post(`${base}/dashboard-posts`, { data: { title: "جلد", content: "متن", categoryIds: [], tagIds: [], coverImage: { src, alt: "جلد" } } });
+    expect(coverResponse.status()).toBe(400);
     const response = await request.post(`${base}/dashboard-posts`, { data: { title: "تصویر", content: "متن", categoryIds: [], tagIds: [], previewDocument: { format: "tiptap-ui-proposal-1", document: { type: "doc", content: [{ type: "image", attrs: { src, alt: "تصویر" } }] } } } });
     expect(response.status()).toBe(400);
   }

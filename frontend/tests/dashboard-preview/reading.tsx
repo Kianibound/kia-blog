@@ -1,6 +1,8 @@
 import "server-only";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { PostCard } from "@/components/posts/post-card";
+import { parseCoverImage } from "@/lib/posts-contract";
 import { Card } from "@/components/ui/card";
 import { publicationMessages as copy } from "@/i18n/messages/publication.fa";
 import { formatPublicationDate } from "@/lib/publication-date";
@@ -20,7 +22,7 @@ async function read(slug?: string) {
   const posts = parseOwnPosts({ data, meta: { page: 1, limit: Math.max(1, data.length), total: data.length, totalPages: data.length ? 1 : 0 } }, 1, Math.max(1, data.length)).data;
   if (posts.some(post => post.status !== "PUBLISHED" || (slug !== undefined && post.slug !== slug))) throw new Error("Invalid fixture public visibility");
   const previewDocument = slug === undefined ? undefined : readPreviewDocument(data[0]?.previewDocument);
-  return posts.map(post => ({ ...post, previewDocument }));
+  return posts.map((post, index) => ({ ...post, coverImage: parseCoverImage(data[index].coverImage), previewDocument }));
 }
 
 export async function PreviewReading({ slug }: { slug?: string }) {
@@ -33,7 +35,7 @@ export async function PreviewReading({ slug }: { slug?: string }) {
     <p>{copy.readingHelp}</p>
     <Link prefetch={false} href="/preview/posts" className="inline-flex min-h-12 items-center rounded-control px-4 underline focus-visible:outline-2 focus-visible:outline-ring">{copy.back}</Link>
     {posts.length === 0 && <p>{copy.readingEmpty}</p>}
-    {posts.map(post => <article key={post.id} className="space-y-4"><Card className="space-y-4 p-6">
+    {posts.map(post => slug === undefined ? <PostCard key={post.id} post={{ ...post, authorName: "", categories: [] }} href={`/preview/posts/${encodeURIComponent(post.slug)}`} /> : <article key={post.id} className="space-y-4"><Card className="space-y-4 p-6">
       <h2 className="text-2xl font-semibold leading-tight wrap-anywhere">{slug === undefined ? <Link prefetch={false} href={`/preview/posts/${encodeURIComponent(post.slug)}`} className="inline-flex min-h-12 items-center underline">{fa(post.title)}</Link> : fa(post.title)}</h2>
       {post.publishedAt && <time dateTime={post.publishedAt}>{formatPublicationDate(post.publishedAt)}</time>}
       {slug !== undefined && (post.previewDocument ? <RichDocument id={`reading-${post.id}`} label={articleFormMessages.content} document={post.previewDocument.document} /> : <div className="whitespace-pre-wrap wrap-anywhere" style={{ unicodeBidi: "plaintext" }}>{post.content}</div>)}

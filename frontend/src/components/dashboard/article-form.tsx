@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { CoverImageField } from "./cover-image-field";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ type Props = {
   publicationAction?: PublicationAction;
   readingHref?: (slug: string) => string;
   contentBlocked?: boolean;
+  uploadImage?: (file: File, signal: AbortSignal) => Promise<string>;
 };
 
 export function ArticleFormLoading() {
@@ -46,8 +48,11 @@ function TaxonomyChoices({ label, choices, original, selected, onChange }: { lab
 }
 
 /** Presentation only. Without an explicitly supplied adapter, saving is unavailable. */
-export function ArticleForm({ article, categories, tags, saveAction, renderContent, publicationAction, readingHref, contentBlocked = false }: Props) {
+export function ArticleForm({ article, categories, tags, saveAction, renderContent, publicationAction, readingHref, contentBlocked = false, uploadImage }: Props) {
   const formId = useId();
+  const [coverImage, setCoverImage] = useState(article?.coverImage ?? null);
+  const [coverPending, setCoverPending] = useState(false);
+  const blocked = contentBlocked || coverPending;
   const [saved, setSaved] = useState(article);
   const [title, setTitle] = useState(article?.title ?? "");
   const [content, setContent] = useState(article?.content ?? "");
@@ -65,7 +70,7 @@ export function ArticleForm({ article, categories, tags, saveAction, renderConte
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!saveAction || pending.current || lifecycleBlocked || contentBlocked || state === "uncertain") return;
+    if (!saveAction || pending.current || lifecycleBlocked || blocked || state === "uncertain") return;
     const invalid = { title: !title.trim(), content: !content.trim() };
     setErrors(invalid);
     if (invalid.title || invalid.content) {
@@ -75,7 +80,7 @@ export function ArticleForm({ article, categories, tags, saveAction, renderConte
     pending.current = true;
     setState("saving");
     try {
-      const result = await saveAction(saved?.id, { title, content, categoryIds: selectedCategories.map(item => item.id), tagIds: selectedTags.map(item => item.id) });
+      const result = await saveAction(saved?.id, { title, content, ...(uploadImage ? { coverImage } : {}), categoryIds: selectedCategories.map(item => item.id), tagIds: selectedTags.map(item => item.id) });
       setState(result.state);
       if (result.state === "saved") {
         setSaved(result.post);
@@ -93,14 +98,15 @@ export function ArticleForm({ article, categories, tags, saveAction, renderConte
       <fieldset disabled={!saveAction || busy} className="min-w-0 space-y-6">
         <Field label={copy.title} htmlFor="article-title"><Input id="article-title" value={title} onChange={event => { setTitle(event.target.value); edited(); }} required aria-invalid={errors.title} aria-describedby={errors.title ? "article-title-error" : undefined} className="min-h-12" />{errors.title && <p id="article-title-error" className="text-sm text-destructive">{copy.requiredTitle}</p>}</Field>
         {renderContent ? <Field label={copy.content} htmlFor="article-content">{renderContent({ id: "article-content", label: copy.content, editable: Boolean(saveAction) && !busy, error: errors.content ? copy.requiredContent : undefined, onChange: text => { setContent(text); edited(); } })}</Field> : <Field label={copy.content} htmlFor="article-content" hint={copy.plain}><Textarea id="article-content" value={content} onChange={event => { setContent(event.target.value); edited(); }} required rows={10} aria-invalid={errors.content} aria-describedby={errors.content ? "article-content-error" : undefined} />{errors.content && <p id="article-content-error" className="text-sm text-destructive">{copy.requiredContent}</p>}</Field>}
+        {uploadImage && <CoverImageField value={coverImage} disabled={busy || !saveAction || contentBlocked} uploadImage={uploadImage} onChange={value => { setCoverImage(value); edited(); }} onPending={setCoverPending} />}
         <TaxonomyChoices label={copy.categories} choices={categories} original={article?.categories ?? []} selected={selectedCategories} onChange={value => { setCategories(value); edited(); }} />
         <TaxonomyChoices label={copy.tags} choices={tags} original={article?.tags ?? []} selected={selectedTags} onChange={value => { setTags(value); edited(); }} />
       </fieldset>
       {(state === "error" || state === "uncertain") && <p role="alert">{copy[state]}</p>}
       <p role="status" aria-live="polite">{state === "saved" ? copy.saved : state === "saving" ? copy.saving : ""}</p>
     </form>
-    <PublicationControls article={saved} action={publicationAction} readingHref={readingHref} busy={busy} dirty={dirty} blocked={lifecycleBlocked || contentBlocked || state === "uncertain"} onSaved={post => { setSaved(post); setState("idle"); }} onPending={value => { pending.current = value; setLifecyclePending(value); }} onUncertain={() => setLifecycleBlocked(true)}
-      saveControl={<Button type="submit" form={formId} size="md" disabled={!saveAction || busy || lifecycleBlocked || contentBlocked || state === "uncertain"} className="min-h-12 w-full motion-reduce:transition-none sm:w-auto">{state === "saving" ? copy.saving : copy.save}</Button>} />
+    <PublicationControls article={saved} action={publicationAction} readingHref={readingHref} busy={busy} dirty={dirty} blocked={lifecycleBlocked || blocked || state === "uncertain"} onSaved={post => { setSaved(post); setState("idle"); }} onPending={value => { pending.current = value; setLifecyclePending(value); }} onUncertain={() => setLifecycleBlocked(true)}
+      saveControl={<Button type="submit" form={formId} size="md" disabled={!saveAction || busy || lifecycleBlocked || blocked || state === "uncertain"} className="min-h-12 w-full motion-reduce:transition-none sm:w-auto">{state === "saving" ? copy.saving : copy.save}</Button>} />
     <a href="/dashboard/posts" className="inline-flex min-h-12 items-center rounded-control px-4 underline focus-visible:outline-2 focus-visible:outline-ring">{copy.back}</a>
   </Card>;
 }

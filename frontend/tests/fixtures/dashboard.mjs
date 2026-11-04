@@ -140,7 +140,8 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
         writeResponse(request, response, saved);
         return;
       }
-      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(key => !["title", "content", "categoryIds", "tagIds", "previewDocument"].includes(key)) || typeof input.title !== "string" || !input.title.trim() || typeof input.content !== "string" || !input.content.trim() || !Array.isArray(input.categoryIds) || !Array.isArray(input.tagIds)) { response.writeHead(400).end(); return; }
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(key => !["title", "content", "categoryIds", "tagIds", "previewDocument", "coverImage"].includes(key)) || typeof input.title !== "string" || !input.title.trim() || typeof input.content !== "string" || !input.content.trim() || !Array.isArray(input.categoryIds) || !Array.isArray(input.tagIds)) { response.writeHead(400).end(); return; }
+      if (input.coverImage != null && (typeof input.coverImage !== "object" || typeof input.coverImage.alt !== "string" || !input.coverImage.alt.trim() || !images.has(input.coverImage.src))) { response.writeHead(400).end(); return; }
       // Envelope check for UI review only, not canonical rich-content validation.
       if (input.previewDocument !== undefined && (input.previewDocument?.format !== "tiptap-ui-proposal-1" || input.previewDocument?.document?.type !== "doc" || !Array.isArray(input.previewDocument?.document?.content))) { response.writeHead(400).end(); return; }
       if (input.previewDocument && !validImages(input.previewDocument.document)) { response.writeHead(400).end(); return; }
@@ -150,6 +151,7 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
       if (saveMode === "error") { response.writeHead(422).end(); return; }
       const now = new Date().toISOString();
       const saved = { ...(post ?? { id: randomUUID(), slug: `fixture-draft-${randomUUID()}`, authorId: authorIds[author], status: "DRAFT", publishedAt: null, createdAt: now }), title: input.title, content: input.content, updatedAt: now, categories: [...new Set(input.categoryIds)].map(id => categories.find(item => item.id === id)), tags: [...new Set(input.tagIds)].map(id => tags.find(item => item.id === id)) };
+      saved.coverImage = input.coverImage === undefined ? (post?.coverImage ?? null) : input.coverImage;
       if (input.previewDocument !== undefined) saved.previewDocument = input.previewDocument;
       if (post) ownPosts[ownPosts.indexOf(post)] = saved; else ownPosts.unshift(saved);
       writeResponse(request, response, saved, post ? 200 : 201);

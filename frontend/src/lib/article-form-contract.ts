@@ -1,8 +1,9 @@
 import { parseOwnPosts, type OwnPost } from "./own-posts-contract";
+import { parseCoverImage, type CoverImage } from "./posts-contract";
 
 export type ArticleTaxonomy = { id: string; name: string; slug: string };
-export type ArticleInput = { title: string; content: string; categoryIds: string[]; tagIds: string[] };
-export type ArticleRecord = OwnPost & { categories: ArticleTaxonomy[]; tags: ArticleTaxonomy[] };
+export type ArticleInput = { title: string; content: string; categoryIds: string[]; tagIds: string[]; coverImage?: CoverImage | null };
+export type ArticleRecord = OwnPost & { categories: ArticleTaxonomy[]; tags: ArticleTaxonomy[]; coverImage?: CoverImage | null };
 export type ArticleSaveResult = { state: "saved"; post: ArticleRecord } | { state: "error" | "uncertain" };
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -23,7 +24,7 @@ export function parseArticleTaxonomy(value: unknown): ArticleTaxonomy[] {
 function parseArticle(value: unknown): ArticleRecord {
   if (!record(value)) throw new Error("Invalid article");
   const post = parseOwnPosts({ data: [value], meta: { page: 1, limit: 1, total: 1, totalPages: 1 } }, 1, 1).data[0];
-  return { ...post, categories: parseArticleTaxonomy(value.categories), tags: parseArticleTaxonomy(value.tags) };
+  return { ...post, coverImage: parseCoverImage(value.coverImage), categories: parseArticleTaxonomy(value.categories), tags: parseArticleTaxonomy(value.tags) };
 }
 
 export function parseArticleDetail(value: unknown): ArticleRecord {
