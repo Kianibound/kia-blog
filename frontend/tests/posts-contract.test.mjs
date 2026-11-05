@@ -5,6 +5,16 @@ import { feed } from "./fixtures/posts.mjs";
 import { previewPosts } from "./fixtures/preview-posts.mjs";
 import { parseOwnPosts, parseAdminPosts } from "../src/lib/own-posts-contract.ts";
 import { validateAuthorInput } from "../src/lib/author-form-contract.ts";
+import { parseModerationComments } from "../src/lib/comment-moderation-contract.ts";
+
+test("fixture moderation accepts only identified pending or approved comments without article data", () => {
+  const comment = { id: "comment-1", name: "نرگس رضایی", text: "دیدگاه خواننده", status: "PENDING" };
+  assert.deepEqual(parseModerationComments([comment]), [comment]);
+  assert.deepEqual(parseModerationComments([]), []);
+  for (const invalid of [null, {}, [comment, comment], [{ ...comment, status: "REJECTED" }], [{ ...comment, text: " " }], [{ ...comment, name: null }], [{ ...comment, id: "" }]]) {
+    assert.throws(() => parseModerationComments(invalid));
+  }
+});
 
 test("ADMIN inventory validates authors against article ownership without dropping publication states", () => {
   const post = { ...feed.data[0], status: "DRAFT", publishedAt: null };

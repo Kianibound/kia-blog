@@ -26,6 +26,14 @@ let ownPosts = structuredClone(initialPosts);
 let saveMode = "success";
 let formMode = "success";
 let authors = []; // Test-only Authors; retained until an explicit fixture reset.
+// Minimal moderation test doubles; intentionally no article or reply associations.
+const initialComments = [
+  { id: "60000000-0000-4000-8000-000000000001", name: "نرگس رضایی", text: "این دیدگاه در انتظار بررسی است.", status: "PENDING" },
+  // Unbroken user text is intentional: exercise wrapping without adding a fixture mode.
+  { id: "60000000-0000-4000-8000-000000000002", name: "سارا کیانی", text: `این دیدگاه قبلاً تأیید شده است. ${"متنبدونفاصله".repeat(20)}`, status: "APPROVED" },
+];
+let comments = structuredClone(initialComments);
+let commentsMode = "success";
 let writes = 0;
 let imageMode = "success";
 const images = new Map(); // Selected bytes live only in this resettable test process.
@@ -50,6 +58,8 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     const nextSaveMode = url.searchParams.get("saveMode") ?? "success";
     const nextFormMode = url.searchParams.get("formMode") ?? "success";
     const nextImageMode = url.searchParams.get("imageMode") ?? "success";
+    const nextCommentsMode = url.searchParams.get("commentsMode") ?? "success";
+    if (!["success", "empty", "error", "invalid", "slow"].includes(nextCommentsMode)) { response.writeHead(400).end(); return true; }
     if (!["success", "error", "slow"].includes(nextImageMode)) { response.writeHead(400).end(); return true; }
     if (!Object.hasOwn(identities, nextRole) || !Object.hasOwn(authorIds, nextAuthor) || !["success", "empty", "error", "invalid", "slow", "foreign"].includes(nextPostsMode) || !["success", "error", "invalid", "slow"].includes(nextMode) || !["success", "error", "slow", "uncertain"].includes(nextSaveMode) || !["success", "missing", "error", "invalid", "detail-error"].includes(nextFormMode)) {
       response.writeHead(400).end();
@@ -61,12 +71,50 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
       saveMode = nextSaveMode;
       formMode = nextFormMode;
       imageMode = nextImageMode;
-      if (url.searchParams.get("reset") === "1") { ownPosts = structuredClone(initialPosts); authors = []; writes = 0; images.clear(); }
+      commentsMode = nextCommentsMode;
+      if (url.searchParams.get("reset") === "1") { ownPosts = structuredClone(initialPosts); authors = []; comments = structuredClone(initialComments); writes = 0; images.clear(); }
       response.writeHead(204).end();
     }
     return true;
   }
   const authorMatch = /^\/dashboard-authors\/([^/]+)$/.exec(url.pathname);
+  const commentMatch = /^\/dashboard-comments\/([^/]+)$/.exec(url.pathname);
+  if (url.pathname === "/dashboard-comments" || commentMatch) {
+    if (role !== "ADMIN") { response.writeHead(403).end(); return true; }
+    if (!commentMatch && request.method === "GET") {
+      if (commentsMode === "error") { response.writeHead(503).end(); return true; }
+      const data = commentsMode === "empty" ? [] : commentsMode === "invalid" ? [{ ...initialComments[0], status: "UNKNOWN" }] : comments;
+      const send = () => json(response, 200, data);
+      if (commentsMode === "slow") setTimeout(send, 1500); else send();
+      return true;
+    }
+    if (!commentMatch || !["DELETE", "PATCH"].includes(request.method)) { response.writeHead(405).end(); return true; }
+    const index = comments.findIndex(item => item.id === commentMatch[1]);
+    if (index === -1) { response.writeHead(404).end(); return true; }
+    const finish = () => {
+      if (saveMode === "uncertain") { request.socket.destroy(); return; }
+      const send = () => response.writeHead(204).end();
+      if (saveMode === "slow") setTimeout(send, 1500); else send();
+    };
+    if (request.method === "DELETE") {
+      if (saveMode === "error") { response.writeHead(422).end(); return true; }
+      comments.splice(index, 1);
+      finish();
+      return true;
+    }
+    let body = "";
+    request.on("data", chunk => { body += chunk; });
+    request.on("end", () => {
+      let input;
+      try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 1 || input.status !== "APPROVED") { response.writeHead(400).end(); return; }
+      if (comments[index].status !== "PENDING") { response.writeHead(409).end(); return; }
+      if (saveMode === "error") { response.writeHead(422).end(); return; }
+      comments[index] = { ...comments[index], status: "APPROVED" };
+      finish();
+    });
+    return true;
+  }
   if (authorMatch) {
     if (role !== "ADMIN") { response.writeHead(403).end(); return true; }
     if (request.method !== "DELETE") { response.writeHead(405).end(); return true; }

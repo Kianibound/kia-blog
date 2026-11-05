@@ -17,6 +17,8 @@ import { AuthorCreateForm } from "@/components/dashboard/author-create-form";
 import { createFixtureAuthor } from "../../../author-actions";
 import { AdminAuthorsLoading, PreviewAdminAuthors } from "../../../admin-authors";
 
+import { AdminCommentsLoading, PreviewAdminComments } from "../../../admin-comments";
+
 export const dynamic = "force-dynamic";
 
 const workspaces = {
@@ -25,14 +27,15 @@ const workspaces = {
   ADMIN: { title: "فضای مدیریت", description: "نویسنده‌ای با نام و ایمیل به داده‌های آزمایشی اضافه کنید." },
 };
 
-async function PreviewContent({ workspacePage, postsPage, authorForm, page, status, form }: { workspacePage: boolean; postsPage: boolean; authorForm: boolean; page: number; status?: OwnPostStatusFilter; form?: { id?: string; unavailable?: boolean } }) {
+async function PreviewContent({ workspacePage, postsPage, commentsPage, authorForm, page, status, form }: { workspacePage: boolean; postsPage: boolean; commentsPage: boolean; authorForm: boolean; page: number; status?: OwnPostStatusFilter; form?: { id?: string; unavailable?: boolean } }) {
   const identity = await readFixtureIdentity();
   const workspace = identity ? workspaces[identity.role] : null;
   const destinations = workspace ? [{ href: "/dashboard", label: copy.title }, { href: "/dashboard/workspace", label: workspace.title }] : [];
   if (identity?.role === "AUTHOR") destinations.push({ href: "/dashboard/posts", label: postsCopy.title });
-  if (identity?.role === "ADMIN") destinations.push({ href: "/dashboard/posts", label: adminCopy.title }, { href: "/dashboard/workspace#authors", label: "لیست نویسندگان" }, { href: "/dashboard/authors/new", label: "افزودن نویسنده" });
+  if (identity?.role === "ADMIN") destinations.push({ href: "/dashboard/comments", label: "کامنت‌ها" }, { href: "/dashboard/posts", label: adminCopy.title }, { href: "/dashboard/workspace#authors", label: "لیست نویسندگان" }, { href: "/dashboard/authors/new", label: "افزودن نویسنده" });
   return (
-    <DashboardShell identity={identity} destinations={destinations} title={authorForm ? "افزودن نویسنده" : form ? form.id ? formCopy.edit : formCopy.create : postsPage ? identity?.role === "ADMIN" ? adminCopy.title : postsCopy.title : workspacePage && workspace ? workspace.title : copy.title} description={postsPage ? identity?.role === "ADMIN" ? adminCopy.description : postsCopy.description : copy.description} actions={<Link href="/" className="inline-flex min-h-12 items-center rounded-control bg-brand px-6 font-semibold text-brand-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">{copy.browse}</Link>}>
+    <DashboardShell identity={identity} destinations={destinations} title={commentsPage ? "کامنت‌ها" : authorForm ? "افزودن نویسنده" : form ? form.id ? formCopy.edit : formCopy.create : postsPage ? identity?.role === "ADMIN" ? adminCopy.title : postsCopy.title : workspacePage && workspace ? workspace.title : copy.title} description={postsPage ? identity?.role === "ADMIN" ? adminCopy.description : postsCopy.description : copy.description} actions={<Link href="/" className="inline-flex min-h-12 items-center rounded-control bg-brand px-6 font-semibold text-brand-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">{copy.browse}</Link>}>
+      {commentsPage ? identity?.role === "ADMIN" ? <Suspense fallback={<AdminCommentsLoading />}><PreviewAdminComments /></Suspense> : <Card className="min-h-64 p-6"><p>مدیریت کامنت‌ها فقط برای مدیر در دسترس است.</p></Card> : <>
       {authorForm ? identity?.role === "ADMIN" ? <AuthorCreateForm createAction={createFixtureAuthor} /> : <Card className="min-h-64 p-6"><p>ایجاد نویسنده فقط برای مدیر در دسترس است.</p></Card> : workspacePage && identity?.role === "ADMIN" ? <Suspense fallback={<AdminAuthorsLoading />}><PreviewAdminAuthors /></Suspense> : <>
       {postsPage ? !identity ? <AuthorPostsUnavailable page={page} status={status} /> : identity.role === "ADMIN" ? form ? form.id ? <Suspense fallback={<ArticleFormLoading />}><PreviewArticleForm {...form} authorId={identity.id} admin /></Suspense> : <Card className="min-h-64 p-6"><p>{formCopy.unavailable}</p></Card> : <Suspense key={page} fallback={<AuthorPostsLoading admin />}><PreviewOwnPosts page={page} authorId={identity.id} admin /></Suspense> : identity.role === "AUTHOR" ? form ? <Suspense fallback={<ArticleFormLoading />}><PreviewArticleForm {...form} authorId={identity.id} /></Suspense> : <div className="space-y-6"><AuthorPostFilters status={status} href={value => ownPostsHref(1, value)} /><Suspense key={`${page}-${status ?? "all"}`} fallback={<AuthorPostsLoading />}><PreviewOwnPosts page={page} status={status} authorId={identity.id} /></Suspense></div> : <Card className="min-h-64 p-6"><p>فهرست مقاله‌های نویسنده در این پیش‌نمایش در دسترس نیست.</p></Card> : workspace ? <Card className="min-h-64 space-y-4 p-6 sm:p-8">
         <h2 className="text-xl leading-tight font-semibold">{workspace.title}</h2>
@@ -44,6 +47,7 @@ async function PreviewContent({ workspacePage, postsPage, authorForm, page, stat
         <p>امکانات حساب و عملیات واقعی تا پیاده‌سازی ورود امن در دسترس نیستند.</p>
       </Card> : <DashboardUnavailable retryHref={workspacePage ? "/dashboard/workspace" : "/dashboard"} />}
       </>}
+      </>}
     </DashboardShell>
   );
 }
@@ -52,10 +56,10 @@ export default async function DashboardPreview({ params, searchParams }: { param
   const { section = [] } = await params;
   const authorForm = section.length === 2 && section[0] === "authors" && section[1] === "new";
   const form = section[0] === "posts" && section.length === 2 && ["new", "unavailable"].includes(section[1]) ? { unavailable: section[1] === "unavailable" } : section[0] === "posts" && section.length === 3 && section[2] === "edit" ? { id: section[1] } : undefined;
-  if (!form && !authorForm && (section.length > 1 || (section.length === 1 && !["workspace", "posts"].includes(section[0])))) notFound();
+  if (!form && !authorForm && (section.length > 1 || (section.length === 1 && !["workspace", "posts", "comments"].includes(section[0])))) notFound();
   const { page: input, status: statusInput } = await searchParams;
   const status = statusInput === "DRAFT" || statusInput === "PUBLISHED" ? statusInput : undefined;
   const numeric = typeof input === "string" && /^\d+$/.test(input) ? Number(input) : 1;
   const page = Number.isSafeInteger(numeric) && numeric > 0 ? numeric : 1;
-  return <Suspense fallback={<DashboardLoading />}><PreviewContent workspacePage={section[0] === "workspace"} postsPage={section[0] === "posts"} authorForm={authorForm} page={page} status={status} form={form} /></Suspense>;
+  return <Suspense fallback={<DashboardLoading />}><PreviewContent workspacePage={section[0] === "workspace"} postsPage={section[0] === "posts"} commentsPage={section[0] === "comments"} authorForm={authorForm} page={page} status={status} form={form} /></Suspense>;
 }
