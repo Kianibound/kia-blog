@@ -62,6 +62,19 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     }
     return true;
   }
+  const authorMatch = /^\/dashboard-authors\/([^/]+)$/.exec(url.pathname);
+  if (authorMatch) {
+    if (role !== "ADMIN") { response.writeHead(403).end(); return true; }
+    if (request.method !== "DELETE") { response.writeHead(405).end(); return true; }
+    const index = authors.findIndex(item => item.id === authorMatch[1]);
+    if (index === -1) { response.writeHead(404).end(); return true; }
+    if (saveMode === "error") { response.writeHead(422).end(); return true; }
+    authors.splice(index, 1); // Only this test list changes; related fixture content is untouched.
+    if (saveMode === "uncertain") { request.socket.destroy(); return true; }
+    const send = () => response.writeHead(204).end();
+    if (saveMode === "slow") setTimeout(send, 1500); else send();
+    return true;
+  }
   if (url.pathname === "/dashboard-authors") {
     if (role !== "ADMIN") { response.writeHead(403).end(); return true; }
     if (request.method === "GET") { json(response, 200, authors); return true; }

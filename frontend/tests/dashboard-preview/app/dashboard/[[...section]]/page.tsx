@@ -30,7 +30,7 @@ async function PreviewContent({ workspacePage, postsPage, authorForm, page, stat
   const workspace = identity ? workspaces[identity.role] : null;
   const destinations = workspace ? [{ href: "/dashboard", label: copy.title }, { href: "/dashboard/workspace", label: workspace.title }] : [];
   if (identity?.role === "AUTHOR") destinations.push({ href: "/dashboard/posts", label: postsCopy.title });
-  if (identity?.role === "ADMIN") destinations.push({ href: "/dashboard/authors/new", label: "افزودن نویسنده" });
+  if (identity?.role === "ADMIN") destinations.push({ href: "/dashboard/workspace#authors", label: "لیست نویسندگان" }, { href: "/dashboard/authors/new", label: "افزودن نویسنده" });
   return (
     <DashboardShell identity={identity} destinations={destinations} title={authorForm ? "افزودن نویسنده" : form ? form.id ? formCopy.edit : formCopy.create : postsPage ? postsCopy.title : workspacePage && workspace ? workspace.title : copy.title} description={postsPage ? postsCopy.description : copy.description} actions={<Link href="/" className="inline-flex min-h-12 items-center rounded-control bg-brand px-6 font-semibold text-brand-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">{copy.browse}</Link>}>
       {authorForm ? identity?.role === "ADMIN" ? <AuthorCreateForm createAction={createFixtureAuthor} /> : <Card className="min-h-64 p-6"><p>ایجاد نویسنده فقط برای مدیر در دسترس است.</p></Card> : workspacePage && identity?.role === "ADMIN" ? <Suspense fallback={<AdminAuthorsLoading />}><PreviewAdminAuthors /></Suspense> : <>

@@ -5,6 +5,107 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+test("ADMIN cancels or confirms Author deletion in a centered modal and the list persists", async ({ page, request }, testInfo) => {
+  const base = "http://127.0.0.1:4101";
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  await request.post(`${base}/dashboard-authors`, { data: { name: "نویسندهٔ حذف‌شدنی", email: "delete@example.test" } });
+  await request.post(`${base}/dashboard-authors`, { data: { name: "نویسندهٔ باقی‌مانده", email: "keep@example.test" } });
+  const articlesBefore = await (await request.get(`${base}/dashboard-public-posts`)).json();
+  await page.goto("/dashboard/workspace");
+  const row = page.getByRole("main").getByRole("listitem").filter({ hasText: "delete@example.test" });
+  const remove = row.getByRole("button", { name: "حذف", exact: true });
+  await expect(remove).toBeVisible();
+  await remove.click();
+  const dialog = page.getByRole("alertdialog", { name: "حذف نویسنده", exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("نویسندهٔ حذف‌شدنی");
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "تأیید حذف", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeFocused();
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    const bounds = await dialog.boundingBox();
+    expect(Math.abs(bounds!.x + bounds!.width / 2 - width / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(bounds!.y + bounds!.height / 2 - 450)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: testInfo.outputPath(`author-delete-modal-${width}.png`), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(remove).toBeFocused();
+  await page.reload();
+  await expect(row).toBeVisible();
+  await remove.click();
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(row).toBeVisible();
+  await remove.click();
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "نویسنده از داده‌های آزمایشی حذف شد." })).toBeVisible();
+  await expect(row).toHaveCount(0);
+  await page.reload();
+  await expect(row).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("listitem")).toHaveCount(1);
+  expect(await (await request.get(`${base}/dashboard-public-posts`)).json()).toEqual(articlesBefore);
+});
+
+test("Author deletion reports failure, blocks pending confirmation and preserves role boundaries", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  const author = await (await request.post(`${base}/dashboard-authors`, { data: { name: "نویسندهٔ آزمون حذف", email: "retry-delete@example.test" } })).json();
+  await page.goto("/dashboard/workspace");
+  const row = page.getByRole("main").getByRole("listitem").filter({ hasText: author.email });
+  await row.getByRole("button", { name: "حذف", exact: true }).click();
+  const dialog = page.getByRole("alertdialog");
+  await request.post(`${base}/__test/dashboard?role=ADMIN&saveMode=error`);
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("حذف نویسنده انجام نشد.");
+  await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+  await page.reload();
+  await expect(row).toBeVisible();
+  for (const role of ["USER", "AUTHOR"]) {
+    await request.post(`${base}/__test/dashboard?role=${role}`);
+    expect((await request.delete(`${base}/dashboard-authors/${author.id}`)).status()).toBe(403);
+  }
+  await request.post(`${base}/__test/dashboard?role=ADMIN&saveMode=slow`);
+  await row.getByRole("button", { name: "حذف", exact: true }).click();
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog.getByRole("status")).toContainText("در حال حذف نویسنده…");
+  await expect(dialog.getByRole("button", { name: "تأیید حذف", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).not.toBeVisible();
+  await expect(row).toHaveCount(0);
+  await page.reload();
+  await expect(row).toHaveCount(0);
+});
+
+test("ADMIN author-list sidebar entry reuses the workspace on desktop and mobile", async ({ page, request }) => {
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
+    await page.goto("/dashboard/authors/new");
+    if (width === 360) await page.getByRole("button", { name: "فهرست پیشخوان", exact: true }).click();
+    const link = page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true }).getByRole("link", { name: "لیست نویسندگان", exact: true });
+    await expect(link).toHaveAttribute("href", "/dashboard/workspace#authors");
+    await link.click();
+    await expect(page).toHaveURL(/\/dashboard\/workspace#authors$/);
+    await expect(page.getByRole("main").getByRole("heading", { name: "نویسندگان", exact: true })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  for (const role of ["USER", "AUTHOR"]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=${role}`);
+    await page.goto("/dashboard/workspace");
+    await expect(page.getByRole("link", { name: "لیست نویسندگان", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "حذف", exact: true })).toHaveCount(0);
+  }
+});
+
 test("ADMIN creates an Author with name and email and sees it in the workspace after reload", async ({ page, request }, testInfo) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
   await page.goto("/dashboard/workspace");

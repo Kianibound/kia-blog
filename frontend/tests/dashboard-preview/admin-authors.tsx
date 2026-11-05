@@ -3,7 +3,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fa } from "@/lib/utils";
+import { AdminAuthorList } from "@/components/dashboard/admin-author-list";
+import { deleteFixtureAuthor } from "./author-actions";
 
 export function AdminAuthorsLoading() {
   return <Card className="min-h-64 space-y-6 p-6 sm:p-8" aria-busy="true">
@@ -26,10 +27,10 @@ export async function PreviewAdminAuthors() {
   } catch {
     return <Card className="min-h-64 space-y-4 p-6" role="alert"><p>دریافت نویسندگان ممکن نشد.</p><form><Button type="submit" size="lg">تلاش دوباره</Button></form></Card>;
   }
-  return <Card className="min-h-64 space-y-6 p-6 sm:p-8">
+  return <Card id="authors" className="min-h-64 space-y-6 p-6 sm:p-8">
     <h2 className="text-xl leading-tight font-semibold">نویسندگان</h2>
     <Link href="/dashboard/authors/new" className="inline-flex min-h-12 items-center justify-center rounded-control bg-brand px-6 font-semibold text-brand-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">افزودن نویسنده</Link>
     <p>نویسندگان ایجادشده در داده‌های آزمایشی اینجا نمایش داده می‌شوند.</p>
-    {authors.length ? <ul className="space-y-4">{authors.map(item => <li key={item.id} className="space-y-2 rounded-control border border-border p-4 wrap-anywhere"><p className="font-semibold">{fa(item.name)}</p><p><bdi>{item.email}</bdi></p></li>)}</ul> : <p>هنوز نویسنده‌ای ایجاد نشده است.</p>}
+    <AdminAuthorList initialAuthors={authors} deleteAction={deleteFixtureAuthor} />
   </Card>;
 }
