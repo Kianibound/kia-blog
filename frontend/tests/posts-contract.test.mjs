@@ -6,6 +6,16 @@ import { previewPosts } from "./fixtures/preview-posts.mjs";
 import { parseOwnPosts, parseAdminPosts } from "../src/lib/own-posts-contract.ts";
 import { validateAuthorInput } from "../src/lib/author-form-contract.ts";
 import { parseModerationComments } from "../src/lib/comment-moderation-contract.ts";
+import { parseFixtureAvatar } from "../src/lib/avatar-contract.ts";
+
+test("avatar state accepts only null or a persistent fixture image reference", () => {
+  assert.equal(parseFixtureAvatar({ src: null }), null);
+  assert.equal(parseFixtureAvatar({ src: "/fixture-images/12345678-abcd" }), "/fixture-images/12345678-abcd");
+  for (const src of ["blob:http://127.0.0.1/avatar", "data:image/png;base64,AAAA", "https://example.test/image.png", "/fixture-images/../secret", "", 3]) {
+    assert.throws(() => parseFixtureAvatar({ src }));
+  }
+  assert.throws(() => parseFixtureAvatar({}));
+});
 
 test("fixture moderation accepts only identified pending or approved comments without article data", () => {
   const comment = { id: "comment-1", name: "نرگس رضایی", text: "دیدگاه خواننده", status: "PENDING" };

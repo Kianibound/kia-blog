@@ -39,6 +39,8 @@ let taxonomyMode = "success";
 let writes = 0;
 let imageMode = "success";
 const images = new Map(); // Selected bytes live only in this resettable test process.
+const avatars = new Map(); // AUTHOR identity -> saved fixture image reference only.
+let avatarMode = "success";
 function validImages(node) {
   return node && typeof node === "object" && (node.type !== "image" || (typeof node.attrs?.alt === "string" && node.attrs.alt.trim() && images.has(node.attrs?.src))) && (!node.content || (Array.isArray(node.content) && node.content.every(validImages)));
 }
@@ -64,6 +66,8 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     const nextImageMode = url.searchParams.get("imageMode") ?? "success";
     const nextCommentsMode = url.searchParams.get("commentsMode") ?? "success";
     const nextTaxonomyMode = url.searchParams.get("taxonomyMode") ?? "success";
+    const nextAvatarMode = url.searchParams.get("avatarMode") ?? "success";
+    if (!["success", "error", "invalid", "slow"].includes(nextAvatarMode)) { response.writeHead(400).end(); return true; }
     if (!["success", "empty", "error", "invalid", "slow"].includes(nextTaxonomyMode)) { response.writeHead(400).end(); return true; }
     if (!["success", "empty", "error", "invalid", "slow"].includes(nextCommentsMode)) { response.writeHead(400).end(); return true; }
     if (!["success", "error", "slow"].includes(nextImageMode)) { response.writeHead(400).end(); return true; }
@@ -79,12 +83,43 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
       imageMode = nextImageMode;
       commentsMode = nextCommentsMode;
       taxonomyMode = nextTaxonomyMode;
-      if (url.searchParams.get("reset") === "1") { ownPosts = structuredClone(initialPosts); authors = []; comments = structuredClone(initialComments); taxonomy = undefined; writes = 0; images.clear(); }
+      avatarMode = nextAvatarMode;
+      if (url.searchParams.get("reset") === "1") { ownPosts = structuredClone(initialPosts); authors = []; comments = structuredClone(initialComments); taxonomy = undefined; writes = 0; images.clear(); avatars.clear(); }
       response.writeHead(204).end();
     }
     return true;
   }
   const authorMatch = /^\/dashboard-authors\/([^/]+)$/.exec(url.pathname);
+  if (url.pathname === "/dashboard-avatar") {
+    if (role !== "AUTHOR") { response.writeHead(403).end(); return true; }
+    const ownerId = authorIds[author];
+    if (request.method === "GET") {
+      if (avatarMode === "error") { response.writeHead(503).end(); return true; }
+      const send = () => json(response, 200, { src: avatarMode === "invalid" ? "blob:invalid" : avatars.get(ownerId) ?? null });
+      if (avatarMode === "slow") setTimeout(send, 1500); else send();
+      return true;
+    }
+    const finish = src => {
+      if (saveMode === "uncertain") { request.socket.destroy(); return; }
+      const send = () => json(response, 200, { src });
+      if (saveMode === "slow") setTimeout(send, 1500); else send();
+    };
+    if (request.method === "DELETE") {
+      if (saveMode === "error") { response.writeHead(422).end(); return true; }
+      avatars.delete(ownerId); finish(null); return true;
+    }
+    if (request.method !== "PATCH") { response.writeHead(405).end(); return true; }
+    let body = "";
+    request.on("data", chunk => { body += chunk; });
+    request.on("end", () => {
+      let input;
+      try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 1 || typeof input.src !== "string" || !/^\/fixture-images\/[a-f0-9-]+$/.test(input.src) || !images.has(input.src)) { response.writeHead(400).end(); return; }
+      if (saveMode === "error") { response.writeHead(422).end(); return; }
+      avatars.set(ownerId, input.src); finish(input.src);
+    });
+    return true;
+  }
   const taxonomyMatch = /^\/dashboard-taxonomies\/(categories|tags)(?:\/([^/]+))?$/.exec(url.pathname);
   if (taxonomyMatch) {
     if (role !== "ADMIN") { response.writeHead(403).end(); return true; }

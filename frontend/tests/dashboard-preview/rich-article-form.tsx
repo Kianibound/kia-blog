@@ -11,13 +11,7 @@ import type { PreviewDocument } from "./editor-document";
 import { saveFixtureArticle } from "./article-actions";
 import { changeFixturePublication } from "./article-actions";
 
-async function uploadFixtureImage(file: File, signal: AbortSignal): Promise<string> {
-  const response = await fetch("/fixture-images", { method: "POST", headers: { "Content-Type": file.type }, body: file, signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) });
-  if (!response.ok) throw new Error("Fixture image upload failed");
-  const result = await response.json();
-  if (typeof result.src !== "string" || !/^\/fixture-images\/[a-f0-9-]+$/.test(result.src)) throw new Error("Invalid fixture image reference");
-  return result.src;
-}
+import { uploadFixtureImage } from "./image-upload";
 
 const RichEditor = dynamic(() => import("@/components/editor/rich-editor").then(module => module.RichEditor), {
   ssr: false, loading: () => <div role="status" className="min-h-96 space-y-4"><p>{copy.loading}</p><div className="flex flex-wrap gap-2">{Array.from({ length: 14 }, (_, index) => <Skeleton key={index} className="h-12 w-24 motion-reduce:animate-none" />)}</div><Skeleton className="h-64 w-full motion-reduce:animate-none" /></div>,

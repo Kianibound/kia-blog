@@ -5,6 +5,129 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+test("AUTHOR previews, saves and removes an avatar with reload persistence and isolated identities", async ({ page, request }, testInfo) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=AUTHOR";
+  await request.post(control);
+  await page.goto("/dashboard/workspace");
+  const link = page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true }).getByRole("link", { name: "عکس پروفایل", exact: true });
+  await expect(link).toBeVisible();
+  await link.click();
+  await expect(page).toHaveURL(/\/dashboard\/avatar$/);
+  await expect(page.getByRole("img", { name: "بدون عکس پروفایل", exact: true })).toBeVisible();
+  await page.getByLabel("فایل عکس پروفایل", { exact: true }).setInputFiles("public/social/linkedin.png");
+  await expect(page.getByRole("img", { name: "پیش‌نمایش عکس پروفایل", exact: true })).toHaveAttribute("src", /^blob:/);
+  await page.getByRole("button", { name: "ذخیرهٔ عکس", exact: true }).click();
+  const saved = page.getByRole("img", { name: "عکس پروفایل", exact: true });
+  await expect(saved).toHaveAttribute("src", /^\/fixture-images\/[a-f0-9-]+$/);
+  const src = await saved.getAttribute("src");
+  await page.reload();
+  await expect(saved).toHaveAttribute("src", src!);
+  await request.post(`${control}&author=nima`);
+  await page.reload();
+  await expect(page.getByRole("img", { name: "بدون عکس پروفایل", exact: true })).toBeVisible();
+  await request.post(control);
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.reload();
+    await expect(saved).toHaveAttribute("src", src!);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`avatar-${width}.png`), fullPage: true });
+  }
+  await page.getByRole("button", { name: "حذف عکس", exact: true }).click();
+  await expect(page.getByRole("img", { name: "بدون عکس پروفایل", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("img", { name: "بدون عکس پروفایل", exact: true })).toBeVisible();
+});
+
+test("avatar action buttons stay in place during a pending upload on mobile and desktop", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&imageMode=slow");
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/dashboard/avatar");
+    await page.getByLabel("فایل عکس پروفایل", { exact: true }).setInputFiles("public/social/linkedin.png");
+    const save = page.getByRole("button", { name: "ذخیرهٔ عکس", exact: true });
+    await page.evaluate(() => document.fonts.ready);
+    await save.scrollIntoViewIfNeeded();
+    const before = await save.evaluate(element => element.getBoundingClientRect().top + window.scrollY);
+    await save.click();
+    await expect(page.getByRole("status")).toContainText("در حال ذخیرهٔ تغییرات عکس…");
+    const during = await save.evaluate(element => element.getBoundingClientRect().top + window.scrollY);
+    expect(Math.abs(during - before)).toBeLessThanOrEqual(1);
+    await expect(page.getByRole("img", { name: "عکس پروفایل", exact: true })).toBeVisible();
+  }
+});
+
+test("avatar validates files and preserves saved state across upload and removal failures", async ({ page, request }) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=AUTHOR";
+  await request.post(control);
+  await page.goto("/dashboard/avatar");
+  const file = page.getByLabel("فایل عکس پروفایل", { exact: true });
+  const save = page.getByRole("button", { name: "ذخیرهٔ عکس", exact: true });
+  for (const input of [{ name: "invalid.txt", mimeType: "text/plain", buffer: Buffer.from("TEST DOUBLE") }, { name: "empty.png", mimeType: "image/png", buffer: Buffer.alloc(0) }, { name: "large.png", mimeType: "image/png", buffer: Buffer.alloc(5 * 1024 * 1024 + 1) }]) {
+    await file.setInputFiles(input);
+    await expect(file).toHaveAttribute("aria-invalid", "true");
+    await expect(save).toBeDisabled();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("۵ مگابایت");
+  }
+  await file.setInputFiles("public/social/linkedin.png");
+  await request.post(`${control}&imageMode=error`);
+  await save.click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("ذخیرهٔ تغییرات عکس انجام نشد.");
+  await request.post(`${control}&saveMode=error`);
+  await save.click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("ذخیرهٔ تغییرات عکس انجام نشد.");
+  expect(await (await request.get("http://127.0.0.1:4101/dashboard-avatar")).json()).toEqual({ src: null });
+  await request.post(`${control}&imageMode=slow`);
+  await save.click();
+  await expect(save).toBeDisabled();
+  await expect(page.getByRole("status")).toContainText("در حال ذخیرهٔ تغییرات عکس…");
+  const saved = page.getByRole("img", { name: "عکس پروفایل", exact: true });
+  await expect(saved).toBeVisible();
+  const src = await saved.getAttribute("src");
+  await request.post(`${control}&saveMode=error`);
+  await page.getByRole("button", { name: "حذف عکس", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("ذخیرهٔ تغییرات عکس انجام نشد.");
+  await page.reload();
+  await expect(saved).toHaveAttribute("src", src!);
+  await request.post(`${control}&saveMode=slow`);
+  await page.getByRole("button", { name: "حذف عکس", exact: true }).click();
+  await expect(page.getByRole("button", { name: "حذف عکس", exact: true })).toBeDisabled();
+  await expect(page.getByRole("img", { name: "بدون عکس پروفایل", exact: true })).toBeVisible();
+});
+
+test("avatar loading and failures recover and USER or ADMIN cannot access avatar settings", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  await request.post(`${base}/__test/dashboard?role=AUTHOR&avatarMode=slow`);
+  await page.goto("/dashboard/avatar", { waitUntil: "commit" });
+  await expect(page.getByRole("status")).toHaveText("در حال دریافت عکس پروفایل…");
+  await expect(page.getByLabel("فایل عکس پروفایل", { exact: true })).toBeVisible();
+  for (const mode of ["error", "invalid"]) {
+    await request.post(`${base}/__test/dashboard?role=AUTHOR&avatarMode=${mode}`);
+    await page.reload();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("دریافت عکس پروفایل ممکن نشد.");
+  }
+  await request.post(`${base}/__test/dashboard?role=AUTHOR`);
+  await page.getByRole("button", { name: "تلاش دوباره", exact: true }).click();
+  await expect(page.getByLabel("فایل عکس پروفایل", { exact: true })).toBeVisible();
+  for (const src of ["blob:http://127.0.0.1/image", "data:image/png;base64,AAAA", "https://example.test/avatar.png", "/fixture-images/00000000-0000-4000-8000-000000000099"]) {
+    expect((await request.patch(`${base}/dashboard-avatar`, { data: { src } })).status()).toBe(400);
+  }
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/dashboard/workspace");
+  await page.getByRole("button", { name: "فهرست پیشخوان", exact: true }).click();
+  await page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true }).getByRole("link", { name: "عکس پروفایل", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/avatar$/);
+  for (const role of ["USER", "ADMIN"]) {
+    await request.post(`${base}/__test/dashboard?role=${role}`);
+    expect((await request.get(`${base}/dashboard-avatar`)).status()).toBe(403);
+    expect((await request.patch(`${base}/dashboard-avatar`, { data: { src: "/fixture-images/1234" } })).status()).toBe(403);
+    expect((await request.delete(`${base}/dashboard-avatar`)).status()).toBe(403);
+    await page.goto("/dashboard/avatar");
+    await expect(page.getByRole("link", { name: "عکس پروفایل", exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("فایل عکس پروفایل", { exact: true })).toHaveCount(0);
+  }
+});
+
 test("ADMIN creates and deletes Categories and Tags with validation and reload persistence", async ({ page, request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
   await page.goto("/dashboard/workspace");
