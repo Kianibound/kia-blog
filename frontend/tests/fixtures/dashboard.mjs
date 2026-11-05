@@ -34,6 +34,8 @@ const initialComments = [
 ];
 let comments = structuredClone(initialComments);
 let commentsMode = "success";
+let taxonomy;
+let taxonomyMode = "success";
 let writes = 0;
 let imageMode = "success";
 const images = new Map(); // Selected bytes live only in this resettable test process.
@@ -50,6 +52,8 @@ function writeResponse(request, response, post, status = 200) {
 }
 
 export function handleDashboardFixture(request, response, url, categoryChoices) {
+  // Reuse the existing taxonomy values, isolated from the public fixture dataset.
+  taxonomy ??= { categories: structuredClone(categoryChoices), tags: [...new Map(publishedPosts.flatMap(post => post.tags).map(item => [item.id, fullTaxonomy(item)])).values()] };
   if (request.method === "POST" && url.pathname === "/__test/dashboard") {
     const nextRole = url.searchParams.get("role") ?? "USER";
     const nextMode = url.searchParams.get("mode") ?? "success";
@@ -59,6 +63,8 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     const nextFormMode = url.searchParams.get("formMode") ?? "success";
     const nextImageMode = url.searchParams.get("imageMode") ?? "success";
     const nextCommentsMode = url.searchParams.get("commentsMode") ?? "success";
+    const nextTaxonomyMode = url.searchParams.get("taxonomyMode") ?? "success";
+    if (!["success", "empty", "error", "invalid", "slow"].includes(nextTaxonomyMode)) { response.writeHead(400).end(); return true; }
     if (!["success", "empty", "error", "invalid", "slow"].includes(nextCommentsMode)) { response.writeHead(400).end(); return true; }
     if (!["success", "error", "slow"].includes(nextImageMode)) { response.writeHead(400).end(); return true; }
     if (!Object.hasOwn(identities, nextRole) || !Object.hasOwn(authorIds, nextAuthor) || !["success", "empty", "error", "invalid", "slow", "foreign"].includes(nextPostsMode) || !["success", "error", "invalid", "slow"].includes(nextMode) || !["success", "error", "slow", "uncertain"].includes(nextSaveMode) || !["success", "missing", "error", "invalid", "detail-error"].includes(nextFormMode)) {
@@ -72,12 +78,56 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
       formMode = nextFormMode;
       imageMode = nextImageMode;
       commentsMode = nextCommentsMode;
-      if (url.searchParams.get("reset") === "1") { ownPosts = structuredClone(initialPosts); authors = []; comments = structuredClone(initialComments); writes = 0; images.clear(); }
+      taxonomyMode = nextTaxonomyMode;
+      if (url.searchParams.get("reset") === "1") { ownPosts = structuredClone(initialPosts); authors = []; comments = structuredClone(initialComments); taxonomy = undefined; writes = 0; images.clear(); }
       response.writeHead(204).end();
     }
     return true;
   }
   const authorMatch = /^\/dashboard-authors\/([^/]+)$/.exec(url.pathname);
+  const taxonomyMatch = /^\/dashboard-taxonomies\/(categories|tags)(?:\/([^/]+))?$/.exec(url.pathname);
+  if (taxonomyMatch) {
+    if (role !== "ADMIN") { response.writeHead(403).end(); return true; }
+    const [, kind, id] = taxonomyMatch;
+    const choices = taxonomy[kind];
+    if (!id && request.method === "GET") {
+      if (taxonomyMode === "error") { response.writeHead(503).end(); return true; }
+      const data = taxonomyMode === "empty" ? [] : taxonomyMode === "invalid" ? [{ id: "invalid", name: null }] : choices;
+      const send = () => json(response, 200, data);
+      if (taxonomyMode === "slow") setTimeout(send, 1500); else send();
+      return true;
+    }
+    const finish = (status, item) => {
+      if (saveMode === "uncertain") { request.socket.destroy(); return; }
+      const send = () => item ? json(response, status, item) : response.writeHead(status).end();
+      if (saveMode === "slow") setTimeout(send, 1500); else send();
+    };
+    if (id && request.method === "DELETE") {
+      const index = choices.findIndex(item => item.id === id);
+      if (index === -1) { response.writeHead(404).end(); return true; }
+      if (ownPosts.some(post => post[kind].some(item => item.id === id))) { response.writeHead(409).end(); return true; }
+      if (saveMode === "error") { response.writeHead(422).end(); return true; }
+      choices.splice(index, 1);
+      finish(204);
+      return true;
+    }
+    if (id || request.method !== "POST") { response.writeHead(405).end(); return true; }
+    let body = "";
+    request.on("data", chunk => { body += chunk; });
+    request.on("end", () => {
+      let input;
+      try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 1 || typeof input.name !== "string" || !input.name.trim()) { response.writeHead(400).end(); return; }
+      const name = input.name.trim();
+      if (choices.some(item => item.name.trim().toLowerCase() === name.toLowerCase())) { response.writeHead(409).end(); return; }
+      if (saveMode === "error") { response.writeHead(422).end(); return; }
+      const newId = randomUUID();
+      const item = fullTaxonomy({ id: newId, name, slug: `fixture-${newId}` });
+      choices.push(item);
+      finish(201, item);
+    });
+    return true;
+  }
   const commentMatch = /^\/dashboard-comments\/([^/]+)$/.exec(url.pathname);
   if (url.pathname === "/dashboard-comments" || commentMatch) {
     if (role !== "ADMIN") { response.writeHead(403).end(); return true; }
@@ -175,7 +225,7 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     else response.writeHead(404).end();
     return true;
   }
-  const tags = [...new Map(publishedPosts.flatMap(post => post.tags).map(item => [item.id, fullTaxonomy(item)])).values()];
+  const tags = taxonomy.tags;
   // Test-host reading only: never used by the production public Posts adapter.
   if (request.method === "GET" && (url.pathname === "/dashboard-public-posts" || url.pathname.startsWith("/dashboard-public-posts/"))) {
     const rows = ownPosts.filter(post => post.status === "PUBLISHED");
@@ -193,7 +243,7 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
   if (url.pathname === "/dashboard-taxonomy" && request.method === "GET") {
     if (role !== "AUTHOR" && role !== "ADMIN") response.writeHead(403).end();
     else if (formMode === "error") response.writeHead(503).end();
-    else json(response, 200, formMode === "invalid" ? { categories: null, tags: [] } : { categories: formMode === "missing" ? [] : categoryChoices, tags: formMode === "missing" ? [] : tags });
+    else json(response, 200, formMode === "invalid" ? { categories: null, tags: [] } : { categories: formMode === "missing" ? [] : taxonomy.categories, tags: formMode === "missing" ? [] : tags });
     return true;
   }
   const match = /^\/dashboard-posts\/([^/]+)$/.exec(url.pathname);
@@ -240,7 +290,7 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
       // Envelope check for UI review only, not canonical rich-content validation.
       if (input.previewDocument !== undefined && (input.previewDocument?.format !== "tiptap-ui-proposal-1" || input.previewDocument?.document?.type !== "doc" || !Array.isArray(input.previewDocument?.document?.content))) { response.writeHead(400).end(); return; }
       if (input.previewDocument && !validImages(input.previewDocument.document)) { response.writeHead(400).end(); return; }
-      const categories = [...categoryChoices, ...ownPosts.flatMap(item => item.categories).map(fullTaxonomy)];
+      const categories = taxonomy.categories;
       if (input.categoryIds.some(id => !categories.some(item => item.id === id)) || input.tagIds.some(id => !tags.some(item => item.id === id))) { response.writeHead(400).end(); return; }
       writes++;
       if (saveMode === "error") { response.writeHead(422).end(); return; }

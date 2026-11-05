@@ -5,6 +5,152 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+test("ADMIN creates and deletes Categories and Tags with validation and reload persistence", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
+  await page.goto("/dashboard/workspace");
+  const nav = page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true });
+  await expect(nav.getByRole("link", { name: "دسته‌بندی‌ها و تگ‌ها", exact: true })).toBeVisible();
+  await nav.getByRole("link", { name: "دسته‌بندی‌ها و تگ‌ها", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/categories$/);
+  for (const [kind, label, name] of [["categories", "دسته‌بندی", "دستهٔ تازه"], ["tags", "تگ", "تگ تازه"]]) {
+    await page.goto(`/dashboard/${kind}`);
+    const input = page.getByLabel(`نام ${label}`, { exact: true });
+    await page.getByRole("button", { name: "افزودن", exact: true }).click();
+    await expect(input).toHaveAttribute("aria-invalid", "true");
+    await input.fill(name);
+    await page.getByRole("button", { name: "افزودن", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("ایجاد شد.");
+    await page.reload();
+    const row = page.getByRole("main").getByRole("listitem").filter({ hasText: name });
+    await expect(row).toBeVisible();
+    await input.fill(` ${name} `);
+    await page.getByRole("button", { name: "افزودن", exact: true }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("این نام قبلاً ثبت شده است.");
+    await row.getByRole("button", { name: "حذف", exact: true }).click();
+    const dialog = page.getByRole("alertdialog", { name: `حذف ${label}`, exact: true });
+    await expect(dialog).toContainText(name);
+    await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeFocused();
+    await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+    await page.reload();
+    await expect(row).toBeVisible();
+    await row.getByRole("button", { name: "حذف", exact: true }).click();
+    await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+    await expect(row).toHaveCount(0);
+    await page.reload();
+    await expect(row).toHaveCount(0);
+  }
+});
+
+test("taxonomy fixture choices are shared with the editor and referenced Categories and Tags cannot be deleted", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  const createdCategory = await request.post(`${base}/dashboard-taxonomies/categories`, { data: { name: "دستهٔ مشترک" } });
+  const createdTag = await request.post(`${base}/dashboard-taxonomies/tags`, { data: { name: "تگ مشترک" } });
+  expect(createdCategory.status()).toBe(201);
+  expect(createdTag.status()).toBe(201);
+  const category = await createdCategory.json();
+  const tag = await createdTag.json();
+  expect(category.id).toBeTruthy();
+  expect(category.slug).toBeTruthy();
+  await request.post(`${base}/__test/dashboard?role=AUTHOR`);
+  await page.goto("/dashboard/posts/00000000-0000-4000-8000-000000000001/edit");
+  await page.getByRole("checkbox", { name: "دستهٔ مشترک", exact: true }).check();
+  await page.getByRole("checkbox", { name: "تگ مشترک", exact: true }).check();
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "مقاله در داده‌های آزمایشی ذخیره شد." })).toBeVisible();
+  const before = await (await request.get(`${base}/dashboard-posts/00000000-0000-4000-8000-000000000001`)).json();
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  for (const [kind, name] of [["categories", category.name], ["tags", tag.name]]) {
+    await page.goto(`/dashboard/${kind}`);
+    const row = page.getByRole("main").getByRole("listitem").filter({ hasText: name });
+    await row.getByRole("button", { name: "حذف", exact: true }).click();
+    const dialog = page.getByRole("alertdialog");
+    await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toHaveText("این مورد در مقاله‌ای استفاده شده است و حذف نمی‌شود.");
+    await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+    await page.reload();
+    await expect(row).toBeVisible();
+  }
+  expect(await (await request.get(`${base}/dashboard-posts/00000000-0000-4000-8000-000000000001`)).json()).toEqual(before);
+});
+
+test("taxonomy management recovers loading, empty, failed writes and pending deletion on mobile", async ({ page, request }, testInfo) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=ADMIN";
+  await request.post(`${control}&taxonomyMode=slow`);
+  await page.goto("/dashboard/categories", { waitUntil: "commit" });
+  await expect(page.getByRole("status")).toHaveText("در حال دریافت فهرست…");
+  await expect(page.getByLabel("نام دسته‌بندی", { exact: true })).toBeVisible();
+  for (const mode of ["error", "invalid"]) {
+    await request.post(`${control}&taxonomyMode=${mode}`);
+    await page.reload();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("دریافت فهرست ممکن نشد.");
+  }
+  await request.post(`${control}&taxonomyMode=empty`);
+  await page.getByRole("button", { name: "تلاش دوباره", exact: true }).click();
+  await expect(page.getByText("موردی برای نمایش وجود ندارد.", { exact: true })).toBeVisible();
+  await request.post(`${control}&saveMode=error`);
+  await page.reload();
+  await page.getByLabel("نام دسته‌بندی", { exact: true }).fill("نمونهٔ حذف");
+  await page.getByRole("button", { name: "افزودن", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("انجام عملیات ممکن نشد.");
+  await expect(page.getByLabel("نام دسته‌بندی", { exact: true })).toHaveValue("نمونهٔ حذف");
+  await request.post(control);
+  await page.getByRole("button", { name: "افزودن", exact: true }).click();
+  const row = page.getByRole("main").getByRole("listitem").filter({ hasText: "نمونهٔ حذف" });
+  await expect(row).toBeVisible();
+  await request.post(`${control}&saveMode=error`);
+  await row.getByRole("button", { name: "حذف", exact: true }).click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("انجام عملیات ممکن نشد.");
+  await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+  await request.post(`${control}&saveMode=slow`);
+  await page.setViewportSize({ width: 360, height: 900 });
+  await row.getByRole("button", { name: "حذف", exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath("taxonomy-confirmation-mobile.png") });
+  expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "تأیید حذف", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("status")).toHaveText("در حال ذخیرهٔ تغییرات…");
+  await expect(row).toHaveCount(0);
+  await page.goto("/dashboard/workspace");
+  await page.getByRole("button", { name: "فهرست پیشخوان", exact: true }).click();
+  await page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true }).getByRole("link", { name: "دسته‌بندی‌ها و تگ‌ها", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/categories$/);
+  for (const kind of ["categories", "tags"]) {
+    await page.goto(`/dashboard/${kind}`);
+    await expect(page.getByRole("main").getByRole("textbox")).toHaveCount(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`taxonomy-${kind}-mobile.png`), fullPage: true });
+  }
+});
+
+test("taxonomy fixture rejects non-ADMIN mutations, renaming and manual slug input", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  for (const role of ["USER", "AUTHOR"]) {
+    await request.post(`${base}/__test/dashboard?role=${role}`);
+    for (const kind of ["categories", "tags"]) {
+      const url = `${base}/dashboard-taxonomies/${kind}`;
+      expect((await request.get(url)).status()).toBe(403);
+      expect((await request.post(url, { data: { name: "مورد جدید" } })).status()).toBe(403);
+      expect((await request.delete(`${url}/unavailable`)).status()).toBe(403);
+      await page.goto(`/dashboard/${kind}`);
+      await expect(page.getByRole("button", { name: "افزودن", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "حذف", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "دسته‌بندی‌ها و تگ‌ها", exact: true })).toHaveCount(0);
+    }
+  }
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  for (const kind of ["categories", "tags"]) {
+    const url = `${base}/dashboard-taxonomies/${kind}`;
+    expect((await request.post(url, { data: { name: " " } })).status()).toBe(400);
+    expect((await request.post(url, { data: { name: "نام", slug: "manual" } })).status()).toBe(400);
+    const items = await (await request.get(url)).json();
+    expect((await request.patch(`${url}/${items[0].id}`, { data: { name: "نام دیگر" } })).status()).toBe(405);
+  }
+});
+
 test("ADMIN approves and confirms comment deletion with reload persistence and direct navigation", async ({ page, request }, testInfo) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
   await page.goto("/dashboard/workspace");
