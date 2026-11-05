@@ -5,6 +5,84 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+test("ADMIN creates an Author with name and email and sees it in the workspace after reload", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
+  await page.goto("/dashboard/workspace");
+  await page.getByRole("main").getByRole("link", { name: "افزودن نویسنده", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/authors\/new$/);
+  await expect(page.getByRole("main").getByRole("textbox")).toHaveCount(2);
+  await page.getByLabel("نام", { exact: true }).fill("نویسندهٔ تازه");
+  await page.getByLabel("ایمیل", { exact: true }).fill("new.author@example.test");
+  await page.getByRole("button", { name: "افزودن نویسنده", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "نویسنده در داده‌های آزمایشی ایجاد شد." })).toBeVisible();
+  await page.getByRole("main").getByRole("link", { name: "مشاهدهٔ نویسندگان", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/workspace$/);
+  await page.reload();
+  await expect(page.getByRole("main")).toContainText("نویسندهٔ تازه");
+  await expect(page.getByRole("main")).toContainText("new.author@example.test");
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.screenshot({ path: testInfo.outputPath(`admin-authors-${width}.png`), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.goto("/dashboard/authors/new");
+    await expect(page.getByLabel("ایمیل", { exact: true })).toHaveAttribute("dir", "ltr");
+    await page.screenshot({ path: testInfo.outputPath(`admin-author-form-${width}.png`), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.goto("/dashboard/workspace");
+  }
+});
+
+test("Author creation validates fields, reports duplicates and preserves input on failed writes", async ({ page, request }) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=ADMIN";
+  await request.post(control);
+  await page.goto("/dashboard/authors/new");
+  const name = page.getByLabel("نام", { exact: true });
+  const email = page.getByLabel("ایمیل", { exact: true });
+  const create = page.getByRole("button", { name: "افزودن نویسنده", exact: true });
+  await create.click();
+  await expect(name).toBeFocused();
+  await expect(name).toHaveAttribute("aria-invalid", "true");
+  await expect(email).toHaveAttribute("aria-invalid", "true");
+  await name.fill("نویسندهٔ آزمون");
+  await email.fill("invalid-email");
+  await create.click();
+  await expect(email).toBeFocused();
+  await expect(page.getByRole("main")).toContainText("یک ایمیل معتبر وارد کنید.");
+  await email.fill("same@example.test");
+  await request.post(`${control}&saveMode=error`);
+  await create.click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("ایجاد نویسنده انجام نشد.");
+  await expect(name).toHaveValue("نویسندهٔ آزمون");
+  await expect(email).toHaveValue("same@example.test");
+  await request.post(`${control}&saveMode=slow`);
+  await create.click();
+  await expect(page.getByRole("button", { name: "در حال ایجاد نویسنده…", exact: true })).toBeDisabled();
+  await expect(page.getByRole("status").filter({ hasText: "نویسنده در داده‌های آزمایشی ایجاد شد." })).toBeVisible();
+  await page.reload();
+  await name.fill("نویسندهٔ تکراری");
+  await email.fill(" SAME@EXAMPLE.TEST ");
+  await request.post(control);
+  await create.click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("این ایمیل قبلاً ثبت شده است.");
+  await expect(name).toHaveValue("نویسندهٔ تکراری");
+  await expect(email).toHaveValue("SAME@EXAMPLE.TEST");
+  await page.goto("/dashboard/workspace");
+  await expect(page.getByRole("main").getByRole("listitem")).toHaveCount(1);
+});
+
+test("only ADMIN fixture identity can access Author creation and records", async ({ page, request }) => {
+  for (const role of ["USER", "AUTHOR"]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=${role}`);
+    for (const path of ["/dashboard/workspace", "/dashboard/authors/new"]) {
+      await page.goto(path);
+      await expect(page.getByRole("button", { name: "افزودن نویسنده", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "افزودن نویسنده", exact: true })).toHaveCount(0);
+    }
+    expect((await request.get("http://127.0.0.1:4101/dashboard-authors")).status()).toBe(403);
+    expect((await request.post("http://127.0.0.1:4101/dashboard-authors", { data: { name: "نویسنده", email: "blocked@example.test" } })).status()).toBe(403);
+  }
+});
+
 test("optional cover can be selected, replaced, saved and removed independently of body images", async ({ page, request }, testInfo) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
   await page.goto("/dashboard/posts/new");

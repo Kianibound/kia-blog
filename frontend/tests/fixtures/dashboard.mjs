@@ -21,6 +21,7 @@ const initialPosts = publishedPosts.map(({ author: omittedAuthor, ...post }, ind
 let ownPosts = structuredClone(initialPosts);
 let saveMode = "success";
 let formMode = "success";
+let authors = []; // Test-only Authors; retained until an explicit fixture reset.
 let writes = 0;
 let imageMode = "success";
 const images = new Map(); // Selected bytes live only in this resettable test process.
@@ -56,9 +57,29 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
       saveMode = nextSaveMode;
       formMode = nextFormMode;
       imageMode = nextImageMode;
-      if (url.searchParams.get("reset") === "1") { ownPosts = structuredClone(initialPosts); writes = 0; images.clear(); }
+      if (url.searchParams.get("reset") === "1") { ownPosts = structuredClone(initialPosts); authors = []; writes = 0; images.clear(); }
       response.writeHead(204).end();
     }
+    return true;
+  }
+  if (url.pathname === "/dashboard-authors") {
+    if (role !== "ADMIN") { response.writeHead(403).end(); return true; }
+    if (request.method === "GET") { json(response, 200, authors); return true; }
+    if (request.method !== "POST") { response.writeHead(405).end(); return true; }
+    let body = "";
+    request.on("data", chunk => { body += chunk; });
+    request.on("end", () => {
+      let input;
+      try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(key => !["name", "email"].includes(key)) || typeof input.name !== "string" || !input.name.trim() || typeof input.email !== "string" || !/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(input.email.trim())) { response.writeHead(400).end(); return; }
+      if (authors.some(item => item.email.toLowerCase() === input.email.trim().toLowerCase())) { response.writeHead(409).end(); return; }
+      if (saveMode === "error") { response.writeHead(422).end(); return; }
+      const saved = { id: randomUUID(), name: input.name.trim(), email: input.email.trim(), role: "AUTHOR" };
+      authors.unshift(saved);
+      if (saveMode === "uncertain") { request.socket.destroy(); return; }
+      const send = () => json(response, 201, saved);
+      if (saveMode === "slow") setTimeout(send, 1500); else send();
+    });
     return true;
   }
   if (request.method === "POST" && url.pathname === "/fixture-images") {

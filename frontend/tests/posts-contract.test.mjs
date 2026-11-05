@@ -4,6 +4,15 @@ import { parsePublishedPost, parsePublishedPosts } from "../src/lib/posts-contra
 import { feed } from "./fixtures/posts.mjs";
 import { previewPosts } from "./fixtures/preview-posts.mjs";
 import { parseOwnPosts } from "../src/lib/own-posts-contract.ts";
+import { validateAuthorInput } from "../src/lib/author-form-contract.ts";
+
+test("Author creation requires a name and a well-formed email", () => {
+  assert.deepEqual(validateAuthorInput({ name: "  ", email: "" }), { name: "required", email: "required" });
+  for (const email of ["reader", "reader@", "reader@example", "reader @example.test", "a@@example.test"]) {
+    assert.deepEqual(validateAuthorInput({ name: "نویسنده", email }), { email: "format" });
+  }
+  assert.deepEqual(validateAuthorInput({ name: " نویسنده ", email: " reader@example.test " }), {});
+});
 
 test("public cards preserve optional covers and reject unsafe cover references", () => {
   const cover = { src: "/fixture-images/12345678-abcd", alt: "تصویر جلد مقاله" };
