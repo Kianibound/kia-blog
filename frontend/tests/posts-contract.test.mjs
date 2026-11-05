@@ -3,8 +3,19 @@ import test from "node:test";
 import { parsePublishedPost, parsePublishedPosts } from "../src/lib/posts-contract.ts";
 import { feed } from "./fixtures/posts.mjs";
 import { previewPosts } from "./fixtures/preview-posts.mjs";
-import { parseOwnPosts } from "../src/lib/own-posts-contract.ts";
+import { parseOwnPosts, parseAdminPosts } from "../src/lib/own-posts-contract.ts";
 import { validateAuthorInput } from "../src/lib/author-form-contract.ts";
+
+test("ADMIN inventory validates authors against article ownership without dropping publication states", () => {
+  const post = { ...feed.data[0], status: "DRAFT", publishedAt: null };
+  const response = { data: [post], meta: { page: 1, limit: 10, total: 1, totalPages: 1 } };
+  const result = parseAdminPosts(response, 1, 10);
+  assert.equal(result.data[0].author.id, post.authorId);
+  assert.equal(result.data[0].status, "DRAFT");
+  for (const author of [null, { ...post.author, id: "foreign" }, { ...post.author, name: 7 }, { ...post.author, username: "" }]) {
+    assert.throws(() => parseAdminPosts({ ...response, data: [{ ...post, author }] }, 1, 10));
+  }
+});
 
 test("Author creation requires a name and a well-formed email", () => {
   assert.deepEqual(validateAuthorInput({ name: "  ", email: "" }), { name: "required", email: "required" });

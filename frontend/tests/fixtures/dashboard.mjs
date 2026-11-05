@@ -12,6 +12,10 @@ let mode = "success";
 let author = "sara";
 let postsMode = "success";
 const authorIds = { sara: "10000000-0000-4000-8000-000000000002", nima: "10000000-0000-4000-8000-000000000001" };
+function postAuthor(post) {
+  const username = post.authorId === authorIds.nima ? "nima" : "sara";
+  return { id: post.authorId, name: username === "nima" ? "نیما کیانی" : identities.AUTHOR.name, username, avatarUrl: null };
+}
 // Reuse existing article records; MyPostsResponseDto has no nested relations.
 const initialPosts = publishedPosts.map(({ author: omittedAuthor, ...post }, index) => {
   void omittedAuthor;
@@ -96,7 +100,7 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     return true;
   }
   if (request.method === "POST" && url.pathname === "/fixture-images") {
-    if (role !== "AUTHOR") { response.writeHead(403).end(); return true; }
+    if (role !== "AUTHOR" && role !== "ADMIN") { response.writeHead(403).end(); return true; }
     const type = request.headers["content-type"];
     if (!["image/png", "image/jpeg", "image/webp"].includes(type)) { response.writeHead(415).end(); return true; }
     const chunks = [];
@@ -139,21 +143,21 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
   }
   if (request.method === "GET" && url.pathname === "/__test/dashboard-writes") { json(response, 200, { writes }); return true; }
   if (url.pathname === "/dashboard-taxonomy" && request.method === "GET") {
-    if (role !== "AUTHOR") response.writeHead(403).end();
+    if (role !== "AUTHOR" && role !== "ADMIN") response.writeHead(403).end();
     else if (formMode === "error") response.writeHead(503).end();
     else json(response, 200, formMode === "invalid" ? { categories: null, tags: [] } : { categories: formMode === "missing" ? [] : categoryChoices, tags: formMode === "missing" ? [] : tags });
     return true;
   }
   const match = /^\/dashboard-posts\/([^/]+)$/.exec(url.pathname);
   if (match || (request.method === "POST" && url.pathname === "/dashboard-posts")) {
-    if (role !== "AUTHOR") { response.writeHead(403).end(); return true; }
-    const post = match ? ownPosts.find(item => item.id === match[1] && item.authorId === authorIds[author]) : undefined;
+    if ((role !== "AUTHOR" && role !== "ADMIN") || (role === "ADMIN" && !match)) { response.writeHead(403).end(); return true; }
+    const post = match ? ownPosts.find(item => item.id === match[1] && (role === "ADMIN" || item.authorId === authorIds[author])) : undefined;
     if (match && !post) { response.writeHead(404).end(); return true; }
     if (request.method === "GET") {
       if (formMode === "detail-error") response.writeHead(503).end();
       else {
         const summary = ({ id, name, slug }) => ({ id, name, slug });
-        json(response, 200, { ...post, categories: post.categories.map(summary), tags: post.tags.map(summary), author: { id: post.authorId, name: author === "sara" ? identities.AUTHOR.name : "نیما کیانی", username: author, avatarUrl: null } });
+        json(response, 200, { ...post, categories: post.categories.map(summary), tags: post.tags.map(summary), author: postAuthor(post) });
       }
       return true;
     }
@@ -196,11 +200,11 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     const page = Number(url.searchParams.get("page"));
     const limit = Number(url.searchParams.get("limit"));
     const status = url.searchParams.get("status");
-    if (role !== "AUTHOR") { response.writeHead(403).end(); return true; }
+    if (role !== "AUTHOR" && role !== "ADMIN") { response.writeHead(403).end(); return true; }
     if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(limit) || limit < 1 || limit > 50 || (status !== null && !["DRAFT", "PUBLISHED"].includes(status)) || [...url.searchParams.keys()].some(key => !["page", "limit", "status"].includes(key) || url.searchParams.getAll(key).length !== 1)) { response.writeHead(400).end(); return true; }
     if (postsMode === "error") { response.writeHead(503).end("TEST DOUBLE: own Posts unavailable"); return true; }
-    const rows = postsMode === "empty" ? [] : ownPosts.filter(post => post.authorId === authorIds[author] && (!status || post.status === status)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-    const payload = { data: rows.slice((page - 1) * limit, page * limit).map(scalar), meta: { page, limit, total: rows.length, totalPages: Math.ceil(rows.length / limit) } };
+    const rows = postsMode === "empty" ? [] : ownPosts.filter(post => (role === "ADMIN" || post.authorId === authorIds[author]) && (!status || post.status === status)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const payload = { data: rows.slice((page - 1) * limit, page * limit).map(post => ({ ...scalar(post), ...(role === "ADMIN" ? { author: postAuthor(post) } : {}) })), meta: { page, limit, total: rows.length, totalPages: Math.ceil(rows.length / limit) } };
     if (postsMode === "invalid") payload.meta.totalPages = -1;
     if (postsMode === "foreign") payload.data = ownPosts.filter(post => post.authorId !== authorIds[author]).slice(0, 1);
     const send = () => response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(payload));

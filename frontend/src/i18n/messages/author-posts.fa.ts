@@ -19,3 +19,13 @@ export const authorPostsMessages = {
   slug: "نشانی مقاله",
   states: { DRAFT: "پیش‌نویس", PUBLISHED: "منتشرشده", DEPRECATED: "کنارگذاشته‌شده" },
 };
+
+export const adminPostsMessages = {
+  ...authorPostsMessages,
+  title: "مقاله‌ها",
+  description: "مقاله‌های همهٔ نویسندگان را مرور و ویرایش کنید.",
+  loading: "در حال دریافت مقاله‌ها…",
+  empty: "هنوز مقاله‌ای وجود ندارد.",
+  unavailable: "دریافت مقاله‌ها ممکن نشد.",
+  pagination: "صفحه‌بندی مقاله‌ها",
+};

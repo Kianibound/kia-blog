@@ -23,10 +23,11 @@ const RichEditor = dynamic(() => import("@/components/editor/rich-editor").then(
   ssr: false, loading: () => <div role="status" className="min-h-96 space-y-4"><p>{copy.loading}</p><div className="flex flex-wrap gap-2">{Array.from({ length: 14 }, (_, index) => <Skeleton key={index} className="h-12 w-24 motion-reduce:animate-none" />)}</div><Skeleton className="h-64 w-full motion-reduce:animate-none" /></div>,
 });
 
-export function PreviewRichArticleForm({ article, categories, tags, initialDocument, unavailable }: { article?: ArticleRecord; categories: ArticleTaxonomy[]; tags: ArticleTaxonomy[]; initialDocument?: PreviewDocument; unavailable: boolean }) {
+export function PreviewRichArticleForm({ article, categories, tags, initialDocument, unavailable, admin = false }: { article?: ArticleRecord; categories: ArticleTaxonomy[]; tags: ArticleTaxonomy[]; initialDocument?: PreviewDocument; unavailable: boolean; admin?: boolean }) {
   const [imagePending, setImagePending] = useState(false);
   const document = useRef<PreviewDocument>(initialDocument ?? { format: "tiptap-ui-proposal-1", document: documentFromText(article?.content ?? "") });
   return <div className="space-y-4"><p>{copy.preview}</p><ArticleForm article={article} categories={categories} tags={tags}
+    backLabel={admin ? "بازگشت به فهرست مقاله‌ها" : undefined}
     uploadImage={uploadFixtureImage}
     contentBlocked={imagePending}
     saveAction={unavailable ? undefined : (id, input) => saveFixtureArticle(id, input, JSON.parse(JSON.stringify(document.current)))}

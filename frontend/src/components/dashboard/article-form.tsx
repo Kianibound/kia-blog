@@ -22,6 +22,7 @@ type Props = {
   readingHref?: (slug: string) => string;
   contentBlocked?: boolean;
   uploadImage?: (file: File, signal: AbortSignal) => Promise<string>;
+  backLabel?: string;
 };
 
 export function ArticleFormLoading() {
@@ -48,7 +49,7 @@ function TaxonomyChoices({ label, choices, original, selected, onChange }: { lab
 }
 
 /** Presentation only. Without an explicitly supplied adapter, saving is unavailable. */
-export function ArticleForm({ article, categories, tags, saveAction, renderContent, publicationAction, readingHref, contentBlocked = false, uploadImage }: Props) {
+export function ArticleForm({ article, categories, tags, saveAction, renderContent, publicationAction, readingHref, contentBlocked = false, uploadImage, backLabel = copy.back }: Props) {
   const formId = useId();
   const [coverImage, setCoverImage] = useState(article?.coverImage ?? null);
   const [coverPending, setCoverPending] = useState(false);
@@ -107,6 +108,6 @@ export function ArticleForm({ article, categories, tags, saveAction, renderConte
     </form>
     <PublicationControls article={saved} action={publicationAction} readingHref={readingHref} busy={busy} dirty={dirty} blocked={lifecycleBlocked || blocked || state === "uncertain"} onSaved={post => { setSaved(post); setState("idle"); }} onPending={value => { pending.current = value; setLifecyclePending(value); }} onUncertain={() => setLifecycleBlocked(true)}
       saveControl={<Button type="submit" form={formId} size="md" disabled={!saveAction || busy || lifecycleBlocked || blocked || state === "uncertain"} className="min-h-12 w-full motion-reduce:transition-none sm:w-auto">{state === "saving" ? copy.saving : copy.save}</Button>} />
-    <a href="/dashboard/posts" className="inline-flex min-h-12 items-center rounded-control px-4 underline focus-visible:outline-2 focus-visible:outline-ring">{copy.back}</a>
+    <a href="/dashboard/posts" className="inline-flex min-h-12 items-center rounded-control px-4 underline focus-visible:outline-2 focus-visible:outline-ring">{backLabel}</a>
   </Card>;
 }

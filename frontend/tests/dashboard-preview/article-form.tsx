@@ -12,7 +12,7 @@ async function read(path: string) {
   return response.json();
 }
 
-export async function PreviewArticleForm({ id, authorId, unavailable = false }: { id?: string; authorId: string; unavailable?: boolean }) {
+export async function PreviewArticleForm({ id, authorId, unavailable = false, admin = false }: { id?: string; authorId: string; unavailable?: boolean; admin?: boolean }) {
   let article, categories, tags, initialDocument;
   try {
     const [taxonomy, detail] = await Promise.all([read("dashboard-taxonomy"), id ? read(`dashboard-posts/${encodeURIComponent(id)}`) : undefined]);
@@ -20,9 +20,10 @@ export async function PreviewArticleForm({ id, authorId, unavailable = false }: 
     tags = parseArticleTaxonomy(taxonomy.tags);
     article = id ? parseArticleDetail(detail) : undefined;
     initialDocument = id ? readPreviewDocument(detail.previewDocument) : undefined;
-    if (article && (article.id !== id || article.authorId !== authorId)) throw new Error("Mismatched fixture article");
+    if (admin && !id) throw new Error("ADMIN creation unavailable");
+    if (article && (article.id !== id || (!admin && article.authorId !== authorId))) throw new Error("Mismatched fixture article");
   } catch {
     return <Card role="alert" className="min-h-64 space-y-4 p-6"><p>{copy.readError}</p><form><Button type="submit" size="lg">{copy.retry}</Button></form></Card>;
   }
-  return <PreviewRichArticleForm key={article?.id ?? "new"} article={article} categories={categories} tags={tags} initialDocument={initialDocument} unavailable={unavailable} />;
+  return <PreviewRichArticleForm key={article?.id ?? "new"} article={article} categories={categories} tags={tags} initialDocument={initialDocument} unavailable={unavailable} admin={admin} />;
 }

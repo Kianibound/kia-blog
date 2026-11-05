@@ -5,6 +5,19 @@ export type OwnPost = {
 };
 export type OwnPosts = { data: OwnPost[]; meta: { page: number; limit: number; total: number; totalPages: number } };
 export type OwnPostStatusFilter = "DRAFT" | "PUBLISHED";
+export type AdminPosts = Omit<OwnPosts, "data"> & { data: (OwnPost & { author: { id: string; name: string | null; username: string } })[] };
+
+/** Test-preview inventory projection, not a production ADMIN API contract. */
+export function parseAdminPosts(value: unknown, page: number, limit: number): AdminPosts {
+  const posts = parseOwnPosts(value, page, limit);
+  if (!record(value) || !Array.isArray(value.data)) throw new Error("Invalid ADMIN Posts");
+  const raw = value.data;
+  return { ...posts, data: posts.data.map((post, index) => {
+    const author: unknown = raw[index]?.author;
+    if (!record(author) || author.id !== post.authorId || (author.name !== null && typeof author.name !== "string") || typeof author.username !== "string" || !author.username.trim()) throw new Error("Invalid ADMIN Post author");
+    return { ...post, author: { id: post.authorId, name: author.name, username: author.username } };
+  }) };
+}
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
