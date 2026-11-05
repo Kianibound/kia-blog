@@ -5,6 +5,51 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+test("ADMIN can recover a categoryless article and repeatedly republish saved drafts without an extra save", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  const id = "00000000-0000-4000-8000-000000000002";
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  const original = await (await request.get(`${base}/dashboard-posts/${id}`)).json();
+  expect(original.status).toBe("PUBLISHED");
+  expect(original.categories).toEqual([]);
+  await page.goto(`/dashboard/posts/${id}/edit`);
+  const publish = page.getByRole("button", { name: "انتشار مقاله", exact: true });
+  const unpublish = page.getByRole("button", { name: "بازگشت به پیش‌نویس", exact: true });
+  await unpublish.click();
+  await page.getByRole("button", { name: "تأیید لغو انتشار آزمایشی", exact: true }).click();
+  await expect(publish).toBeDisabled();
+  await expect(page.getByText("برای انتشار، دست‌کم یک دسته‌بندی انتخاب و مقاله را ذخیره کنید. برچسب اختیاری است.", { exact: true })).toBeVisible();
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("مقالهٔ بازنشر مدیر");
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "مقاله در داده‌های آزمایشی ذخیره شد." })).toBeVisible();
+  await expect(publish).toBeDisabled();
+  await page.getByRole("checkbox", { name: "توسعهٔ وب", exact: true }).check();
+  await expect(publish).toBeDisabled();
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(publish).toBeEnabled();
+  await page.reload();
+  await expect(publish).toBeEnabled();
+  await publish.click();
+  await page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
+  await expect(unpublish).toBeEnabled();
+  for (let cycle = 0; cycle < 2; cycle++) {
+    await expect(unpublish).toBeEnabled();
+    await unpublish.click();
+    await page.getByRole("button", { name: "تأیید لغو انتشار آزمایشی", exact: true }).click();
+    await expect(publish).toBeEnabled();
+    await page.reload();
+    await expect(publish).toBeEnabled();
+    await publish.click();
+    await page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
+    await expect(unpublish).toBeEnabled();
+    await page.reload();
+    await expect(unpublish).toBeEnabled();
+  }
+  const saved = await (await request.get(`${base}/dashboard-posts/${id}`)).json();
+  expect(saved.status).toBe("PUBLISHED");
+  expect(saved.authorId).toBe(original.authorId);
+});
+
 test("ADMIN inventories all authors and edits, publishes and unpublishes without changing ownership", async ({ page, request }, testInfo) => {
   const base = "http://127.0.0.1:4101";
   await request.post(`${base}/__test/dashboard?role=ADMIN`);
