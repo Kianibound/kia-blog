@@ -1,11 +1,12 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { authorPostsMessages as copy, adminPostsMessages } from "@/i18n/messages/author-posts.fa";
 import { formatPublicationDate } from "@/lib/publication-date";
 import { fa } from "@/lib/utils";
-import type { OwnPosts, OwnPostStatusFilter } from "@/lib/own-posts-contract";
+import type { OwnPost, OwnPosts, OwnPostStatusFilter } from "@/lib/own-posts-contract";
 import { articleFormMessages as formCopy } from "@/i18n/messages/article-form.fa";
 
 const controlClass = "inline-flex min-h-12 items-center justify-center rounded-control border border-border px-4 font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring";
@@ -16,7 +17,7 @@ export function AuthorPostFilters({ status, href }: { status?: OwnPostStatusFilt
   </nav>;
 }
 
-export function AuthorPostList({ posts, href, status, formLinks, authors }: { posts: OwnPosts; href: (page: number) => string; status?: OwnPostStatusFilter; formLinks?: { create?: string; edit: (id: string) => string }; authors?: Record<string, string> }) {
+export function AuthorPostList({ posts, href, status, formLinks, authors, renderAction }: { posts: OwnPosts; href: (page: number) => string; status?: OwnPostStatusFilter; formLinks?: { create?: string; edit: (id: string) => string }; authors?: Record<string, string>; renderAction?: (post: OwnPost) => ReactNode }) {
   const messages = authors ? adminPostsMessages : copy;
   const { data, meta } = posts;
   return <section className="min-h-64 space-y-6" aria-label={messages.title}>
@@ -31,6 +32,7 @@ export function AuthorPostList({ posts, href, status, formLinks, authors }: { po
         <p className="text-sm text-muted-foreground">{copy.updated}: <time dateTime={post.updatedAt}>{formatPublicationDate(post.updatedAt)}</time></p>
         <p className="text-sm wrap-anywhere">{copy.slug}: <bdi>{post.slug}</bdi></p>
         {formLinks && <Link href={formLinks.edit(post.id)} className={controlClass}>{formCopy.edit}</Link>}
+        {renderAction?.(post)}
       </Card>
     </li>)}</ul>}
     {meta.total === 0 ? <Card className="min-h-64 p-6"><p role="status">{status ? copy.emptyStatus : messages.empty}</p></Card> : data.length === 0 ? <Card className="min-h-64 space-y-4 p-6"><p role="status">{copy.outOfRange}</p><Link href={href(1)} className={controlClass}>{copy.firstPage}</Link></Card> :

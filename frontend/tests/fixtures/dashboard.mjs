@@ -153,6 +153,15 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     if ((role !== "AUTHOR" && role !== "ADMIN") || (role === "ADMIN" && !match)) { response.writeHead(403).end(); return true; }
     const post = match ? ownPosts.find(item => item.id === match[1] && (role === "ADMIN" || item.authorId === authorIds[author])) : undefined;
     if (match && !post) { response.writeHead(404).end(); return true; }
+    if (request.method === "DELETE") {
+      if (role !== "ADMIN") { response.writeHead(403).end(); return true; }
+      if (saveMode === "error") { response.writeHead(422).end(); return true; }
+      ownPosts.splice(ownPosts.indexOf(post), 1);
+      if (saveMode === "uncertain") { request.socket.destroy(); return true; }
+      const send = () => response.writeHead(204).end();
+      if (saveMode === "slow") setTimeout(send, 1500); else send();
+      return true;
+    }
     if (request.method === "GET") {
       if (formMode === "detail-error") response.writeHead(503).end();
       else {

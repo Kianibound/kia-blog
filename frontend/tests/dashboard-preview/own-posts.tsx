@@ -2,6 +2,8 @@ import "server-only";
 import { AuthorPostList, AuthorPostsUnavailable } from "@/components/dashboard/author-post-list";
 import { parseOwnPosts, parseAdminPosts } from "@/lib/own-posts-contract";
 import type { OwnPostStatusFilter } from "@/lib/own-posts-contract";
+import { AdminArticleList } from "@/components/dashboard/admin-article-list";
+import { deleteFixtureArticle } from "./article-actions";
 
 export function ownPostsHref(page: number, status?: OwnPostStatusFilter) {
   const query = new URLSearchParams();
@@ -28,5 +30,6 @@ export async function PreviewOwnPosts({ page, authorId, status, admin = false }:
   } catch {
     return <AuthorPostsUnavailable page={page} status={status} admin={admin} />;
   }
-  return <AuthorPostList posts={posts} authors={authors} status={status} href={page => ownPostsHref(page, status)} formLinks={{ ...(!admin ? { create: "/dashboard/posts/new" } : {}), edit: id => `/dashboard/posts/${encodeURIComponent(id)}/edit` }} />;
+  if (authors) return <AdminArticleList posts={posts} authors={authors} deleteAction={deleteFixtureArticle} />;
+  return <AuthorPostList posts={posts} status={status} href={page => ownPostsHref(page, status)} formLinks={{ create: "/dashboard/posts/new", edit: id => `/dashboard/posts/${encodeURIComponent(id)}/edit` }} />;
 }

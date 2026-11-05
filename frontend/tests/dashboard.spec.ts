@@ -5,6 +5,78 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+test("ADMIN cancels or permanently deletes an article and updates the list and reading views", async ({ page, request }, testInfo) => {
+  const base = "http://127.0.0.1:4101";
+  const id = "00000000-0000-4000-8000-000000000005";
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  const original = await (await request.get(`${base}/dashboard-posts/${id}`)).json();
+  await page.goto("/dashboard/posts");
+  const row = page.getByRole("main").getByRole("listitem").filter({ hasText: original.title });
+  const remove = row.getByRole("button", { name: "حذف مقاله", exact: true });
+  await expect(remove).toBeVisible();
+  await remove.click();
+  const dialog = page.getByRole("alertdialog", { name: "حذف مقاله", exact: true });
+  await expect(dialog).toContainText(original.title);
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeFocused();
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    const bounds = await dialog.boundingBox();
+    expect(Math.abs(bounds!.x + bounds!.width / 2 - width / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(bounds!.y + bounds!.height / 2 - 450)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: testInfo.outputPath(`article-delete-${width}.png`), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+  await expect(remove).toBeFocused();
+  expect(await (await request.get(`${base}/dashboard-posts/${id}`)).json()).toEqual(original);
+  await page.reload();
+  await remove.click();
+  await dialog.getByRole("button", { name: "تأیید حذف مقاله", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "مقاله از داده‌های آزمایشی حذف شد." })).toBeVisible();
+  await expect(row).toHaveCount(0);
+  await page.reload();
+  await expect(row).toHaveCount(0);
+  expect((await request.get(`${base}/dashboard-posts/${id}`)).status()).toBe(404);
+  await page.goto("/preview/posts");
+  await expect(page.getByRole("article").filter({ hasText: original.title })).toHaveCount(0);
+  expect((await page.goto(`/preview/posts/${original.slug}`))?.status()).toBe(404);
+});
+
+test("article deletion preserves failures, blocks duplicate confirmation, rejects non-ADMIN roles and resets", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  const id = "00000000-0000-4000-8000-000000000005";
+  for (const role of ["AUTHOR", "USER"]) {
+    await request.post(`${base}/__test/dashboard?role=${role}`);
+    expect((await request.delete(`${base}/dashboard-posts/${id}`)).status()).toBe(403);
+    for (const path of ["/dashboard/posts", `/dashboard/posts/${id}/edit`]) {
+      await page.goto(path);
+      await expect(page.getByRole("button", { name: "حذف مقاله", exact: true })).toHaveCount(0);
+    }
+  }
+  await request.post(`${base}/__test/dashboard?role=ADMIN&saveMode=error`);
+  const original = await (await request.get(`${base}/dashboard-posts/${id}`)).json();
+  await page.goto("/dashboard/posts");
+  const row = page.getByRole("main").getByRole("listitem").filter({ hasText: original.title });
+  await row.getByRole("button", { name: "حذف مقاله", exact: true }).click();
+  const dialog = page.getByRole("alertdialog", { name: "حذف مقاله", exact: true });
+  await dialog.getByRole("button", { name: "تأیید حذف مقاله", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("حذف مقاله انجام نشد.");
+  expect(await (await request.get(`${base}/dashboard-posts/${id}`)).json()).toEqual(original);
+  await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+  await request.post(`${base}/__test/dashboard?role=ADMIN&saveMode=slow`);
+  await row.getByRole("button", { name: "حذف مقاله", exact: true }).click();
+  await dialog.getByRole("button", { name: "تأیید حذف مقاله", exact: true }).click();
+  await expect(dialog.getByRole("status")).toContainText("در حال حذف مقاله…");
+  await expect(dialog.getByRole("button", { name: "تأیید حذف مقاله", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).not.toBeVisible();
+  await expect(row).toHaveCount(0);
+  await request.post(`${base}/__test/dashboard?role=ADMIN&reset=1`);
+  expect((await request.get(`${base}/dashboard-posts/${id}`)).status()).toBe(200);
+});
+
 test("ADMIN can recover a categoryless article and repeatedly republish saved drafts without an extra save", async ({ page, request }) => {
   const base = "http://127.0.0.1:4101";
   const id = "00000000-0000-4000-8000-000000000002";
