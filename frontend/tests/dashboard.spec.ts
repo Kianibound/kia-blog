@@ -5,6 +5,31 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+for (const [role, label, validPassword] of [["USER", "کاربر", "a"], ["AUTHOR", "نویسنده", "123"]]) {
+  test(`${role} login rejects non-ASCII and whitespace while allowing simple ASCII passwords`, async ({ page, request }) => {
+    await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT");
+    await page.goto("/login");
+    await page.getByRole("radio", { name: label, exact: true }).check();
+    await page.getByLabel("ایمیل", { exact: true }).fill("reader@example.test");
+    const password = page.getByLabel("گذرواژه", { exact: true });
+    for (const value of ["فارسی123!", "abcé", "abc۱", "abc😀", " abc", "abc ", "a b", "a\tb", "a\u00a0b"]) {
+      await password.fill(value);
+      await page.getByRole("button", { name: "ورود با ایمیل", exact: true }).click();
+      await expect(password).toHaveAttribute("aria-invalid", "true");
+      await expect(password).toHaveAccessibleDescription(/فاصله و نویسه‌های فارسی یا غیرانگلیسی مجاز نیستند/);
+      await expect(password).toBeFocused();
+      await expect(page.getByRole("radio", { name: label, exact: true })).toBeChecked();
+      expect((await request.get("http://127.0.0.1:4101/dashboard-identity")).status()).toBe(401);
+    }
+    await password.fill(validPassword);
+    await page.getByRole("button", { name: "ورود با ایمیل", exact: true }).click();
+    await expect(page).toHaveURL(/:3102\/$/);
+    await page.reload();
+    expect((await (await request.get("http://127.0.0.1:4101/dashboard-identity")).json()).role).toBe(role);
+    await expect(page.locator("header")).toContainText(label);
+  });
+}
+
 for (const role of ["USER", "AUTHOR"]) {
   test(`${role} sidebar logout recovers errors, disables pending actions and persists signed-out state`, async ({ page, request }, testInfo) => {
     await page.setViewportSize({ width: 360, height: 900 });

@@ -7,7 +7,14 @@ import { parseOwnPosts, parseAdminPosts } from "../src/lib/own-posts-contract.ts
 import { validateAuthorInput } from "../src/lib/author-form-contract.ts";
 import { parseModerationComments } from "../src/lib/comment-moderation-contract.ts";
 import { parseFixtureAvatar } from "../src/lib/avatar-contract.ts";
-import { validateRegistrationPasswords } from "../src/lib/registration-validation.ts";
+import { validatePasswordCharacters, validateRegistrationPasswords } from "../src/lib/registration-validation.ts";
+
+test("login password characters reject non-ASCII and whitespace without registration complexity rules", () => {
+  for (const password of ["a", "123", "!", "simple-password", "abcdef1!"]) assert.equal(validatePasswordCharacters(password), "");
+  for (const password of ["", "فارسی123!", "abcé", "abc۱", "abc😀", " abc", "abc ", "a b", "a\tb", "a\nb", "a\rb", "a\u00a0b", "a\u0000b", "a\u007fb"]) {
+    assert.notEqual(validatePasswordCharacters(password), "", JSON.stringify(password));
+  }
+});
 
 test("registration passwords require printable ASCII letters, a digit, a symbol and exact confirmation", () => {
   assert.deepEqual(validateRegistrationPasswords("abcdef1!", "abcdef1!"), { password: "", confirmPassword: "" });

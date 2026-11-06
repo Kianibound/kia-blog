@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
-import { validateRegistrationPasswords } from "@/lib/registration-validation";
+import { validatePasswordCharacters, validateRegistrationPasswords } from "@/lib/registration-validation";
 
 export type AuthChoice = { operation: "login" | "register"; provider: "email" | "google" | "github"; role: "USER" | "AUTHOR"; password?: string; confirmPassword?: string };
 export type SimulateAuth = (choice: AuthChoice) => Promise<boolean>;
@@ -46,7 +46,7 @@ export function AuthScreen({ registration = false, simulate }: { registration?: 
         const email = String(data.get("email") ?? "").trim();
         const password = String(data.get("password") ?? "");
         const confirmPassword = String(data.get("confirmPassword") ?? "");
-        const next = { email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? "" : "یک ایمیل معتبر وارد کنید.", ...(registration ? validateRegistrationPasswords(password, confirmPassword) : { password: password.trim() ? "" : "گذرواژه را وارد کنید.", confirmPassword: "" }) };
+        const next = { email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? "" : "یک ایمیل معتبر وارد کنید.", ...(registration ? validateRegistrationPasswords(password, confirmPassword) : { password: validatePasswordCharacters(password), confirmPassword: "" }) };
         setErrors(next);
         if (next.email || next.password || next.confirmPassword) { event.currentTarget.querySelector<HTMLInputElement>(next.email ? "#auth-email" : next.password ? "#auth-password" : "#auth-confirm-password")?.focus(); return; }
         void submit("email", { password, confirmPassword });
