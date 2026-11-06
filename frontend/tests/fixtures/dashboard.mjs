@@ -1,6 +1,8 @@
 import { publishedPosts } from "./posts.mjs";
+import { previewPosts } from "./preview-posts.mjs";
 import { randomUUID } from "node:crypto";
 import { validateRegistrationPasswords } from "../../src/lib/registration-validation.ts";
+import { validateArticleCommentText } from "../../src/lib/comment-moderation-contract.ts";
 
 // Test doubles only. There is no authentication or production account here.
 const identities = {
@@ -28,12 +30,12 @@ let ownPosts = structuredClone(initialPosts);
 let saveMode = "success";
 let formMode = "success";
 let authors = []; // Test-only Authors; retained until an explicit fixture reset.
-// Minimal moderation test doubles; intentionally no article or reply associations.
+// Shared article/moderation test doubles; intentionally no reply associations.
 const initialComments = [
   { id: "60000000-0000-4000-8000-000000000001", name: "نرگس رضایی", text: "این دیدگاه در انتظار بررسی است.", status: "PENDING" },
   // Unbroken user text is intentional: exercise wrapping without adding a fixture mode.
   { id: "60000000-0000-4000-8000-000000000002", name: "سارا کیانی", text: `این دیدگاه قبلاً تأیید شده است. ${"متنبدونفاصله".repeat(20)}`, status: "APPROVED" },
-];
+].map((comment, index) => ({ ...comment, postId: publishedPosts[1].id, userId: index === 0 ? "user" : authorIds.sara }));
 let comments = structuredClone(initialComments);
 let commentsMode = "success";
 let taxonomy;
@@ -56,6 +58,40 @@ function writeResponse(request, response, post, status = 200) {
 }
 
 export function handleDashboardFixture(request, response, url, categoryChoices) {
+  const articleCommentsMatch = /^\/article-comments\/([^/]+)$/.exec(url.pathname);
+  if (articleCommentsMatch) {
+    let slug;
+    try { slug = decodeURIComponent(articleCommentsMatch[1]); } catch { response.writeHead(400).end(); return true; }
+    const post = [...publishedPosts, ...previewPosts].find(item => item.slug === slug && item.status === "PUBLISHED");
+    if (!post) { response.writeHead(404).end(); return true; }
+    if (request.method === "GET") {
+      if (commentsMode === "error" || commentsMode === "slow-error") { const fail = () => response.writeHead(503).end(); if (commentsMode === "slow-error") setTimeout(fail, 1500); else fail(); return true; }
+      const visible = comments.filter(comment => comment.postId === post.id && comment.status === "APPROVED").map(({ id, name, text, status }) => ({ id, name, text, status }));
+      const data = commentsMode === "empty" ? [] : commentsMode === "invalid" ? [initialComments[0]] : visible;
+      const send = () => json(response, 200, data);
+      if (commentsMode === "slow") setTimeout(send, 1500); else send();
+      return true;
+    }
+    if (request.method !== "POST") { response.writeHead(405).end(); return true; }
+    if (role !== "USER") { response.writeHead(403).end(); return true; }
+    let body = "";
+    request.on("data", chunk => { body += chunk; });
+    request.on("end", () => {
+      let input;
+      try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 1 || validateArticleCommentText(input.text)) { response.writeHead(400).end(); return; }
+      if (saveMode === "error") { response.writeHead(422).end(); return; }
+      const send = () => {
+        if (role !== "USER") { response.writeHead(403).end(); return; }
+        const comment = { id: randomUUID(), postId: post.id, userId: "user", name: identities.USER.name, text: input.text.trim(), status: "PENDING" };
+        comments.push(comment);
+        if (saveMode === "uncertain") { request.socket.destroy(); return; }
+        json(response, 201, comment);
+      };
+      if (saveMode === "slow") setTimeout(send, 1500); else send();
+    });
+    return true;
+  }
   if (request.method === "POST" && url.pathname === "/__test/auth") {
     let body = "";
     request.on("data", chunk => { body += chunk; if (body.length > 2048) request.destroy(); });
@@ -92,7 +128,7 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     const nextAvatarMode = url.searchParams.get("avatarMode") ?? "success";
     if (!["success", "error", "invalid", "slow"].includes(nextAvatarMode)) { response.writeHead(400).end(); return true; }
     if (!["success", "empty", "error", "invalid", "slow"].includes(nextTaxonomyMode)) { response.writeHead(400).end(); return true; }
-    if (!["success", "empty", "error", "invalid", "slow"].includes(nextCommentsMode)) { response.writeHead(400).end(); return true; }
+    if (!["success", "empty", "error", "invalid", "slow", "slow-error"].includes(nextCommentsMode)) { response.writeHead(400).end(); return true; }
     if (!["success", "error", "slow"].includes(nextImageMode)) { response.writeHead(400).end(); return true; }
     if (!Object.hasOwn(identities, nextRole) || !Object.hasOwn(authorIds, nextAuthor) || !["success", "empty", "error", "invalid", "slow", "foreign"].includes(nextPostsMode) || !["success", "error", "invalid", "slow"].includes(nextMode) || !["success", "error", "slow", "uncertain"].includes(nextSaveMode) || !["success", "missing", "error", "invalid", "detail-error"].includes(nextFormMode)) {
       response.writeHead(400).end();
@@ -190,7 +226,7 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
   if (url.pathname === "/dashboard-comments" || commentMatch) {
     if (role !== "ADMIN") { response.writeHead(403).end(); return true; }
     if (!commentMatch && request.method === "GET") {
-      if (commentsMode === "error") { response.writeHead(503).end(); return true; }
+      if (commentsMode === "error" || commentsMode === "slow-error") { const fail = () => response.writeHead(503).end(); if (commentsMode === "slow-error") setTimeout(fail, 1500); else fail(); return true; }
       const data = commentsMode === "empty" ? [] : commentsMode === "invalid" ? [{ ...initialComments[0], status: "UNKNOWN" }] : comments;
       const send = () => json(response, 200, data);
       if (commentsMode === "slow") setTimeout(send, 1500); else send();

@@ -2,6 +2,17 @@
 export type ModerationComment = { id: string; name: string; text: string; status: "PENDING" | "APPROVED" };
 export type CommentOperation = "approve" | "delete";
 export type CommentModerationResult = "saved" | "error" | "uncertain";
+export type ArticleCommentSubmissionResult = "pending" | "error" | "uncertain";
+
+export function validateArticleCommentText(value: unknown): string {
+  return typeof value === "string" && value.trim() ? "" : "متن دیدگاه را وارد کنید.";
+}
+
+export function parseApprovedComments(value: unknown): ModerationComment[] {
+  const comments = parseModerationComments(value);
+  if (comments.some(comment => comment.status !== "APPROVED")) throw new Error("Invalid public fixture Comment visibility");
+  return comments;
+}
 
 export function parseModerationComments(value: unknown): ModerationComment[] {
   if (!Array.isArray(value)) throw new Error("Invalid fixture Comments");

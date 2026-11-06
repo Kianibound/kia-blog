@@ -5,9 +5,20 @@ import { feed } from "./fixtures/posts.mjs";
 import { previewPosts } from "./fixtures/preview-posts.mjs";
 import { parseOwnPosts, parseAdminPosts } from "../src/lib/own-posts-contract.ts";
 import { validateAuthorInput } from "../src/lib/author-form-contract.ts";
-import { parseModerationComments } from "../src/lib/comment-moderation-contract.ts";
+import { parseApprovedComments, parseModerationComments, validateArticleCommentText } from "../src/lib/comment-moderation-contract.ts";
 import { parseFixtureAvatar } from "../src/lib/avatar-contract.ts";
 import { validatePasswordCharacters, validateRegistrationPasswords } from "../src/lib/registration-validation.ts";
+
+test("public article comments accept only approved records and nonempty comment text", () => {
+  const comment = { id: "comment-1", name: "نرگس رضایی", text: "دیدگاه تأییدشده", status: "APPROVED" };
+  assert.deepEqual(parseApprovedComments([comment]), [comment]);
+  assert.deepEqual(parseApprovedComments([]), []);
+  assert.throws(() => parseApprovedComments([{ ...comment, status: "PENDING" }]));
+  assert.throws(() => parseApprovedComments([comment, comment]));
+  assert.throws(() => parseApprovedComments([{ ...comment, text: " " }]));
+  assert.equal(validateArticleCommentText("  یک دیدگاه دربارهٔ مقاله  "), "");
+  for (const value of ["", " \n\t", null, {}, 4]) assert.notEqual(validateArticleCommentText(value), "");
+});
 
 test("login password characters reject non-ASCII and whitespace without registration complexity rules", () => {
   for (const password of ["a", "123", "!", "simple-password", "abcdef1!"]) assert.equal(validatePasswordCharacters(password), "");

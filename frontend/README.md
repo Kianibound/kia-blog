@@ -56,6 +56,27 @@ not connect to a real database or prove live Nest deployment interoperability.
 
 ## Conventions
 
+### Article comments preview (Issue #36)
+
+The test-only host now composes the existing public `/posts/[slug]` page, fixing
+article cards that previously opened a missing preview route. The article list
+and production detail route remain unchanged. Missing, draft and deprecated
+fixture article URLs retain real HTTP 404 responses.
+
+On port 3102, `/posts/test-post-2` shows sample approved comments and allows the
+USER fixture identity to submit text. The loopback fixture assigns the article,
+USER and PENDING status; these fields cannot be supplied by the form. Pending
+comments survive reload but remain hidden from public article comments until
+the existing ADMIN `/dashboard/comments` flow approves them. That flow also
+removes public visibility when an ADMIN deletes a comment. Other roles and
+signed-out visitors can read approved comments but cannot submit in this preview.
+The shared resettable fixture owns all comment state; no real accounts,
+sessions, production comment adapter or database changes are involved.
+
+Use the existing `/__test/dashboard?role=USER` or `role=ADMIN` controls and refresh.
+`commentsMode=slow|empty|error|slow-error|invalid` and `saveMode=slow|error|uncertain` exercise
+loading and failure feedback. `reset=1` restores the sample approved/pending pair.
+
 ### Authentication screen preview (Issue #35)
 
 The public header links to `/login` and `/register`. Production forms stay

@@ -5,6 +5,180 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+test("article comment validation, failed and uncertain submissions preserve input and pending actions cannot repeat", async ({ page, request }) => {
+  await page.goto("/posts/test-post-2");
+  const comments = page.getByRole("region", { name: "دیدگاه‌های مقاله", exact: true });
+  const input = page.getByLabel("متن دیدگاه", { exact: true });
+  const submit = page.getByRole("button", { name: "ارسال دیدگاه", exact: true });
+  await input.fill("   ");
+  await submit.click();
+  await expect(input).toBeFocused();
+  await expect(input).toHaveAccessibleDescription("متن دیدگاه را وارد کنید.");
+  const text = "دیدگاهی که هنگام خطا حفظ می‌شود";
+  await input.fill(text);
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER&saveMode=error");
+  await submit.click();
+  await expect(comments.getByRole("alert")).toContainText("ارسال دیدگاه انجام نشد");
+  await expect(input).toHaveValue(text);
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER&saveMode=slow");
+  await submit.click();
+  await expect(comments.getByRole("status")).toHaveText("در حال ارسال دیدگاه…");
+  await expect(submit).toBeDisabled();
+  await expect(input).toBeDisabled();
+  await expect(comments.getByRole("status")).toContainText("در انتظار تأیید");
+  await expect(input).toHaveValue("");
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER&saveMode=uncertain");
+  const uncertain = "دیدگاه با نتیجهٔ نامشخص";
+  await input.fill(uncertain);
+  await submit.click();
+  await expect(comments.getByRole("alert")).toContainText("نتیجهٔ ارسال مشخص نیست");
+  await expect(input).toHaveValue(uncertain);
+  await expect(submit).toBeDisabled();
+  await page.reload();
+  await expect(comments).not.toContainText(uncertain);
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
+  const queue = await (await request.get("http://127.0.0.1:4101/dashboard-comments")).json();
+  expect(queue.filter((item: { text: string }) => item.text === text)).toHaveLength(1);
+  expect(queue.filter((item: { text: string }) => item.text === uncertain)).toHaveLength(1);
+});
+
+test("article comments show loading, empty and safe retry states on mobile and desktop", async ({ page, request }, testInfo) => {
+  const comments = page.getByRole("region", { name: "دیدگاه‌های مقاله", exact: true });
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER&commentsMode=slow");
+    await page.goto("/posts/test-post-2", { waitUntil: "commit" });
+    await expect(comments.getByRole("status")).toHaveText("در حال دریافت دیدگاه‌ها…");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    const before = await comments.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY);
+    await expect(page.getByLabel("متن دیدگاه", { exact: true })).toBeVisible();
+    const after = await comments.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY);
+    const cards = await comments.locator(":scope > div").evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height));
+    expect(Math.abs(after - before), JSON.stringify({ before, after, cards })).toBeLessThanOrEqual(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`article-comments-${width}.png`), fullPage: true });
+  }
+  for (const mode of ["error", "invalid", "slow-error"]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=USER&commentsMode=${mode}`);
+    if (mode === "slow-error") await page.setViewportSize({ width: 360, height: 900 });
+    await page.reload({ waitUntil: mode === "slow-error" ? "commit" : "load" });
+    let beforeError = 0;
+    if (mode === "slow-error") {
+      await expect(comments.getByRole("status")).toHaveText("در حال دریافت دیدگاه‌ها…");
+      await page.evaluate(() => document.fonts.ready);
+      beforeError = await comments.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY);
+    }
+    await expect(comments.getByRole("alert")).toContainText("دریافت دیدگاه‌ها ممکن نشد");
+    if (mode === "slow-error") {
+      const afterError = await comments.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY);
+      expect(Math.abs(afterError - beforeError)).toBeLessThanOrEqual(1);
+    }
+    await expect(comments).not.toContainText("این دیدگاه در انتظار بررسی است.");
+    await expect(page.getByLabel("متن دیدگاه", { exact: true })).toHaveCount(0);
+  }
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER&commentsMode=empty");
+  await comments.getByRole("button", { name: "تلاش دوباره", exact: true }).click();
+  await expect(comments).toContainText("هنوز دیدگاه تأییدشده‌ای برای این مقاله وجود ندارد.");
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER");
+  await page.reload();
+  await expect(comments).toContainText("این دیدگاه قبلاً تأیید شده است.");
+});
+
+test("article comment fixtures enforce USER submission, server associations, pending visibility and published-only paths", async ({ request, page }) => {
+  const base = "http://127.0.0.1:4101";
+  const path = `${base}/article-comments/test-post-2`;
+  for (const role of ["SIGNED_OUT", "AUTHOR", "ADMIN"]) {
+    await request.post(`${base}/__test/dashboard?role=${role}`);
+    expect((await request.post(path, { data: { text: "نباید ثبت شود" } })).status()).toBe(403);
+    expect((await request.get(path)).status()).toBe(200);
+    await page.goto("/posts/test-post-2");
+    await expect(page.getByLabel("متن دیدگاه", { exact: true })).toHaveCount(0);
+  }
+  await request.post(`${base}/__test/dashboard?role=USER`);
+  for (const body of [{ text: " " }, { text: "دیدگاه", status: "APPROVED" }, { text: "دیدگاه", userId: "admin" }, { text: "دیدگاه", postId: "other" }, { text: "دیدگاه", parentId: "comment-1" }]) {
+    expect((await request.post(path, { data: body })).status()).toBe(400);
+  }
+  for (const slug of ["missing-post", "draft-post", "deprecated-post"]) {
+    expect((await request.get(`${base}/article-comments/${slug}`)).status()).toBe(404);
+    expect((await request.post(`${base}/article-comments/${slug}`, { data: { text: "دیدگاه" } })).status()).toBe(404);
+  }
+  const response = await request.post(path, { data: { text: "  دیدگاه آزمایشی  " } });
+  expect(response.status()).toBe(201);
+  const saved = await response.json();
+  expect(saved).toMatchObject({ postId: "00000000-0000-4000-8000-000000000002", userId: "user", name: "نرگس رضایی", text: "دیدگاه آزمایشی", status: "PENDING" });
+  expect((await (await request.get(path)).json()).some((item: { id: string }) => item.id === saved.id)).toBe(false);
+  expect((await request.delete(path)).status()).toBe(405);
+});
+
+test("article comment submission stays disabled without JavaScript", async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    await page.goto("http://127.0.0.1:3102/posts/test-post-2");
+    await expect(page.getByLabel("متن دیدگاه", { exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "ارسال دیدگاه", exact: true, includeHidden: true })).toBeDisabled();
+  } finally { await context.close(); }
+});
+
+test("USER article comments stay pending until existing ADMIN moderation approves them and deletion removes visibility", async ({ page, request }) => {
+  await page.goto("/posts/test-post-2");
+  const comments = page.getByRole("region", { name: "دیدگاه‌های مقاله", exact: true });
+  await expect(comments).toContainText("این دیدگاه قبلاً تأیید شده است.");
+  await expect(comments).not.toContainText("این دیدگاه در انتظار بررسی است.");
+  const text = "دیدگاه تازهٔ کاربر برای مقالهٔ دوم";
+  await page.getByLabel("متن دیدگاه", { exact: true }).fill(text);
+  await page.getByRole("button", { name: "ارسال دیدگاه", exact: true }).click();
+  await expect(comments.getByRole("status")).toContainText("در انتظار تأیید");
+  await expect(comments.getByRole("list")).not.toContainText(text);
+  await page.reload();
+  await expect(comments).not.toContainText(text);
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
+  await page.goto("/dashboard/comments");
+  const row = page.getByRole("main").getByRole("listitem").filter({ hasText: text });
+  await expect(row).toContainText("در انتظار تأیید");
+  await row.getByRole("button", { name: "تأیید", exact: true }).click();
+  await expect(row).toContainText("تأییدشده");
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT");
+  await page.goto("/posts/test-post-2");
+  await expect(comments).toContainText(text);
+  await expect(page.getByLabel("متن دیدگاه", { exact: true })).toHaveCount(0);
+  await page.reload();
+  await expect(comments).toContainText(text);
+  await page.goto("/posts/test-post-1");
+  await expect(comments).not.toContainText(text);
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
+  await page.goto("/dashboard/comments");
+  await row.getByRole("button", { name: "حذف کامنت", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(row).toHaveCount(0);
+  await page.goto("/posts/test-post-2");
+  await expect(comments).not.toContainText(text);
+});
+
+test("published article cards open the shared public detail route for USER and signed-out readers", async ({ page, request }) => {
+  for (const role of ["USER", "SIGNED_OUT"]) {
+    await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT");
+    if (role === "USER") {
+      await page.goto("/login");
+      await page.getByLabel("ایمیل", { exact: true }).fill("reader@example.test");
+      await page.getByLabel("گذرواژه", { exact: true }).fill("a");
+      await page.getByRole("button", { name: "ورود با ایمیل", exact: true }).click();
+      await expect(page).toHaveURL(/:3102\/$/);
+    } else await page.goto("/");
+    const card = page.getByRole("article").first().getByRole("link");
+    await expect(card).toHaveAttribute("href", "/posts/test-post-2");
+    await card.click();
+    await expect(page).toHaveURL(/\/posts\/test-post-2$/);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("عنوان <strong>مقاله</strong> باید متن بماند");
+    expect((await page.reload())?.status()).toBe(200);
+    for (const slug of ["missing-post", "draft-post", "deprecated-post"]) {
+      expect((await page.goto(`/posts/${slug}`))?.status()).toBe(404);
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText("مقاله پیدا نشد");
+    }
+  }
+});
+
 for (const [role, label, validPassword] of [["USER", "کاربر", "a"], ["AUTHOR", "نویسنده", "123"]]) {
   test(`${role} login rejects non-ASCII and whitespace while allowing simple ASCII passwords`, async ({ page, request }) => {
     await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT");
