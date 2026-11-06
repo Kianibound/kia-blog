@@ -105,7 +105,7 @@ test("a Visitor reaches Contact from desktop and mobile navigation", async ({ pa
   await menu.focus();
   await page.keyboard.press("Enter");
   await expect(menu).toHaveAttribute("aria-expanded", "true");
-  for (let step = 0; step < 4; step++) await page.keyboard.press("Tab");
+  for (let step = 0; step < 5; step++) await page.keyboard.press("Tab");
   await expect(contact).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/contact$/);

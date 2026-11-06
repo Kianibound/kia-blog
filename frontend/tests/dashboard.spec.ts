@@ -2625,3 +2625,73 @@ test("mobile navigation, skip link, theme persistence and return-to-blog work wi
   await expect(page).toHaveURL("/");
   await expect(page.getByRole("article").first()).toBeVisible();
 });
+
+
+test("bookmark icons sit inside article and saved cards with accessible toggle states", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER");
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/posts/test-post-1");
+    const save = page.getByRole("button", { name: "ذخیره مقاله", exact: true });
+    await expect(save).toHaveAttribute("aria-pressed", "false");
+    await expect(save).toHaveText("");
+    await expect(save.locator("svg")).toHaveAttribute("aria-hidden", "true");
+    await expect(save.locator("svg")).toHaveAttribute("fill", "none");
+    const checkCorner = async () => {
+      const geometry = await page.getByRole("button", { name: /ذخیره مقاله|حذف از ذخیره‌شده‌ها/ }).evaluate(button => {
+        const card = button.closest("article")!.querySelector(":scope > div")!;
+        const b = button.getBoundingClientRect(), c = card.getBoundingClientRect();
+        return { left: b.left-c.left, top: b.top-c.top, width:b.width, height:b.height, nested:!!button.closest("a") };
+      });
+      expect(geometry.left).toBeGreaterThanOrEqual(0);
+      expect(geometry.left).toBeLessThanOrEqual(28);
+      expect(geometry.top).toBeGreaterThanOrEqual(0);
+      expect(geometry.top).toBeLessThanOrEqual(28);
+      expect(geometry.width).toBeGreaterThanOrEqual(44);
+      expect(geometry.height).toBeGreaterThanOrEqual(44);
+      expect(geometry.nested).toBe(false);
+    };
+    await checkCorner();
+    await save.focus();
+    await page.keyboard.press("Space");
+    const remove = page.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact:true });
+    await expect(remove).toHaveAttribute("aria-pressed", "true");
+    await expect(remove.locator("svg")).toHaveAttribute("fill", "currentColor");
+    await page.reload();
+    await expect(remove).toHaveAttribute("aria-pressed", "true");
+    await page.goto("/dashboard/bookmarks");
+    await expect(remove).toHaveText("");
+    await expect(remove.locator("svg")).toHaveAttribute("fill", "currentColor");
+    await checkCorner();
+    const link = page.getByRole("main").getByRole("article").getByRole("link");
+    await expect(link).toHaveAttribute("href", "/posts/test-post-1");
+    await link.click();
+    await expect(page).toHaveURL(/\/posts\/test-post-1$/);
+    await page.goto("/dashboard/bookmarks");
+    await remove.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("هنوز مقاله‌ای ذخیره نکرده‌اید.")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+});
+
+test("public account actions align on desktop and fit mobile navigation", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER");
+  for (const width of [360, 768, 1024, 1280]) {
+    await page.setViewportSize({ width, height:900 });
+    await page.goto("/");
+    const banner = page.getByRole("banner");
+    const account = banner.getByRole("link", { name:/حساب آزمایشی/ });
+    const logout = banner.getByRole("button", { name:"خروج", exact:true });
+    await expect(account).toBeVisible();
+    await expect(logout).toBeVisible();
+    if (width >= 1024) {
+      const theme = banner.getByRole("button", { name:/فعال‌کردن حالت/ });
+      const centers = await Promise.all([account, logout, theme].map(async locator => {
+        const box = await locator.boundingBox(); return box!.y + box!.height/2;
+      }));
+      expect(Math.max(...centers)-Math.min(...centers)).toBeLessThanOrEqual(1);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+});

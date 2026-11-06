@@ -5,14 +5,15 @@ import { fa } from "@/lib/utils";
 import { formatPublicationDate } from "@/lib/publication-date";
 import Link from "next/link";
 
-export function PostCard({ post, href = `/posts/${encodeURIComponent(post.slug)}` }: { post: PostSummary; href?: string }) {
+export function PostCard({ post, href = `/posts/${encodeURIComponent(post.slug)}`, bookmark }: { post: PostSummary; href?: string; bookmark?: React.ReactNode }) {
   return (
     <article aria-labelledby={`post-${post.id}`} className="h-full">
-      <Card className="flex h-full flex-col">
+      <Card className="relative flex h-full flex-col">
+        {bookmark && <div className="absolute end-4 top-4 z-10">{bookmark}</div>}
         {/* Fixture image bytes use the existing same-origin proxy. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {post.coverImage && <img src={post.coverImage.src} alt={post.coverImage.alt} width={640} height={360} loading="lazy" className="aspect-video w-full rounded-t-surface object-cover" />}
-        <CardHeader>
+        <CardHeader className={bookmark ? "pe-20" : undefined}>
           {post.categories.length > 0 && (
             <ul aria-label={messages.home.categoriesLabel} className="mb-3 flex flex-wrap gap-2 text-sm">
               {post.categories.map((category) => (

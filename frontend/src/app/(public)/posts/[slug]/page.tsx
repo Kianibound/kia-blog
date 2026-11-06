@@ -9,7 +9,7 @@ import { fa } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-export default async function ArticleDetail({ params }: { params: Promise<{ slug: string }> }) {
+export default async function ArticleDetail({ params, bookmark }: { params: Promise<{ slug: string }>; bookmark?: React.ReactNode }) {
   const { slug } = await params;
   let post;
   try {
@@ -31,8 +31,9 @@ export default async function ArticleDetail({ params }: { params: Promise<{ slug
   return (
     <article className="mx-auto max-w-3xl space-y-6" aria-labelledby="article-title">
       <Link href="/" className="inline-flex min-h-12 items-center rounded-md px-4 font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">{messages.article.backToFeed}</Link>
-      <Card>
-        <header className="space-y-6 p-6 sm:p-8">
+      <Card className="relative">
+        {bookmark && <div className="absolute end-4 top-4 sm:end-6 sm:top-6">{bookmark}</div>}
+        <header className={bookmark ? "space-y-6 p-6 pe-20 sm:p-8 sm:pe-24" : "space-y-6 p-6 sm:p-8"}>
           <h1 id="article-title" className="text-3xl leading-tight font-bold wrap-anywhere">{fa(post.title)}</h1>
           <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground">
             <p className="wrap-anywhere">{fa(post.authorName)}</p>

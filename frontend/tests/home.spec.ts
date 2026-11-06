@@ -59,6 +59,8 @@ test("a Visitor operates the mobile navigation with the keyboard", async ({ page
   await page.keyboard.press("Enter");
   await expect(menu).toHaveAttribute("aria-expanded", "true");
   await page.keyboard.press("Tab");
+  await expect(navigation.getByRole("link", { name: "ورود / ثبت‌نام", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
   await expect(home).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(navigation.getByRole("button", { name: "دسته‌بندی‌ها" })).toBeFocused();
@@ -70,6 +72,7 @@ test("a Visitor operates the mobile navigation with the keyboard", async ({ page
   await expect(menu).toBeFocused();
   await expect(about).toBeHidden();
   await page.keyboard.press("Space");
+  await page.keyboard.press("Tab");
   await page.keyboard.press("Tab");
   await page.keyboard.press("Tab");
   await page.keyboard.press("Tab");

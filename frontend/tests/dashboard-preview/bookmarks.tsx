@@ -9,7 +9,7 @@ import { readFixtureIdentity } from "./identity";
 import { changeFixtureBookmark } from "./bookmark-actions";
 
 export function BookmarkLoading() {
-  return <section aria-label="ذخیره‌سازی مقاله" className="mx-auto mt-8 min-h-64 max-w-3xl space-y-4" aria-busy="true"><p role="status">در حال دریافت وضعیت ذخیره…</p><Skeleton className="h-12 w-48 motion-reduce:animate-none" /><Skeleton className="h-24 w-full motion-reduce:animate-none" /></section>;
+  return <section aria-label="ذخیره‌سازی مقاله" className="relative size-12" aria-busy="true"><p role="status" className="sr-only">در حال دریافت وضعیت ذخیره…</p><Skeleton className="size-12 motion-reduce:animate-none" /></section>;
 }
 
 export async function PreviewBookmark({ slug }: { slug: string }) {
@@ -22,7 +22,7 @@ export async function PreviewBookmark({ slug }: { slug: string }) {
       saved = parseBookmarkState(await response.json(), identity.id, slug);
     } catch { saved = null; }
   }
-  return <section aria-label="ذخیره‌سازی مقاله" className="mx-auto mt-8 min-h-64 max-w-3xl">{identity?.role !== "USER" ? <p>ذخیره مقاله در این پیش‌نمایش فقط برای حساب کاربر در دسترس است.</p> : saved === null ? <Card role="alert" className="space-y-4 p-6"><p>دریافت وضعیت ذخیره ممکن نشد.</p><form><Button size="lg" type="submit">تلاش دوباره</Button></form></Card> : <BookmarkToggle key={`${identity.id}:${slug}`} initialSaved={saved} action={changeFixtureBookmark.bind(null, identity.id, slug)} />}</section>;
+  return <section aria-label="ذخیره‌سازی مقاله" className="relative size-12">{identity?.role !== "USER" ? <p className="sr-only">ذخیره مقاله در این پیش‌نمایش فقط برای حساب کاربر در دسترس است.</p> : saved === null ? <Card role="alert" className="absolute end-0 top-0 z-10 w-56 space-y-4 p-4"><p>دریافت وضعیت ذخیره ممکن نشد.</p><form><Button size="lg" type="submit">تلاش دوباره</Button></form></Card> : <BookmarkToggle key={`${identity.id}:${slug}`} initialSaved={saved} action={changeFixtureBookmark.bind(null, identity.id, slug)} />}</section>;
 }
 
 export function SavedArticlesLoading() {

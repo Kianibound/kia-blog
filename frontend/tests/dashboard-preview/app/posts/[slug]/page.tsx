@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export default async function PreviewArticleDetail({ params }: { params: Promise<{ slug: string }> }) {
   // Resolve the shared page before its shell so missing/unpublished posts keep HTTP 404.
-  const article = await ArticleDetail({ params });
   const { slug } = await params;
-  return <FixturePublicLayout>{article}<Suspense fallback={<BookmarkLoading />}><PreviewBookmark slug={slug} /></Suspense><Suspense fallback={<ArticleCommentsLoading />}><PreviewArticleComments slug={slug} /></Suspense></FixturePublicLayout>;
+  const article = await ArticleDetail({ params, bookmark: <Suspense fallback={<BookmarkLoading />}><PreviewBookmark slug={slug} /></Suspense> });
+  return <FixturePublicLayout>{article}<Suspense fallback={<ArticleCommentsLoading />}><PreviewArticleComments slug={slug} /></Suspense></FixturePublicLayout>;
 }

@@ -16,7 +16,7 @@ const destinations = [
   { href: "/contact", label: messages.public.contact },
 ];
 
-export function SiteNavigation({ children, categories }: { children: ReactNode; categories: Category[] | null }) {
+export function SiteNavigation({ children, categories, accountEntry }: { children: ReactNode; categories: Category[] | null; accountEntry: ReactNode }) {
   const pathname = usePathname();
   const [expanded, setExpanded] = useState(false);
   const linksId = useId();
@@ -66,16 +66,17 @@ export function SiteNavigation({ children, categories }: { children: ReactNode; 
   return (
     <nav
       aria-label={messages.public.navigation}
-      className="flex flex-wrap items-center justify-between gap-x-6 md:grid md:grid-cols-6"
+      className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4 xl:grid xl:grid-cols-3"
       onClick={(event) => {
         if (expanded && event.target instanceof Element && event.target.closest("a")) closeMenu();
       }}
     >
-      <div className="md:justify-self-start">{children}</div>
-      <ul className="hidden items-center gap-2 md:col-span-4 md:flex md:justify-self-center">
+      <div className="xl:justify-self-start">{children}</div>
+      <ul className="hidden flex-wrap items-center gap-2 md:flex xl:flex-nowrap xl:justify-self-center">
         {links[0]}<li><CategoryDisclosure categories={categories} mobile={false} /></li>{links.slice(1)}
       </ul>
-      <div className="flex items-center gap-2 md:justify-self-end">
+      <div className="contents md:flex md:shrink-0 md:items-center md:gap-4 xl:justify-self-end">
+      <div className="flex items-center gap-2">
         <ThemeToggle />
         <Button
           id={triggerId}
@@ -88,6 +89,8 @@ export function SiteNavigation({ children, categories }: { children: ReactNode; 
         >
           {messages.public.menu}
         </Button>
+      </div>
+      <div className="flex min-h-12 basis-full flex-wrap items-center justify-end gap-4 md:basis-auto md:flex-nowrap">{accountEntry}</div>
       </div>
       <ul
         id={linksId}
