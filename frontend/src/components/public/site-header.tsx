@@ -3,7 +3,7 @@ import { messages } from "@/i18n/messages/fa";
 import { SiteNavigation } from "./site-navigation";
 import { getPublicCategories } from "@/lib/categories";
 
-export async function SiteHeader() {
+export async function SiteHeader({ accountEntry }: { accountEntry?: React.ReactNode }) {
   const categories = await getPublicCategories();
   return (
     <>
@@ -20,6 +20,9 @@ export async function SiteHeader() {
               {messages.metadata.title}
             </Link>
           </SiteNavigation>
+          <div className="mt-4 flex min-h-12 flex-wrap items-center justify-end gap-4">
+            {accountEntry ?? <Link href="/login" className="inline-flex min-h-12 items-center rounded-control px-4 font-medium hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring">ورود / ثبت‌نام</Link>}
+          </div>
         </div>
       </header>
     </>

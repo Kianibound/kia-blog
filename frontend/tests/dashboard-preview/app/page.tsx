@@ -1,4 +1,4 @@
-import PublicLayout from "@/app/(public)/layout";
+import { FixturePublicLayout as PublicLayout } from "../public-layout";
 import Home from "@/app/(public)/page";
 import type { PostsSearchParams } from "@/lib/posts-query";
 

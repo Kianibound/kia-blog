@@ -116,5 +116,7 @@ test("a Visitor reaches Contact from desktop and mobile navigation", async ({ pa
   await page.keyboard.press("Escape");
   await expect(menu).toBeFocused();
   await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "ورود / ثبت‌نام", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
   await expect(page.getByRole("textbox", { name: "نام", exact: true })).toBeFocused();
 });

@@ -5,6 +5,98 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+test("fixture auth controls remain disabled without JavaScript", async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    for (const [route, title] of [["login", "ورود"], ["register", "ثبت‌نام"]]) {
+      await page.goto(`http://127.0.0.1:3102/${route}`);
+      await expect(page.getByLabel("ایمیل", { exact: true })).toBeDisabled();
+      await expect(page.getByLabel("گذرواژه", { exact: true })).toBeDisabled();
+      for (const provider of ["ایمیل", "گوگل", "گیت‌هاب"]) {
+        await expect(page.getByRole("button", { name: `${title} با ${provider}`, exact: true })).toBeDisabled();
+      }
+    }
+  } finally { await context.close(); }
+});
+
+test("registration creates only USER and fixture header persists until logout", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT");
+  await page.goto("/");
+  await page.getByRole("link", { name: "ورود / ثبت‌نام", exact: true }).click();
+  await page.getByRole("link", { name: "ثبت‌نام", exact: true }).click();
+  await expect(page.getByRole("radio")).toHaveCount(0);
+  await page.getByLabel("ایمیل", { exact: true }).fill("reader@example.test");
+  await page.getByLabel("گذرواژه", { exact: true }).fill("fixture-only-password");
+  await page.getByRole("button", { name: "ثبت‌نام با ایمیل", exact: true }).click();
+  await expect(page).toHaveURL(/:3102\/$/);
+  await expect(page.locator("header")).toContainText("کاربر");
+  await page.reload();
+  await expect(page.locator("header")).toContainText("کاربر");
+  await page.getByRole("button", { name: "خروج", exact: true }).click();
+  await page.reload();
+  await expect(page.getByRole("link", { name: "ورود / ثبت‌نام", exact: true })).toBeVisible();
+});
+
+test("email simulation validates locally, reports failures and blocks repeated pending actions", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT&saveMode=error");
+  await page.goto("/login");
+  await page.getByRole("button", { name: "ورود با ایمیل", exact: true }).click();
+  await expect(page.getByLabel("ایمیل", { exact: true })).toBeFocused();
+  await expect(page.getByText("یک ایمیل معتبر وارد کنید.", { exact: true })).toBeVisible();
+  await page.getByLabel("ایمیل", { exact: true }).fill("reader@example.test");
+  await page.getByLabel("گذرواژه", { exact: true }).fill("fixture-only-password");
+  await page.getByRole("button", { name: "ورود با ایمیل", exact: true }).click();
+  await expect(page.locator("main").getByRole("alert")).toContainText("شبیه‌سازی انجام نشد");
+  await expect(page.getByLabel("ایمیل", { exact: true })).toHaveValue("reader@example.test");
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT&saveMode=slow");
+  await page.getByRole("radio", { name: "نویسنده", exact: true }).check();
+  await page.getByRole("button", { name: "ورود با ایمیل", exact: true }).click();
+  await expect(page.locator("main").getByRole("status")).toContainText("در حال شبیه‌سازی");
+  await expect(page.getByRole("button", { name: "ورود با گوگل", exact: true })).toBeDisabled();
+  await expect(page).toHaveURL(/:3102\/$/);
+  await expect(page.locator("header")).toContainText("نویسنده");
+  await page.reload();
+  await expect(page.locator("header")).toContainText("نویسنده");
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const route of ["/", "/register", "/login"]) {
+      await page.goto(route);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`auth-${route.replaceAll("/", "") || "home"}-${width}.png`), fullPage: true });
+    }
+  }
+});
+
+for (const provider of ["گوگل", "گیت‌هاب"]) {
+  test(`${provider} fixture registration and USER/AUTHOR login have simulated persistent outcomes`, async ({ page, request }) => {
+    await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT");
+    for (const [route, action, role, label] of [["register", "ثبت‌نام", "USER", "کاربر"], ["login", "ورود", "USER", "کاربر"], ["login", "ورود", "AUTHOR", "نویسنده"]]) {
+      await page.goto(`/${route}`);
+      if (route === "login") await page.getByRole("radio", { name: label, exact: true }).check();
+      await page.getByRole("button", { name: `${action} با ${provider}`, exact: true }).click();
+      await expect(page).toHaveURL(/:3102\/$/);
+      await page.reload();
+      await expect(page.locator("header")).toContainText(label);
+      await expect(page.getByRole("link", { name: /حساب آزمایشی/ })).toHaveAttribute("href", "/dashboard");
+      const identity = await (await request.get("http://127.0.0.1:4101/dashboard-identity")).json();
+      expect(identity.role).toBe(role);
+      await page.getByRole("button", { name: "خروج", exact: true }).click();
+      await expect(page.getByRole("link", { name: "ورود / ثبت‌نام", exact: true })).toBeVisible();
+    }
+  });
+}
+
+test("fixture registration cannot assign AUTHOR or ADMIN and separate ADMIN preview remains", async ({ request }) => {
+  for (const provider of ["email", "google", "github"]) {
+    expect((await request.post("http://127.0.0.1:4101/__test/auth", { data: { operation: "register", provider, role: "AUTHOR" } })).status()).toBe(204);
+    expect((await (await request.get("http://127.0.0.1:4101/dashboard-identity")).json()).role).toBe("USER");
+    expect((await request.post("http://127.0.0.1:4101/__test/auth", { data: { operation: "login", provider, role: "ADMIN" } })).status()).toBe(400);
+  }
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
+  expect((await (await request.get("http://127.0.0.1:4101/dashboard-identity")).json()).role).toBe("ADMIN");
+});
+
 test("AUTHOR previews, saves and removes an avatar with reload persistence and isolated identities", async ({ page, request }, testInfo) => {
   const control = "http://127.0.0.1:4101/__test/dashboard?role=AUTHOR";
   await request.post(control);

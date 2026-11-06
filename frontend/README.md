@@ -56,6 +56,29 @@ not connect to a real database or prove live Nest deployment interoperability.
 
 ## Conventions
 
+### Authentication screen preview (Issue #35)
+
+The public header links to `/login` and `/register`. Production forms stay
+disabled until secure authentication integration is implemented. Only the
+existing test host on port 3102 injects email, Google and GitHub simulations.
+No credentials leave these forms, no external provider is contacted, and no
+tokens, cookies or browser account storage are created. Registration always
+selects the USER test identity, including social-provider simulations.
+
+The fixture identity is process-wide, shared by preview tabs, and retained on
+reload until logout, fixture reset or process restart. Login choices select
+USER or AUTHOR test data; they do not enforce permissions. ADMIN remains a
+separate fixture control. To select a manual scenario in PowerShell:
+
+```powershell
+Invoke-WebRequest -Method Post 'http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT'
+Invoke-WebRequest -Method Post 'http://127.0.0.1:4101/__test/dashboard?role=USER'
+Invoke-WebRequest -Method Post 'http://127.0.0.1:4101/__test/dashboard?role=AUTHOR'
+```
+
+Refresh the preview after changing a scenario. Add `&saveMode=slow` or
+`&saveMode=error` to exercise pending or failed simulation feedback.
+
 ### Dashboard shell preview (Issue #14)
 
 `npm run test:dashboard` builds a separate test-only Next application on port

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 
 // Test doubles only. There is no authentication or production account here.
 const identities = {
+  SIGNED_OUT: null,
   USER: { name: "نرگس رضایی", username: "narges", role: "USER" },
   AUTHOR: { name: "سارا کیانی", username: "sara", role: "AUTHOR" },
   ADMIN: { name: "مدیر نمونه", username: "admin", role: "ADMIN" },
@@ -54,6 +55,26 @@ function writeResponse(request, response, post, status = 200) {
 }
 
 export function handleDashboardFixture(request, response, url, categoryChoices) {
+  if (request.method === "POST" && url.pathname === "/__test/auth") {
+    let body = "";
+    request.on("data", chunk => { body += chunk; if (body.length > 2048) request.destroy(); });
+    request.on("end", () => {
+      let input;
+      try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
+      if (!input || typeof input !== "object" || !["register", "login", "logout"].includes(input.operation)) { response.writeHead(400).end(); return; }
+      if (input.operation !== "logout" && (!["email", "google", "github"].includes(input.provider) || !["USER", "AUTHOR"].includes(input.role))) { response.writeHead(400).end(); return; }
+      if (saveMode === "error") { response.writeHead(503).end(); return; }
+      const send = () => {
+        // Registration always selects USER, even for a tampered AUTHOR request.
+        role = input.operation === "logout" ? "SIGNED_OUT" : input.operation === "register" ? "USER" : input.role;
+        author = "sara";
+        mode = "success";
+        response.writeHead(204).end();
+      };
+      if (saveMode === "slow") setTimeout(send, 1500); else send();
+    });
+    return true;
+  }
   // Reuse the existing taxonomy values, isolated from the public fixture dataset.
   taxonomy ??= { categories: structuredClone(categoryChoices), tags: [...new Map(publishedPosts.flatMap(post => post.tags).map(item => [item.id, fullTaxonomy(item)])).values()] };
   if (request.method === "POST" && url.pathname === "/__test/dashboard") {
@@ -354,6 +375,7 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     return true;
   }
   if (request.method !== "GET" || url.pathname !== "/dashboard-identity") return false;
+  if (role === "SIGNED_OUT") { response.writeHead(401).end(); return true; }
   if (mode === "error") {
     response.writeHead(503).end("TEST DOUBLE: dashboard unavailable");
     return true;
