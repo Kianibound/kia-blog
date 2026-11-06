@@ -76,7 +76,7 @@ export function SiteNavigation({ children, categories, accountEntry }: { childre
         {links[0]}<li><CategoryDisclosure categories={categories} mobile={false} /></li>{links.slice(1)}
       </ul>
       <div className="contents md:flex md:shrink-0 md:items-center md:gap-4 xl:justify-self-end">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 md:order-last">
         <ThemeToggle />
         <Button
           id={triggerId}

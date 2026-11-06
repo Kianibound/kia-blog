@@ -2691,6 +2691,15 @@ test("public account actions align on desktop and fit mobile navigation", async 
         const box = await locator.boundingBox(); return box!.y + box!.height/2;
       }));
       expect(Math.max(...centers)-Math.min(...centers)).toBeLessThanOrEqual(1);
+      const themeBox = await theme.boundingBox();
+      for (const control of [account, logout]) {
+        expect(themeBox!.x + themeBox!.width).toBeLessThanOrEqual((await control.boundingBox())!.x);
+      }
+      await theme.focus();
+      await page.keyboard.press("Enter");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+      await page.keyboard.press("Enter");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
