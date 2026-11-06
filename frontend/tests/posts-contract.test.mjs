@@ -7,6 +7,17 @@ import { parseOwnPosts, parseAdminPosts } from "../src/lib/own-posts-contract.ts
 import { validateAuthorInput } from "../src/lib/author-form-contract.ts";
 import { parseModerationComments } from "../src/lib/comment-moderation-contract.ts";
 import { parseFixtureAvatar } from "../src/lib/avatar-contract.ts";
+import { validateRegistrationPasswords } from "../src/lib/registration-validation.ts";
+
+test("registration passwords require printable ASCII letters, a digit, a symbol and exact confirmation", () => {
+  assert.deepEqual(validateRegistrationPasswords("abcdef1!", "abcdef1!"), { password: "", confirmPassword: "" });
+  for (const password of ["", "Ab1!xyz", "1234567!", "abcdefgh!", "abcdef12", "Abcdef1!فارسی", "Abcdef1!é", "Abcdef1! ", "Abcdef1!\t", "Abcdef1!\n", "Abcdef1!\u0000", "Abcdef1!\u007f", "Abcdef1!\u00a0"]) {
+    assert.notEqual(validateRegistrationPasswords(password, password).password, "", JSON.stringify(password));
+  }
+  for (const confirmation of ["", "abcdef1! ", "Abcdef1!"]) {
+    assert.notEqual(validateRegistrationPasswords("abcdef1!", confirmation).confirmPassword, "");
+  }
+});
 
 test("avatar state accepts only null or a persistent fixture image reference", () => {
   assert.equal(parseFixtureAvatar({ src: null }), null);

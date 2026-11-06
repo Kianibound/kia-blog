@@ -1,7 +1,8 @@
 "use server";
 import type { AuthChoice } from "@/components/public/auth-screen";
 
-// Test-only simulation: no credentials, tokens, cookies or production API.
+// Dummy registration passwords are validated transiently by the test fixture;
+// no password storage, tokens, cookies or production API are involved.
 export async function simulateAuth(choice: AuthChoice): Promise<boolean> {
   try {
     const response = await fetch("http://127.0.0.1:4101/__test/auth", {

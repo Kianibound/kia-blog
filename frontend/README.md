@@ -61,9 +61,15 @@ not connect to a real database or prove live Nest deployment interoperability.
 The public header links to `/login` and `/register`. Production forms stay
 disabled until secure authentication integration is implemented. Only the
 existing test host on port 3102 injects email, Google and GitHub simulations.
-No credentials leave these forms, no external provider is contacted, and no
-tokens, cookies or browser account storage are created. Registration always
-selects the USER test identity, including social-provider simulations.
+Email registration sends dummy password/confirmation values to the test-only
+fixture for transient validation using the same validator as the form; values
+are discarded and never stored. Use no real credentials. No external provider
+is contacted, and no tokens, cookies or browser account storage are created.
+Registration always selects USER, including social-provider simulations.
+Email passwords require at least eight printable ASCII characters, including
+an English letter, digit and symbol, with no whitespace and exact confirmation.
+USER and AUTHOR dashboard sidebars reuse the header's fixture logout action
+and return to the signed-out homepage; failed logout preserves the identity.
 
 The fixture identity is process-wide, shared by preview tabs, and retained on
 reload until logout, fixture reset or process restart. Login choices select

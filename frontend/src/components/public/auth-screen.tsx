@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
+import { validateRegistrationPasswords } from "@/lib/registration-validation";
 
-export type AuthChoice = { operation: "login" | "register"; provider: "email" | "google" | "github"; role: "USER" | "AUTHOR" };
+export type AuthChoice = { operation: "login" | "register"; provider: "email" | "google" | "github"; role: "USER" | "AUTHOR"; password?: string; confirmPassword?: string };
 export type SimulateAuth = (choice: AuthChoice) => Promise<boolean>;
 
 export function AuthScreen({ registration = false, simulate }: { registration?: boolean; simulate?: SimulateAuth }) {
@@ -18,16 +19,16 @@ export function AuthScreen({ registration = false, simulate }: { registration?: 
   const [role, setRole] = useState<"USER" | "AUTHOR">("USER");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const [errors, setErrors] = useState({ email: "", password: "" });
+  const [errors, setErrors] = useState({ email: "", password: "", confirmPassword: "" });
   const title = registration ? "ثبت‌نام" : "ورود";
 
-  async function submit(provider: AuthChoice["provider"]) {
+  async function submit(provider: AuthChoice["provider"], passwords?: { password: string; confirmPassword: string }) {
     if (!simulate || locked.current) return;
     locked.current = true;
     setPending(true);
     setError("");
     try {
-      const ok = await simulate({ operation: registration ? "register" : "login", provider, role: registration ? "USER" : role });
+      const ok = await simulate({ operation: registration ? "register" : "login", provider, role: registration ? "USER" : role, ...(registration && provider === "email" ? passwords : {}) });
       if (ok) { router.push("/"); router.refresh(); }
       else setError("شبیه‌سازی انجام نشد. دوباره تلاش کنید.");
     } catch { setError("ارتباط با پیش‌نمایش برقرار نشد. دوباره تلاش کنید."); }
@@ -44,10 +45,11 @@ export function AuthScreen({ registration = false, simulate }: { registration?: 
         const data = new FormData(event.currentTarget);
         const email = String(data.get("email") ?? "").trim();
         const password = String(data.get("password") ?? "");
-        const next = { email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? "" : "یک ایمیل معتبر وارد کنید.", password: password.trim() ? "" : "گذرواژه را وارد کنید." };
+        const confirmPassword = String(data.get("confirmPassword") ?? "");
+        const next = { email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? "" : "یک ایمیل معتبر وارد کنید.", ...(registration ? validateRegistrationPasswords(password, confirmPassword) : { password: password.trim() ? "" : "گذرواژه را وارد کنید.", confirmPassword: "" }) };
         setErrors(next);
-        if (next.email || next.password) { event.currentTarget.querySelector<HTMLInputElement>(next.email ? "#auth-email" : "#auth-password")?.focus(); return; }
-        void submit("email");
+        if (next.email || next.password || next.confirmPassword) { event.currentTarget.querySelector<HTMLInputElement>(next.email ? "#auth-email" : next.password ? "#auth-password" : "#auth-confirm-password")?.focus(); return; }
+        void submit("email", { password, confirmPassword });
       }} className="space-y-4">
         <fieldset disabled={!hydrated || pending || !simulate} className="min-w-0 space-y-4">
           {!registration && <fieldset className="flex flex-wrap gap-4">
@@ -55,7 +57,8 @@ export function AuthScreen({ registration = false, simulate }: { registration?: 
             {([ ["USER", "کاربر"], ["AUTHOR", "نویسنده"] ] as const).map(([value, label]) => <label key={value} className="flex min-h-12 items-center gap-2"><input type="radio" name="role" value={value} checked={role === value} onChange={() => setRole(value)} />{label}</label>)}
           </fieldset>}
           <Field label="ایمیل" htmlFor="auth-email"><Input id="auth-email" name="email" type="email" dir="ltr" autoComplete="email" className="min-h-12" aria-invalid={!!errors.email} aria-describedby={errors.email ? "email-error" : undefined} /><p id="email-error" className="text-sm text-destructive">{errors.email}</p></Field>
-          <Field label="گذرواژه" htmlFor="auth-password"><Input id="auth-password" name="password" type="password" autoComplete={registration ? "new-password" : "current-password"} className="min-h-12" aria-invalid={!!errors.password} aria-describedby={errors.password ? "password-error" : undefined} /><p id="password-error" className="text-sm text-destructive">{errors.password}</p></Field>
+          <Field label="گذرواژه" htmlFor="auth-password"><Input id="auth-password" name="password" type="password" autoComplete={registration ? "new-password" : "current-password"} className="min-h-12" aria-invalid={!!errors.password} aria-describedby={errors.password ? "password-error" : registration ? "password-hint" : undefined} />{registration && <p id="password-hint" className="text-sm text-muted-foreground">دست‌کم ۸ نویسه، شامل حرف انگلیسی، رقم انگلیسی و نماد؛ بدون فاصله یا نویسهٔ فارسی و غیرانگلیسی.</p>}<p id="password-error" className="text-sm text-destructive">{errors.password}</p></Field>
+          {registration && <Field label="تکرار گذرواژه" htmlFor="auth-confirm-password"><Input id="auth-confirm-password" name="confirmPassword" type="password" autoComplete="new-password" className="min-h-12" aria-invalid={!!errors.confirmPassword} aria-describedby={errors.confirmPassword ? "confirm-password-error" : undefined} /><p id="confirm-password-error" className="text-sm text-destructive">{errors.confirmPassword}</p></Field>}
           <Button type="submit" size="lg" className="w-full">{title} با ایمیل</Button>
           <div className="grid gap-4 sm:grid-cols-2">
             <Button size="lg" variant="outline" onClick={() => void submit("google")}>{title} با گوگل</Button>

@@ -5,6 +5,81 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+for (const role of ["USER", "AUTHOR"]) {
+  test(`${role} sidebar logout recovers errors, disables pending actions and persists signed-out state`, async ({ page, request }, testInfo) => {
+    await page.setViewportSize({ width: 360, height: 900 });
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=${role}&saveMode=error`);
+    await page.goto("/dashboard/workspace");
+    const logout = page.locator("aside").getByRole("button", { name: "خروج", exact: true });
+    await expect(logout).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    const beforeError = await page.getByRole("main").evaluate(element => element.getBoundingClientRect().top + window.scrollY);
+    await logout.click();
+    await expect(page.locator("aside").getByRole("alert")).toContainText("خروج انجام نشد");
+    const afterError = await page.getByRole("main").evaluate(element => element.getBoundingClientRect().top + window.scrollY);
+    expect(Math.abs(afterError - beforeError)).toBeLessThanOrEqual(1);
+    expect((await (await request.get("http://127.0.0.1:4101/dashboard-identity")).json()).role).toBe(role);
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=${role}&saveMode=slow`);
+    await logout.click();
+    await expect(page.locator("aside").getByRole("button", { name: "در حال خروج…", exact: true })).toBeDisabled();
+    await expect(page).toHaveURL(/:3102\/$/);
+    await page.reload();
+    await expect(page.getByRole("link", { name: "ورود / ثبت‌نام", exact: true })).toBeVisible();
+    await page.goto("/dashboard");
+    await expect(page.locator("aside").getByRole("button", { name: "خروج", exact: true })).toHaveCount(0);
+    for (const width of [360, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await request.post(`http://127.0.0.1:4101/__test/dashboard?role=${role}`);
+      await page.goto("/dashboard/workspace");
+      await expect(logout).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`sidebar-logout-${role}-${width}.png`), fullPage: true });
+      await logout.focus();
+      await page.keyboard.press("Enter");
+      await expect(page).toHaveURL(/:3102\/$/);
+      await expect(page.getByRole("link", { name: "ورود / ثبت‌نام", exact: true })).toBeVisible();
+    }
+  });
+}
+
+test("email registration fixture rejects invalid passwords and confirmations without changing identity", async ({ request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT");
+  for (const [password, confirmPassword] of [["Ab1!xyz", "Ab1!xyz"], ["1234567!", "1234567!"], ["abcdefgh!", "abcdefgh!"], ["abcdef12", "abcdef12"], ["Abcdef1! ", "Abcdef1! "], ["Abcdef1!فارسی", "Abcdef1!فارسی"], ["abcdef1!", "Abcdef1!"], ["abcdef1!", ""], [undefined, undefined]]) {
+    expect((await request.post("http://127.0.0.1:4101/__test/auth", { data: { operation: "register", provider: "email", role: "USER", password, confirmPassword } })).status()).toBe(400);
+    expect((await request.get("http://127.0.0.1:4101/dashboard-identity")).status()).toBe(401);
+  }
+  expect((await request.post("http://127.0.0.1:4101/__test/auth", { data: { operation: "register", provider: "email", role: "AUTHOR", password: "abcdef1!", confirmPassword: "abcdef1!" } })).status()).toBe(204);
+  expect((await (await request.get("http://127.0.0.1:4101/dashboard-identity")).json()).role).toBe("USER");
+});
+
+test("registration validates password rules and exact confirmation before fixture writes", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT");
+  await page.goto("/register");
+  await page.getByLabel("ایمیل", { exact: true }).fill("reader@example.test");
+  const password = page.getByLabel("گذرواژه", { exact: true });
+  const confirmation = page.getByLabel("تکرار گذرواژه", { exact: true });
+  await expect(confirmation).toBeVisible();
+  for (const [value, message] of [["Ab1!xyz", /۸ نویسه/], ["1234567!", /حرف انگلیسی/], ["abcdefgh!", /رقم انگلیسی/], ["abcdef12", /نماد/], ["Abcdef1! ", /فاصله/], ["Abcdef1!فارسی", /فارسی/]]) {
+    await password.fill(String(value));
+    await confirmation.fill(String(value));
+    await page.getByRole("button", { name: "ثبت‌نام با ایمیل", exact: true }).click();
+    await expect(password).toHaveAttribute("aria-invalid", "true");
+    await expect(password).toHaveAccessibleDescription(message);
+    await expect(password).toBeFocused();
+    expect((await request.get("http://127.0.0.1:4101/dashboard-identity")).status()).toBe(401);
+  }
+  await password.fill("abcdef1!");
+  await confirmation.fill("Abcdef1!");
+  await page.getByRole("button", { name: "ثبت‌نام با ایمیل", exact: true }).click();
+  await expect(confirmation).toHaveAccessibleDescription("تکرار گذرواژه باید دقیقاً با گذرواژه یکسان باشد.");
+  await expect(confirmation).toBeFocused();
+  await confirmation.fill("abcdef1!");
+  await page.getByRole("button", { name: "ثبت‌نام با ایمیل", exact: true }).click();
+  await expect(page).toHaveURL(/:3102\/$/);
+  await page.reload();
+  await expect(page.locator("header")).toContainText("کاربر");
+});
+
 test("fixture auth controls remain disabled without JavaScript", async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   try {
@@ -13,6 +88,7 @@ test("fixture auth controls remain disabled without JavaScript", async ({ browse
       await page.goto(`http://127.0.0.1:3102/${route}`);
       await expect(page.getByLabel("ایمیل", { exact: true })).toBeDisabled();
       await expect(page.getByLabel("گذرواژه", { exact: true })).toBeDisabled();
+      if (route === "register") await expect(page.getByLabel("تکرار گذرواژه", { exact: true })).toBeDisabled();
       for (const provider of ["ایمیل", "گوگل", "گیت‌هاب"]) {
         await expect(page.getByRole("button", { name: `${title} با ${provider}`, exact: true })).toBeDisabled();
       }
@@ -27,7 +103,8 @@ test("registration creates only USER and fixture header persists until logout", 
   await page.getByRole("link", { name: "ثبت‌نام", exact: true }).click();
   await expect(page.getByRole("radio")).toHaveCount(0);
   await page.getByLabel("ایمیل", { exact: true }).fill("reader@example.test");
-  await page.getByLabel("گذرواژه", { exact: true }).fill("fixture-only-password");
+  await page.getByLabel("گذرواژه", { exact: true }).fill("Fixture-only-1!");
+  await page.getByLabel("تکرار گذرواژه", { exact: true }).fill("Fixture-only-1!");
   await page.getByRole("button", { name: "ثبت‌نام با ایمیل", exact: true }).click();
   await expect(page).toHaveURL(/:3102\/$/);
   await expect(page.locator("header")).toContainText("کاربر");
@@ -89,7 +166,7 @@ for (const provider of ["گوگل", "گیت‌هاب"]) {
 
 test("fixture registration cannot assign AUTHOR or ADMIN and separate ADMIN preview remains", async ({ request }) => {
   for (const provider of ["email", "google", "github"]) {
-    expect((await request.post("http://127.0.0.1:4101/__test/auth", { data: { operation: "register", provider, role: "AUTHOR" } })).status()).toBe(204);
+    expect((await request.post("http://127.0.0.1:4101/__test/auth", { data: { operation: "register", provider, role: "AUTHOR", ...(provider === "email" ? { password: "abcdef1!", confirmPassword: "abcdef1!" } : {}) } })).status()).toBe(204);
     expect((await (await request.get("http://127.0.0.1:4101/dashboard-identity")).json()).role).toBe("USER");
     expect((await request.post("http://127.0.0.1:4101/__test/auth", { data: { operation: "login", provider, role: "ADMIN" } })).status()).toBe(400);
   }
@@ -1883,7 +1960,7 @@ test("each fixture Role gets an honest RTL dashboard with working role navigatio
     await expect(page.getByRole("link", { name: label, exact: true })).toHaveAttribute("aria-current", "page");
     await page.reload();
     await expect(page.getByRole("group", { name: "هویت حساب" })).toContainText(name);
-    await expect(page.getByRole("button", { name: "خروج", exact: true })).toHaveCount(0);
+    await expect(page.locator("aside").getByRole("button", { name: "خروج", exact: true })).toHaveCount(role === "ADMIN" ? 0 : 1);
   }
 });
 

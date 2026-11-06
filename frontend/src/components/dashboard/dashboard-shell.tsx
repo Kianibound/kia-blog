@@ -20,12 +20,13 @@ export function DashboardPageHeading({ title, description, actions }: { title: s
   );
 }
 
-export function DashboardShell({ identity, destinations, title, description, actions, children, pending = false }: {
+export function DashboardShell({ identity, destinations, title, description, actions, sidebarActions, children, pending = false }: {
   identity: DashboardIdentity | null;
   destinations: DashboardDestination[];
   title: string;
   description?: string;
   actions?: ReactNode;
+  sidebarActions?: ReactNode;
   children: ReactNode;
   pending?: boolean;
 }) {
@@ -53,6 +54,8 @@ export function DashboardShell({ identity, destinations, title, description, act
       <div className="grid min-w-0 flex-1 content-start gap-6 lg:grid-cols-4">
         <aside className="self-start rounded-surface border border-border bg-card p-4 lg:sticky lg:top-6">
           <DashboardNavigation destinations={destinations} pending={pending} />
+          {/* Reserve action geometry while identity is loading or unavailable. */}
+          <div className="mt-4 min-h-24">{pending ? <Skeleton className="h-12 w-24 motion-reduce:animate-none" /> : sidebarActions}</div>
         </aside>
         <main id="dashboard-content" tabIndex={-1} aria-labelledby="dashboard-heading" className="min-h-96 min-w-0 space-y-6 lg:col-span-3">
           <DashboardPageHeading title={title} description={description} actions={actions} />

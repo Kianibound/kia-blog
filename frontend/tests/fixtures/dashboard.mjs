@@ -1,5 +1,6 @@
 import { publishedPosts } from "./posts.mjs";
 import { randomUUID } from "node:crypto";
+import { validateRegistrationPasswords } from "../../src/lib/registration-validation.ts";
 
 // Test doubles only. There is no authentication or production account here.
 const identities = {
@@ -63,6 +64,7 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
       try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
       if (!input || typeof input !== "object" || !["register", "login", "logout"].includes(input.operation)) { response.writeHead(400).end(); return; }
       if (input.operation !== "logout" && (!["email", "google", "github"].includes(input.provider) || !["USER", "AUTHOR"].includes(input.role))) { response.writeHead(400).end(); return; }
+      if (input.operation === "register" && input.provider === "email" && Object.values(validateRegistrationPasswords(input.password, input.confirmPassword)).some(Boolean)) { response.writeHead(400).end(); return; }
       if (saveMode === "error") { response.writeHead(503).end(); return; }
       const send = () => {
         // Registration always selects USER, even for a tampered AUTHOR request.
