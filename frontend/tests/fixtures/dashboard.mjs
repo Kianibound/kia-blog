@@ -12,6 +12,15 @@ const identities = {
   ADMIN: { name: "مدیر نمونه", username: "admin", role: "ADMIN" },
 };
 let role = "USER";
+const userIdentities = {
+  narges: { ...identities.USER, id: "user" },
+  mina: { id: "user-mina", name: "مینا احمدی", username: "mina", role: "USER" },
+};
+let user = "narges";
+const currentUser = () => userIdentities[user];
+const bookmarks = new Map(); // USER id -> Set of public article slugs, test process only.
+let bookmarksMode = "success";
+const publicPostStatuses = new Map([...publishedPosts, ...previewPosts].map(post => [post, post.status]));
 let mode = "success";
 let author = "sara";
 let postsMode = "success";
@@ -58,6 +67,42 @@ function writeResponse(request, response, post, status = 200) {
 }
 
 export function handleDashboardFixture(request, response, url, categoryChoices) {
+  const bookmarkMatch = /^\/article-bookmarks\/([^/]+)$/.exec(url.pathname);
+  if (url.pathname === "/dashboard-bookmarks" || bookmarkMatch) {
+    if (role !== "USER") { response.writeHead(403).end(); return true; }
+    const ownerId = currentUser().id;
+    if (request.headers["x-fixture-user"] && request.headers["x-fixture-user"] !== ownerId) { response.writeHead(403).end(); return true; }
+    const saved = bookmarks.get(ownerId) ?? new Set();
+    const publicPosts = [...publishedPosts, ...previewPosts].filter(post => post.status === "PUBLISHED");
+    let slug;
+    if (bookmarkMatch) { try { slug = decodeURIComponent(bookmarkMatch[1]); } catch { response.writeHead(400).end(); return true; } }
+    if (request.method === "GET") {
+      if (bookmarkMatch && !publicPosts.some(post => post.slug === slug)) { response.writeHead(404).end(); return true; }
+      if (["error", "slow-error"].includes(bookmarksMode)) { const fail = () => response.writeHead(503).end(); if (bookmarksMode === "slow-error") setTimeout(fail, 1500); else fail(); return true; }
+      const payload = bookmarkMatch ? { userId: ownerId, slug, saved: saved.has(slug) } : { userId: ownerId, data: bookmarksMode === "empty" ? [] : publicPosts.filter(post => saved.has(post.slug)) };
+      if (bookmarksMode === "foreign") payload.userId = ownerId === "user" ? "user-mina" : "user";
+      if (bookmarksMode === "invalid") { if (bookmarkMatch) payload.saved = "invalid"; else payload.data = [{}]; }
+      const send = () => json(response, 200, payload);
+      if (bookmarksMode === "slow") setTimeout(send, 1500); else send();
+      return true;
+    }
+    if (!bookmarkMatch || !["PUT", "DELETE"].includes(request.method)) { response.writeHead(405).end(); return true; }
+    if (request.method === "PUT" && !publicPosts.some(post => post.slug === slug)) { response.writeHead(404).end(); return true; }
+    if (saveMode === "error") { response.writeHead(422).end(); return true; }
+    const send = () => {
+      if (role !== "USER" || currentUser().id !== ownerId) { response.writeHead(403).end(); return; }
+      const current = bookmarks.get(ownerId) ?? new Set();
+      if (request.method === "PUT") {
+        if (![...publishedPosts, ...previewPosts].some(post => post.slug === slug && post.status === "PUBLISHED")) { response.writeHead(404).end(); return; }
+        current.add(slug);
+      } else current.delete(slug);
+      bookmarks.set(ownerId, current);
+      if (saveMode === "uncertain") { request.socket.destroy(); return; }
+      response.writeHead(204).end();
+    };
+    if (saveMode === "slow") setTimeout(send, 1500); else send();
+    return true;
+  }
   const articleCommentsMatch = /^\/article-comments\/([^/]+)$/.exec(url.pathname);
   if (articleCommentsMatch) {
     let slug;
@@ -74,6 +119,7 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     }
     if (request.method !== "POST") { response.writeHead(405).end(); return true; }
     if (role !== "USER") { response.writeHead(403).end(); return true; }
+    const commentOwner = currentUser();
     let body = "";
     request.on("data", chunk => { body += chunk; });
     request.on("end", () => {
@@ -82,8 +128,8 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
       if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 1 || validateArticleCommentText(input.text)) { response.writeHead(400).end(); return; }
       if (saveMode === "error") { response.writeHead(422).end(); return; }
       const send = () => {
-        if (role !== "USER") { response.writeHead(403).end(); return; }
-        const comment = { id: randomUUID(), postId: post.id, userId: "user", name: identities.USER.name, text: input.text.trim(), status: "PENDING" };
+        if (role !== "USER" || currentUser().id !== commentOwner.id) { response.writeHead(403).end(); return; }
+        const comment = { id: randomUUID(), postId: post.id, userId: commentOwner.id, name: commentOwner.name, text: input.text.trim(), status: "PENDING" };
         comments.push(comment);
         if (saveMode === "uncertain") { request.socket.destroy(); return; }
         json(response, 201, comment);
@@ -106,6 +152,7 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
         // Registration always selects USER, even for a tampered AUTHOR request.
         role = input.operation === "logout" ? "SIGNED_OUT" : input.operation === "register" ? "USER" : input.role;
         author = "sara";
+        user = "narges";
         mode = "success";
         response.writeHead(204).end();
       };
@@ -119,6 +166,10 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     const nextRole = url.searchParams.get("role") ?? "USER";
     const nextMode = url.searchParams.get("mode") ?? "success";
     const nextAuthor = url.searchParams.get("author") ?? "sara";
+    const nextUser = url.searchParams.get("user") ?? "narges";
+    const nextBookmarksMode = url.searchParams.get("bookmarksMode") ?? "success";
+    const hidePost = url.searchParams.get("hidePost");
+    if (!Object.hasOwn(userIdentities, nextUser) || !["success", "empty", "error", "invalid", "foreign", "slow", "slow-error"].includes(nextBookmarksMode) || (hidePost && ![...publishedPosts, ...previewPosts].some(post => post.slug === hidePost))) { response.writeHead(400).end(); return true; }
     const nextPostsMode = url.searchParams.get("postsMode") ?? "success";
     const nextSaveMode = url.searchParams.get("saveMode") ?? "success";
     const nextFormMode = url.searchParams.get("formMode") ?? "success";
@@ -136,6 +187,8 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
       role = nextRole;
       mode = nextMode;
       author = nextAuthor;
+      user = nextUser;
+      bookmarksMode = nextBookmarksMode;
       postsMode = nextPostsMode;
       saveMode = nextSaveMode;
       formMode = nextFormMode;
@@ -143,7 +196,9 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
       commentsMode = nextCommentsMode;
       taxonomyMode = nextTaxonomyMode;
       avatarMode = nextAvatarMode;
-      if (url.searchParams.get("reset") === "1") { ownPosts = structuredClone(initialPosts); authors = []; comments = structuredClone(initialComments); taxonomy = undefined; writes = 0; images.clear(); avatars.clear(); }
+      if (url.searchParams.get("reset") === "1") { ownPosts = structuredClone(initialPosts); authors = []; comments = structuredClone(initialComments); taxonomy = undefined; writes = 0; images.clear(); avatars.clear(); bookmarks.clear(); for (const [post, status] of publicPostStatuses) post.status = status; }
+      if (hidePost === "") { for (const [post, status] of publicPostStatuses) post.status = status; }
+      else if (hidePost) [...publishedPosts, ...previewPosts].find(post => post.slug === hidePost).status = "DRAFT";
       response.writeHead(204).end();
     }
     return true;
@@ -225,22 +280,23 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
   const ownCommentMatch = /^\/dashboard-my-comments\/([^/]+)$/.exec(url.pathname);
   if (url.pathname === "/dashboard-my-comments" || ownCommentMatch) {
     if (role !== "USER") { response.writeHead(403).end(); return true; }
+    const ownerId = currentUser().id;
     if (!ownCommentMatch && request.method === "GET") {
       if (commentsMode === "error" || commentsMode === "slow-error") { const fail = () => response.writeHead(503).end(); if (commentsMode === "slow-error") setTimeout(fail, 1500); else fail(); return true; }
       const projection = comment => { const { id, userId, name, text, status } = comment; return { id, userId, name, text, status }; };
-      const data = commentsMode === "empty" ? [] : commentsMode === "invalid" ? [{ ...projection(initialComments[0]), status: "UNKNOWN" }] : commentsMode === "foreign" ? comments.filter(item => item.userId !== "user").map(projection) : comments.filter(item => item.userId === "user").map(projection);
+      const data = commentsMode === "empty" ? [] : commentsMode === "invalid" ? [{ ...projection(initialComments[0]), status: "UNKNOWN" }] : commentsMode === "foreign" ? comments.filter(item => item.userId !== ownerId).map(projection) : comments.filter(item => item.userId === ownerId).map(projection);
       const send = () => json(response, 200, data);
       if (commentsMode === "slow") setTimeout(send, 1500); else send();
       return true;
     }
     if (!ownCommentMatch || !["PATCH", "DELETE"].includes(request.method)) { response.writeHead(405).end(); return true; }
     const id = ownCommentMatch[1];
-    if (!comments.some(item => item.id === id && item.userId === "user")) { response.writeHead(404).end(); return true; }
+    if (!comments.some(item => item.id === id && item.userId === ownerId)) { response.writeHead(404).end(); return true; }
     const mutate = text => {
       if (saveMode === "error") { response.writeHead(422).end(); return; }
       const send = () => {
-        if (role !== "USER") { response.writeHead(403).end(); return; }
-        const index = comments.findIndex(item => item.id === id && item.userId === "user");
+        if (role !== "USER" || currentUser().id !== ownerId) { response.writeHead(403).end(); return; }
+        const index = comments.findIndex(item => item.id === id && item.userId === ownerId);
         if (index === -1) { response.writeHead(404).end(); return; }
         if (request.method === "DELETE") comments.splice(index, 1);
         else comments[index] = { ...comments[index], text, status: "PENDING" };
@@ -456,7 +512,7 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     response.writeHead(503).end("TEST DOUBLE: dashboard unavailable");
     return true;
   }
-  const identity = role === "AUTHOR" ? { ...identities.AUTHOR, id: authorIds[author], ...(author === "nima" ? { username: "nima", name: "نیما کیانی" } : {}) } : { ...identities[role], id: role.toLowerCase() };
+  const identity = role === "USER" ? currentUser() : role === "AUTHOR" ? { ...identities.AUTHOR, id: authorIds[author], ...(author === "nima" ? { username: "nima", name: "نیما کیانی" } : {}) } : { ...identities[role], id: role.toLowerCase() };
   const payload = mode === "invalid" ? { ...identity, role: "UNKNOWN" } : identity;
   const send = () => response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(payload));
   if (mode === "slow") setTimeout(send, 1500);

@@ -23,6 +23,20 @@ export type PostSummary = {
   categories: { id: string; name: string }[];
 };
 
+// Test-preview bookmark projections only; not a production bookmark API contract.
+export type BookmarkWriteResult = "saved" | "error" | "uncertain";
+export function parseBookmarkState(value: unknown, userId: string, slug: string): boolean {
+  if (!isRecord(value) || !isText(userId) || value.userId !== userId || value.slug !== slug || typeof value.saved !== "boolean") throw new Error("Invalid fixture bookmark state");
+  return value.saved;
+}
+
+export function parseBookmarkedPosts(value: unknown, userId: string): PostDetail[] {
+  if (!isRecord(value) || !isText(userId) || value.userId !== userId || !Array.isArray(value.data)) throw new Error("Invalid fixture bookmark ownership");
+  const posts = value.data.map(parsePublishedPost);
+  if (new Set(posts.map(post => post.id)).size !== posts.length || new Set(posts.map(post => post.slug)).size !== posts.length) throw new Error("Duplicate fixture bookmarks");
+  return posts;
+}
+
 // Optional frontend fixture projection; no backend media contract is implied.
 export type CoverImage = { src: string; alt: string };
 export function parseCoverImage(value: unknown): CoverImage | null {

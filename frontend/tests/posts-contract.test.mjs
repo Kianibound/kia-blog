@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parsePublishedPost, parsePublishedPosts } from "../src/lib/posts-contract.ts";
+import { parseBookmarkState, parseBookmarkedPosts, parsePublishedPost, parsePublishedPosts } from "../src/lib/posts-contract.ts";
 import { feed } from "./fixtures/posts.mjs";
 import { previewPosts } from "./fixtures/preview-posts.mjs";
 import { parseOwnPosts, parseAdminPosts } from "../src/lib/own-posts-contract.ts";
@@ -8,6 +8,16 @@ import { validateAuthorInput } from "../src/lib/author-form-contract.ts";
 import { parseApprovedComments, parseModerationComments, parseOwnComments, validateArticleCommentText } from "../src/lib/comment-moderation-contract.ts";
 import { parseFixtureAvatar } from "../src/lib/avatar-contract.ts";
 import { validatePasswordCharacters, validateRegistrationPasswords } from "../src/lib/registration-validation.ts";
+
+test("bookmark fixture responses validate USER ownership, selected article and published-only unique cards", () => {
+  assert.equal(parseBookmarkState({ userId: "user", slug: "test-post-1", saved: true }, "user", "test-post-1"), true);
+  assert.equal(parseBookmarkState({ userId: "user", slug: "test-post-1", saved: false }, "user", "test-post-1"), false);
+  for (const value of [null, { userId: "other", slug: "test-post-1", saved: true }, { userId: "user", slug: "other", saved: true }, { userId: "user", slug: "test-post-1", saved: "true" }]) assert.throws(() => parseBookmarkState(value, "user", "test-post-1"));
+  const payload = { userId: "user", data: [feed.data[0]] };
+  assert.equal(parseBookmarkedPosts(payload, "user")[0].slug, "test-post-1");
+  assert.deepEqual(parseBookmarkedPosts({ userId: "user", data: [] }, "user"), []);
+  for (const value of [{ ...payload, userId: "other" }, { ...payload, data: [feed.data[0], feed.data[0]] }, { ...payload, data: [{ ...feed.data[0], status: "DRAFT" }] }, { ...payload, data: [{ ...feed.data[0], status: "DEPRECATED" }] }, { userId: "user", data: [{}] }]) assert.throws(() => parseBookmarkedPosts(value, "user"));
+});
 
 test("My Comments accepts only the current USER's pending or approved comments without list associations", () => {
   const comment = { id: "own-1", userId: "user", name: "نرگس رضایی", text: "دیدگاه من", status: "PENDING", postId: "article-1" };

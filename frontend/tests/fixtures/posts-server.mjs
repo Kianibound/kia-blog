@@ -96,6 +96,7 @@ createServer((request, response) => {
   response.writeHead(200, { "Content-Type": "application/json" });
   const source = postsMode === "empty" ? [] : preview ? previewPosts : publishedPosts;
   const posts = source.filter((post) =>
+    post.status === "PUBLISHED" &&
     (!search || [post.title, post.content].some((text) => text.toLowerCase().includes(search.toLowerCase()))) &&
     (!category || post.categories.some((item) => item.slug === category)) &&
     (!tag || post.tags.some((item) => item.slug === tag)));

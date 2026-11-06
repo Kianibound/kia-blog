@@ -5,6 +5,196 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+test("bookmark toggles preserve known state on errors, block pending writes and resolve uncertain removals on reload", async ({ page, request }) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=USER";
+  await page.goto("/posts/test-post-2");
+  const region = page.getByRole("region", { name: "ذخیره‌سازی مقاله", exact: true });
+  const save = region.getByRole("button", { name: "ذخیره مقاله", exact: true });
+  await request.post(`${control}&saveMode=error`);
+  await save.click();
+  await expect(region.getByRole("alert")).toContainText("انجام عملیات ممکن نشد");
+  await expect(save).toHaveAttribute("aria-pressed", "false");
+  await request.post(`${control}&saveMode=slow`);
+  await save.click();
+  await expect(save).toBeDisabled();
+  await expect(region.getByRole("status")).toHaveText("در حال ثبت ذخیره‌سازی…");
+  const remove = region.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true });
+  await expect(remove).toHaveAttribute("aria-pressed", "true");
+  await request.post(`${control}&saveMode=uncertain`);
+  await remove.click();
+  await expect(region.getByRole("alert")).toContainText("نتیجهٔ عملیات مشخص نیست");
+  await expect(remove).toHaveAttribute("aria-pressed", "true");
+  await expect(remove).toBeDisabled();
+  await page.reload();
+  await expect(save).toHaveAttribute("aria-pressed", "false");
+  await request.post(control);
+  await request.put("http://127.0.0.1:4101/article-bookmarks/test-post-2");
+  await page.goto("/dashboard/bookmarks");
+  await request.post(`${control}&saveMode=error`);
+  await page.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("انجام عملیات ممکن نشد");
+  await expect(page.getByRole("main").getByRole("article")).toHaveCount(1);
+  await request.post(`${control}&saveMode=slow`);
+  const listRemove = page.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true });
+  await listRemove.click();
+  await expect(listRemove).toBeDisabled();
+  await expect(page.getByRole("main").getByRole("article")).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("status")).toHaveText("مقاله از ذخیره‌شده‌ها حذف شد.");
+});
+
+test("bookmark reading recovers loading, invalid and foreign states with stable RTL layouts in both themes", async ({ page, request }, testInfo) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=USER";
+  await request.put("http://127.0.0.1:4101/article-bookmarks/test-post-2");
+  await request.put("http://127.0.0.1:4101/article-bookmarks/test-post-1");
+  const list = page.getByRole("region", { name: "فهرست مقالات ذخیره‌شده", exact: true });
+  for (const theme of ["dark", "light"] as const) {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    for (const width of [360, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await request.post(`${control}&bookmarksMode=slow`);
+      await page.goto("/dashboard/bookmarks", { waitUntil: "commit" });
+      await expect(list.getByRole("status")).toHaveText("در حال دریافت مقالات ذخیره‌شده…");
+      await page.evaluate(() => document.fonts.ready);
+      const before = await list.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY);
+      await expect(list.getByRole("article")).toHaveCount(2);
+      expect(Math.abs(await list.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY) - before)).toBeLessThanOrEqual(1);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await expect(page.locator("html")).toHaveCSS("color-scheme", theme);
+      await page.screenshot({ path: testInfo.outputPath(`bookmarks-${theme}-${width}.png`), fullPage: true });
+    }
+  }
+  for (const mode of ["error", "invalid", "foreign", "slow-error"]) {
+    await request.post(`${control}&bookmarksMode=${mode}`);
+    await page.reload({ waitUntil: mode === "slow-error" ? "commit" : "load" });
+    let before = 0;
+    if (mode === "slow-error") { await expect(list.getByRole("status")).toHaveText("در حال دریافت مقالات ذخیره‌شده…"); before = await list.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY); }
+    await expect(list.getByRole("alert")).toContainText("دریافت مقالات ذخیره‌شده ممکن نشد");
+    await expect(list.getByRole("article")).toHaveCount(0);
+    if (mode === "slow-error") expect(Math.abs(await list.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY) - before)).toBeLessThanOrEqual(1);
+  }
+  await request.post(`${control}&bookmarksMode=empty`);
+  await list.getByRole("button", { name: "تلاش دوباره", exact: true }).click();
+  await expect(list).toContainText("هنوز مقاله‌ای ذخیره نکرده‌اید.");
+  const state = page.getByRole("region", { name: "ذخیره‌سازی مقاله", exact: true });
+  for (const mode of ["slow", "error", "foreign", "invalid", "slow-error"]) {
+    await request.post(`${control}&bookmarksMode=${mode}`);
+    await page.goto("/posts/test-post-2", { waitUntil: ["slow", "slow-error"].includes(mode) ? "commit" : "load" });
+    let before = 0;
+    if (["slow", "slow-error"].includes(mode)) { await expect(state.getByRole("status")).toHaveText("در حال دریافت وضعیت ذخیره…"); await page.evaluate(() => document.fonts.ready); before = await state.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY); }
+    if (mode === "slow") await expect(state.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true })).toHaveAttribute("aria-pressed", "true");
+    else { await expect(state.getByRole("alert")).toContainText("دریافت وضعیت ذخیره ممکن نشد"); await expect(state.getByRole("button", { name: "ذخیره مقاله", exact: true })).toHaveCount(0); }
+    if (["slow", "slow-error"].includes(mode)) expect(Math.abs(await state.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY) - before)).toBeLessThanOrEqual(1);
+  }
+  await request.post(control);
+  await state.getByRole("button", { name: "تلاش دوباره", exact: true }).click();
+  await expect(state.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "فهرست پیشخوان", exact: true }).click();
+  const nav = page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true });
+  await expect(nav.getByRole("link", { name: "فضای خواندن", exact: true })).toHaveCount(0);
+  await nav.getByRole("link", { name: "مقالات ذخیره‌شده", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/dashboard\/bookmarks$/);
+  await expect(list.getByRole("article")).toHaveCount(2);
+});
+
+test("bookmark fixture writes are idempotent, concurrent saves are retained and unpublished articles stay hidden", async ({ request, page }) => {
+  const base = "http://127.0.0.1:4101";
+  for (const role of ["SIGNED_OUT", "AUTHOR", "ADMIN"]) {
+    await request.post(`${base}/__test/dashboard?role=${role}`);
+    for (const path of ["/dashboard-bookmarks", "/article-bookmarks/test-post-2"]) expect((await request.get(`${base}${path}`)).status()).toBe(403);
+    expect((await request.put(`${base}/article-bookmarks/test-post-2`)).status()).toBe(403);
+    expect((await request.delete(`${base}/article-bookmarks/test-post-2`)).status()).toBe(403);
+    expect((await page.goto("/posts/test-post-2"))?.status()).toBe(200);
+    await expect(page.getByRole("button", { name: "ذخیره مقاله", exact: true })).toHaveCount(0);
+  }
+  await request.post(`${base}/__test/dashboard?role=USER&saveMode=slow`);
+  const writes = await Promise.all([request.put(`${base}/article-bookmarks/test-post-1`), request.put(`${base}/article-bookmarks/test-post-2`)]);
+  expect(writes.map(response => response.status())).toEqual([204, 204]);
+  expect((await (await request.get(`${base}/dashboard-bookmarks`)).json()).data).toHaveLength(2);
+  await request.post(`${base}/__test/dashboard?role=USER`);
+  await request.put(`${base}/article-bookmarks/test-post-2`);
+  expect((await (await request.get(`${base}/dashboard-bookmarks`)).json()).data).toHaveLength(2);
+  await request.post(`${base}/__test/dashboard?role=USER&hidePost=test-post-2`);
+  expect((await request.get(`${base}/article-bookmarks/test-post-2`)).status()).toBe(404);
+  expect((await request.put(`${base}/article-bookmarks/test-post-2`)).status()).toBe(404);
+  expect((await page.goto("/posts/test-post-2"))?.status()).toBe(404);
+  await page.goto("/dashboard/bookmarks");
+  await expect(page.getByRole("main").getByRole("article")).toHaveCount(1);
+  await expect(page.getByRole("main").getByRole("article").getByRole("link")).toHaveAttribute("href", "/posts/test-post-1");
+  expect((await request.delete(`${base}/article-bookmarks/test-post-2`)).status()).toBe(204);
+  await request.post(`${base}/__test/dashboard?role=USER&hidePost=`);
+  expect((await (await request.get(`${base}/article-bookmarks/test-post-2`)).json()).saved).toBe(false);
+  for (const slug of ["missing-post", "draft-post", "deprecated-post"]) {
+    expect((await request.put(`${base}/article-bookmarks/${slug}`)).status()).toBe(404);
+    expect((await page.goto(`/posts/${slug}`))?.status()).toBe(404);
+  }
+});
+
+test("bookmarks and existing comment ownership stay isolated between fixture USER identities", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  await request.put(`${base}/article-bookmarks/test-post-2`);
+  await request.post(`${base}/__test/dashboard?role=USER&user=mina`);
+  expect((await (await request.get(`${base}/dashboard-identity`)).json()).id).toBe("user-mina");
+  await page.goto("/dashboard/bookmarks");
+  await expect(page.getByRole("main")).toContainText("هنوز مقاله‌ای ذخیره نکرده‌اید.");
+  expect((await request.put(`${base}/article-bookmarks/test-post-2`, { headers: { "X-Fixture-User": "user" } })).status()).toBe(403);
+  await page.goto("/posts/test-post-2");
+  await page.getByRole("button", { name: "ذخیره مقاله", exact: true }).click();
+  await expect(page.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.goto("/dashboard/bookmarks");
+  await page.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("article")).toHaveCount(0);
+  await request.put(`${base}/article-bookmarks/test-post-1`);
+  expect(await (await request.get(`${base}/dashboard-my-comments`)).json()).toEqual([]);
+  expect((await request.patch(`${base}/dashboard-my-comments/60000000-0000-4000-8000-000000000001`, { data: { text: "نباید ذخیره شود" } })).status()).toBe(404);
+  const own = await request.post(`${base}/article-comments/test-post-1`, { data: { text: "دیدگاه کاربر دوم" } });
+  expect((await own.json()).userId).toBe("user-mina");
+  await request.post(`${base}/__test/dashboard?role=USER&user=narges`);
+  await page.goto("/dashboard/bookmarks");
+  await expect(page.getByRole("main").getByRole("article").getByRole("link")).toHaveAttribute("href", "/posts/test-post-2");
+  expect((await (await request.get(`${base}/dashboard-my-comments`)).json()).map((item: { userId: string }) => item.userId)).toEqual(["user"]);
+  await page.reload();
+  await expect(page.getByRole("main").getByRole("article")).toHaveCount(1);
+  await request.post(`${base}/__test/dashboard?role=USER&user=mina`);
+  await page.reload();
+  await expect(page.getByRole("main").getByRole("article").getByRole("link")).toHaveAttribute("href", "/posts/test-post-1");
+});
+
+test("USER bookmarks published articles, opens the saved list and removes bookmarks with reload persistence", async ({ page }) => {
+  await page.goto("/posts/test-post-2");
+  const toggle = page.getByRole("button", { name: "ذخیره مقاله", exact: true });
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await toggle.click();
+  const remove = page.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true });
+  await expect(remove).toHaveAttribute("aria-pressed", "true");
+  await page.reload();
+  await expect(remove).toHaveAttribute("aria-pressed", "true");
+  await page.goto("/dashboard");
+  const nav = page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true });
+  await expect(nav.getByRole("link", { name: "فضای خواندن", exact: true })).toHaveCount(0);
+  await nav.getByRole("link", { name: "مقالات ذخیره‌شده", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/bookmarks$/);
+  const article = page.getByRole("main").getByRole("article");
+  await expect(article).toHaveCount(1);
+  await expect(article.getByRole("link")).toHaveAttribute("href", "/posts/test-post-2");
+  await article.getByRole("link").click();
+  await expect(remove).toHaveAttribute("aria-pressed", "true");
+  await remove.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await page.reload();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await toggle.click();
+  await expect(remove).toHaveAttribute("aria-pressed", "true");
+  await page.goto("/dashboard/bookmarks");
+  await page.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true }).click();
+  await expect(article).toHaveCount(0);
+  await expect(page.getByRole("main")).toContainText("هنوز مقاله‌ای ذخیره نکرده‌اید.");
+  await page.reload();
+  await expect(article).toHaveCount(0);
+});
+
 test("My Comments rejects non-USER access, foreign ownership and forged moderation or association fields", async ({ page, request }) => {
   const base = "http://127.0.0.1:4101";
   const own = `${base}/dashboard-my-comments/60000000-0000-4000-8000-000000000001`;
@@ -2335,10 +2525,10 @@ test("author list remains readable and keyboard-paginated on mobile in both them
 });
 
 test("each fixture Role gets an honest RTL dashboard with working role navigation", async ({ page, request }) => {
-  for (const [role, name, label] of [
-    ["USER", "نرگس رضایی", "فضای خواندن"],
-    ["AUTHOR", "سارا کیانی", "فضای نویسندگی"],
-    ["ADMIN", "مدیر نمونه", "فضای مدیریت"],
+  for (const [role, name, label, destination] of [
+    ["USER", "نرگس رضایی", "مقالات ذخیره‌شده", "bookmarks"],
+    ["AUTHOR", "سارا کیانی", "فضای نویسندگی", "workspace"],
+    ["ADMIN", "مدیر نمونه", "فضای مدیریت", "workspace"],
   ]) {
     await request.post(`http://127.0.0.1:4101/__test/dashboard?role=${role}`);
     await page.goto("/dashboard");
@@ -2347,7 +2537,7 @@ test("each fixture Role gets an honest RTL dashboard with working role navigatio
     await expect(page.getByRole("note")).toContainText("داده‌های آزمایشی");
     await expect(page.getByRole("group", { name: "هویت حساب" })).toContainText(name);
     await page.getByRole("link", { name: label, exact: true }).click();
-    await expect(page).toHaveURL(/\/dashboard\/workspace$/);
+    await expect(page).toHaveURL(new RegExp(`/dashboard/${destination}$`));
     await expect(page.getByRole("heading", { level: 1, name: label })).toBeVisible();
     await expect(page.getByRole("link", { name: label, exact: true })).toHaveAttribute("aria-current", "page");
     await page.reload();

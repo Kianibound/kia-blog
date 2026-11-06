@@ -19,5 +19,5 @@ export async function PreviewOwnComments({ userId }: { userId: string }) {
   } catch {
     return <section aria-label="فهرست کامنت‌های من" className="min-h-160"><Card className="min-h-64 space-y-4 p-6" role="alert"><p>دریافت کامنت‌های شما ممکن نشد.</p><form><Button size="lg" type="submit">تلاش دوباره</Button></form></Card></section>;
   }
-  return <OwnCommentList initialComments={comments} saveAction={saveOwnFixtureComment} deleteAction={deleteOwnFixtureComment} />;
+  return <OwnCommentList key={userId} initialComments={comments} saveAction={saveOwnFixtureComment} deleteAction={deleteOwnFixtureComment} />;
 }

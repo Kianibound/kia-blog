@@ -56,6 +56,23 @@ not connect to a real database or prove live Nest deployment interoperability.
 
 ## Conventions
 
+### Bookmarks preview (Issue #15)
+
+Published article pages on the test-only host (3102) provide a USER bookmark
+toggle. `/dashboard/bookmarks` reuses public article cards and the same toggle
+to remove saved articles. The USER sidebar links directly to this list and no
+longer includes «فضای خواندن»; the existing dashboard and other role menus stay
+available. No production bookmark adapter, authentication or database is added.
+
+Bookmarks are stored per fixture USER id and survive reload. Select
+`POST /__test/dashboard?role=USER&user=narges` (default) or `user=mina`, then reload
+to inspect isolation. Comment ownership also follows the selected USER.
+`bookmarksMode=slow|empty|error|invalid|foreign|slow-error` and the existing
+`saveMode` options exercise pending/failure feedback. `hidePost=test-post-2`
+temporarily unpublishes that public fixture article for feed/detail/bookmark
+visibility checks; `hidePost=` restores visibility without clearing bookmarks.
+`reset=1` restores public article statuses and clears every USER's bookmarks.
+
 ### My Comments preview (Issue #37)
 
 The USER-only sidebar entry «کامنت‌های من» opens `/dashboard/my-comments` on
