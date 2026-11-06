@@ -1,4 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from '@nestjs/common';
+import { createHash } from 'node:crypto';
+import { Prisma } from '../generated/prisma/client';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
 import * as argon2 from 'argon2';
@@ -26,6 +32,17 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    if (
+      dto.confirmPassword !== undefined &&
+      dto.confirmPassword !== dto.password
+    ) {
+      throw new BadRequestException(
+        'confirmPassword must exactly match password',
+      );
+    }
+    const username =
+      dto.username ??
+      `user_${createHash('sha256').update(dto.email).digest('hex')}`;
     // Hash password before saving
     const passwordHash = await argon2.hash(dto.password);
 
@@ -33,13 +50,25 @@ export class AuthService {
     const defaultRole = await this.rolesService.findRequiredByName('USER');
 
     // Create user
-    const user = await this.usersService.create({
-      email: dto.email,
-      username: dto.username,
-      name: dto.name,
-      passwordHash,
-      roleId: defaultRole.id,
-    });
+    const user = await this.usersService
+      .create({
+        email: dto.email,
+        username,
+        name: dto.name ?? username,
+        passwordHash,
+        roleId: defaultRole.id,
+      })
+      .catch((error: unknown) => {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        ) {
+          throw new ConflictException(
+            'An account with this email or username already exists.',
+          );
+        }
+        throw error;
+      });
 
     // Create and optionally send verification email
     const verificationUrl = await this.emailVerificationService.createAndSend(
@@ -49,7 +78,8 @@ export class AuthService {
 
     return {
       user,
-      message: 'Registration successful. Please verify your email.',
+      message:
+        'Registration successful. Log in with your email and password. No session was created.',
       ...(process.env.NODE_ENV !== 'production' && {
         verificationUrl,
       }),

@@ -10,6 +10,8 @@ import { PrismaService } from '../../src/database/prisma.service';
 import { MailService } from '../../src/mail/mail.service';
 import { CloudinaryService } from '../../src/media/cloudinary.service';
 import { userPublicSelect } from '../../src/users/user.select';
+import { ThrottlerStorage } from '@nestjs/throttler';
+import { Prisma } from '../../src/generated/prisma/client';
 import { setupSwagger } from '../../src/swagger';
 import type {
   OpenAPIObject,
@@ -98,6 +100,16 @@ describe('Backend contracts with isolated I/O', () => {
       .useValue(mail)
       .overrideProvider(CloudinaryService)
       .useValue(cloudinary)
+      // Rate-limit windows are not the subject of isolated contract examples.
+      .overrideProvider(ThrottlerStorage)
+      .useValue({
+        increment: async () => ({
+          totalHits: 1,
+          timeToExpire: 60,
+          isBlocked: false,
+          timeToBlockExpire: 0,
+        }),
+      })
       .compile();
     app = module.createNestApplication();
     app.useGlobalPipes(
@@ -217,6 +229,17 @@ describe('Backend contracts with isolated I/O', () => {
     }
     const create = resolve(document.components!.schemas!.CreatePostDto);
     expect(create.required).toEqual(['title', 'content']);
+    const registration = resolve(document.components!.schemas!.RegisterDto);
+    expect(registration.required).toEqual(['email', 'password']);
+    expect(registration.properties!.password).toMatchObject({
+      minLength: 8,
+      pattern: expect.any(String),
+    });
+    expect(registration.properties).toHaveProperty('confirmPassword');
+    expect(registration.properties).not.toHaveProperty('role');
+    expect(
+      resolve(document.components!.schemas!.RegisterResponseDto).properties,
+    ).not.toHaveProperty('accessToken');
     expect(create.properties!.categoryIds).toEqual({
       type: 'array',
       items: { type: 'string', format: 'uuid' },
@@ -513,6 +536,88 @@ describe('Backend contracts with isolated I/O', () => {
   });
 
   describe('Auth and Sessions', () => {
+    it('rejects invalid registration passwords, confirmations and role injection before persistence', async () => {
+      const valid = { email: 'new@example.com', password: 'Valid123!' };
+      for (const input of [
+        ...[
+          'Ab1!',
+          'abcdefgh!',
+          '12345678!',
+          'Abcdefg1',
+          'Valid 123!',
+          'Valid123!\n',
+          'رمزValid123!',
+          'Valid123!é',
+        ].map((password) => ({ ...valid, password })),
+        { ...valid, confirmPassword: 'Different123!' },
+        { ...valid, confirmPassword: null },
+        { ...valid, role: 'AUTHOR' },
+        { ...valid, roleId: 'admin-id' },
+        { ...valid, username: '   ' },
+        { ...valid, name: '   ' },
+        { ...valid, email: ' new@example.com ' },
+      ]) {
+        await request(app.getHttpServer())
+          .post('/auth/register')
+          .send(input)
+          .expect(400);
+      }
+      expect(persistence.user.create).not.toHaveBeenCalled();
+      expect(persistence.emailVerificationToken.create).not.toHaveBeenCalled();
+    });
+    it('reports database uniqueness conflicts without creating verification or session state', async () => {
+      persistence.user.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('duplicate', {
+          code: 'P2002',
+          clientVersion: 'test',
+        }),
+      );
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({ email: 'reader@example.com', password: 'Valid123!' })
+        .expect(409);
+      expect(persistence.emailVerificationToken.create).not.toHaveBeenCalled();
+      expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+    });
+    it('accepts frontend registration without profile fields and requires a separate login', async () => {
+      persistence.user.create.mockImplementation(async (args) => ({
+        ...safeUser,
+        ...(args as { data: object }).data,
+        passwordHash: undefined,
+      }));
+      const response = await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          email: 'new@example.com',
+          password: 'Valid123!',
+          confirmPassword: 'Valid123!',
+        })
+        .expect(201);
+      expect(response.body.user.username).toMatch(/^user_[a-f0-9]{64}$/);
+      expect(response.body.user.name).toBe(response.body.user.username);
+      expect(response.body).not.toHaveProperty('accessToken');
+      expect(response.body).not.toHaveProperty('refreshToken');
+      expect(response.body.message).toContain('Log in');
+      expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+      expect(persistence.role.findUnique).toHaveBeenCalledWith({
+        where: { name: 'USER' },
+      });
+      const stored = (
+        persistence.user.create.mock.calls[0][0] as {
+          data: { passwordHash: string };
+        }
+      ).data;
+      expect(await argon2.verify(stored.passwordHash, 'Valid123!')).toBe(true);
+      persistence.user.findUnique.mockImplementation(async (args) =>
+        (args as { select?: unknown }).select
+          ? safeUser
+          : { ...safeUser, passwordHash: stored.passwordHash },
+      );
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'new@example.com', password: 'Valid123!' })
+        .expect(200);
+    });
     it('registers with a hashed password/default role and hides verification links in production', async () => {
       const previousMode = process.env.NODE_ENV;
       process.env.NODE_ENV = 'production';
@@ -528,6 +633,14 @@ describe('Backend contracts with isolated I/O', () => {
           .expect(201);
         expect(response.body.verificationUrl).toBeUndefined();
         expect(response.body.user.passwordHash).toBeUndefined();
+        expect(persistence.user.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              username: 'new_reader',
+              name: 'New Reader',
+            }),
+          }),
+        );
         expect(persistence.role.findUnique).toHaveBeenCalledWith({
           where: { name: 'USER' },
         });

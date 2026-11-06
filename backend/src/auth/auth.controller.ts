@@ -5,7 +5,10 @@ import {
   ForgotPasswordResponseDto,
 } from './dto/auth-response.dto';
 import { UserResponseDto } from '../users/dto/user-response.dto';
-import { MessageResponseDto } from '../common/dto/response.dto';
+import {
+  ErrorResponseDto,
+  MessageResponseDto,
+} from '../common/dto/response.dto';
 import {
   Body,
   Controller,
@@ -39,16 +42,19 @@ import {
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @ApiOperation({ summary: 'Register a new user' })
+  @ApiOperation({
+    summary: 'Register a USER account',
+    description:
+      'Creates a USER only. Returns no access or refresh tokens; call POST /auth/login separately. Existing email-verification behavior is unchanged.',
+  })
   @ApiBody({
     type: RegisterDto,
     examples: {
       default: {
         value: {
           email: 'user@example.com',
-          username: 'test_user',
           password: 'StrongPassword123!',
-          name: 'Test User',
+          confirmPassword: 'StrongPassword123!',
         },
       },
     },
@@ -56,9 +62,20 @@ export class AuthController {
   @ApiResponse({
     type: RegisterResponseDto,
     status: 201,
-    description: 'User registered successfully.',
+    description:
+      'USER registered successfully. No session created; a subsequent login is required.',
   })
   @Post('register')
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 400,
+    description: 'Invalid registration fields, password or confirmation.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 409,
+    description: 'Email or username already exists.',
+  })
   @Throttle({
     default: {
       limit: 5,

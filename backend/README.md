@@ -31,6 +31,30 @@ The project includes authentication, role-based authorization, posts, categories
 - Forgot password
 - Reset password
 
+### Email registration contract
+
+`POST /auth/register` accepts `{ email, password, confirmPassword? }` and always
+creates a `USER`. `role` and `roleId` are rejected. Passwords require at least
+8 printable ASCII characters (U+0021 through U+007E), including an English
+letter, a digit and a symbol. Whitespace and non-ASCII characters are rejected;
+passwords are never trimmed. When supplied, `confirmPassword` must match exactly;
+it is not stored. Confirmation remains optional for legacy API callers; the
+completed frontend requires it.
+
+Existing callers may still supply nonempty `username` and `name` (trimmed before
+validation). Otherwise username is `user_` followed by the full SHA-256 hex digest
+of the exact validated email, and name defaults to that resolved username.
+No email normalization or existing-account migration is performed: subsequent
+email login uses the same email. Unique email/username conflicts return HTTP 409;
+invalid input returns HTTP 400. Generated usernames are identifiers, not secrets.
+
+Registration returns HTTP 201 with the safe user and a message, **without access
+or refresh tokens**. The client must subsequently call `POST /auth/login`.
+Existing verification-token creation and optional delivery remain unchanged;
+login does not currently require email verification. Login's existing password
+validation is unchanged and does not acquire registration complexity rules.
+No database migration or new configuration is required for this contract.
+
 ### Authorization
 
 Three application roles are supported:

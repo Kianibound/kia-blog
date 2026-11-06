@@ -15,7 +15,11 @@ export class LoginResponseDto extends AccessTokenResponseDto {
 }
 
 export class RegisterResponseDto extends MessageResponseDto {
-  @ApiProperty({ type: UserResponseDto })
+  @ApiProperty({
+    type: UserResponseDto,
+    description:
+      'Created USER account; registration does not return session tokens.',
+  })
   user: UserResponseDto;
   @ApiPropertyOptional({ description: 'Only returned outside production.' })
   verificationUrl?: string;
