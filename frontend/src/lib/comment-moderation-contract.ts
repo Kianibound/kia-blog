@@ -4,6 +4,12 @@ export type CommentOperation = "approve" | "delete";
 export type CommentModerationResult = "saved" | "error" | "uncertain";
 export type ArticleCommentSubmissionResult = "pending" | "error" | "uncertain";
 
+export function parseOwnComments(value: unknown, userId: string): ModerationComment[] {
+  const comments = parseModerationComments(value);
+  if (!userId || !Array.isArray(value) || value.some(item => item.userId !== userId)) throw new Error("Invalid fixture Comment ownership");
+  return comments;
+}
+
 export function validateArticleCommentText(value: unknown): string {
   return typeof value === "string" && value.trim() ? "" : "متن دیدگاه را وارد کنید.";
 }

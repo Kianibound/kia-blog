@@ -56,6 +56,21 @@ not connect to a real database or prove live Nest deployment interoperability.
 
 ## Conventions
 
+### My Comments preview (Issue #37)
+
+The USER-only sidebar entry «کامنت‌های من» opens `/dashboard/my-comments` on
+the existing test host (3102). Its fixture read validates ownership before
+showing text and PENDING/APPROVED status; article associations are omitted.
+Edits and confirmed deletions use the same comment records as article reading
+and ADMIN moderation. Every edit returns to PENDING and hides the revised text
+publicly until ADMIN approval. Failed writes preserve input; uncertain writes
+block repeat actions until reload. Nothing is activated in production.
+
+The existing `commentsMode` and `saveMode` controls exercise loading, empty,
+error and uncertain states; `commentsMode=foreign` tests rejected ownership.
+To prepare both owned statuses, approve the initial USER comment through ADMIN
+moderation, then submit another comment as USER on `/posts/test-post-2`.
+
 ### Article comments preview (Issue #36)
 
 The test-only host now composes the existing public `/posts/[slug]` page, fixing

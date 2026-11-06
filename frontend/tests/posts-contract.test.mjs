@@ -5,9 +5,17 @@ import { feed } from "./fixtures/posts.mjs";
 import { previewPosts } from "./fixtures/preview-posts.mjs";
 import { parseOwnPosts, parseAdminPosts } from "../src/lib/own-posts-contract.ts";
 import { validateAuthorInput } from "../src/lib/author-form-contract.ts";
-import { parseApprovedComments, parseModerationComments, validateArticleCommentText } from "../src/lib/comment-moderation-contract.ts";
+import { parseApprovedComments, parseModerationComments, parseOwnComments, validateArticleCommentText } from "../src/lib/comment-moderation-contract.ts";
 import { parseFixtureAvatar } from "../src/lib/avatar-contract.ts";
 import { validatePasswordCharacters, validateRegistrationPasswords } from "../src/lib/registration-validation.ts";
+
+test("My Comments accepts only the current USER's pending or approved comments without list associations", () => {
+  const comment = { id: "own-1", userId: "user", name: "نرگس رضایی", text: "دیدگاه من", status: "PENDING", postId: "article-1" };
+  assert.deepEqual(parseOwnComments([comment], "user"), [{ id: "own-1", name: "نرگس رضایی", text: "دیدگاه من", status: "PENDING" }]);
+  assert.equal(parseOwnComments([{ ...comment, status: "APPROVED" }], "user")[0].status, "APPROVED");
+  assert.deepEqual(parseOwnComments([], "user"), []);
+  for (const value of [[{ ...comment, userId: "other" }], [{ ...comment, userId: undefined }], [{ ...comment, status: "UNKNOWN" }], [comment, comment], null]) assert.throws(() => parseOwnComments(value, "user"));
+});
 
 test("public article comments accept only approved records and nonempty comment text", () => {
   const comment = { id: "comment-1", name: "نرگس رضایی", text: "دیدگاه تأییدشده", status: "APPROVED" };

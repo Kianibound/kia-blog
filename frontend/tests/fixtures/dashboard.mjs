@@ -128,7 +128,7 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
     const nextAvatarMode = url.searchParams.get("avatarMode") ?? "success";
     if (!["success", "error", "invalid", "slow"].includes(nextAvatarMode)) { response.writeHead(400).end(); return true; }
     if (!["success", "empty", "error", "invalid", "slow"].includes(nextTaxonomyMode)) { response.writeHead(400).end(); return true; }
-    if (!["success", "empty", "error", "invalid", "slow", "slow-error"].includes(nextCommentsMode)) { response.writeHead(400).end(); return true; }
+    if (!["success", "empty", "error", "invalid", "slow", "slow-error", "foreign"].includes(nextCommentsMode)) { response.writeHead(400).end(); return true; }
     if (!["success", "error", "slow"].includes(nextImageMode)) { response.writeHead(400).end(); return true; }
     if (!Object.hasOwn(identities, nextRole) || !Object.hasOwn(authorIds, nextAuthor) || !["success", "empty", "error", "invalid", "slow", "foreign"].includes(nextPostsMode) || !["success", "error", "invalid", "slow"].includes(nextMode) || !["success", "error", "slow", "uncertain"].includes(nextSaveMode) || !["success", "missing", "error", "invalid", "detail-error"].includes(nextFormMode)) {
       response.writeHead(400).end();
@@ -219,6 +219,44 @@ export function handleDashboardFixture(request, response, url, categoryChoices) 
       const item = fullTaxonomy({ id: newId, name, slug: `fixture-${newId}` });
       choices.push(item);
       finish(201, item);
+    });
+    return true;
+  }
+  const ownCommentMatch = /^\/dashboard-my-comments\/([^/]+)$/.exec(url.pathname);
+  if (url.pathname === "/dashboard-my-comments" || ownCommentMatch) {
+    if (role !== "USER") { response.writeHead(403).end(); return true; }
+    if (!ownCommentMatch && request.method === "GET") {
+      if (commentsMode === "error" || commentsMode === "slow-error") { const fail = () => response.writeHead(503).end(); if (commentsMode === "slow-error") setTimeout(fail, 1500); else fail(); return true; }
+      const projection = comment => { const { id, userId, name, text, status } = comment; return { id, userId, name, text, status }; };
+      const data = commentsMode === "empty" ? [] : commentsMode === "invalid" ? [{ ...projection(initialComments[0]), status: "UNKNOWN" }] : commentsMode === "foreign" ? comments.filter(item => item.userId !== "user").map(projection) : comments.filter(item => item.userId === "user").map(projection);
+      const send = () => json(response, 200, data);
+      if (commentsMode === "slow") setTimeout(send, 1500); else send();
+      return true;
+    }
+    if (!ownCommentMatch || !["PATCH", "DELETE"].includes(request.method)) { response.writeHead(405).end(); return true; }
+    const id = ownCommentMatch[1];
+    if (!comments.some(item => item.id === id && item.userId === "user")) { response.writeHead(404).end(); return true; }
+    const mutate = text => {
+      if (saveMode === "error") { response.writeHead(422).end(); return; }
+      const send = () => {
+        if (role !== "USER") { response.writeHead(403).end(); return; }
+        const index = comments.findIndex(item => item.id === id && item.userId === "user");
+        if (index === -1) { response.writeHead(404).end(); return; }
+        if (request.method === "DELETE") comments.splice(index, 1);
+        else comments[index] = { ...comments[index], text, status: "PENDING" };
+        if (saveMode === "uncertain") { request.socket.destroy(); return; }
+        response.writeHead(204).end();
+      };
+      if (saveMode === "slow") setTimeout(send, 1500); else send();
+    };
+    if (request.method === "DELETE") { mutate(); return true; }
+    let body = "";
+    request.on("data", chunk => { body += chunk; });
+    request.on("end", () => {
+      let input;
+      try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 1 || validateArticleCommentText(input.text)) { response.writeHead(400).end(); return; }
+      mutate(input.text.trim());
     });
     return true;
   }

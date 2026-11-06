@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 test("production has no private dashboard or test identity entry", async ({ request }) => {
+  expect((await request.get("/dashboard/my-comments")).status()).toBe(404);
+  expect((await request.get("/dashboard-my-comments")).status()).toBe(404);
+  expect((await request.patch("/dashboard-my-comments/own-1", { data: { text: "fixture-only" } })).status()).toBe(404);
   expect((await request.post("/article-comments/test-post-2", { data: { text: "fixture-only" } })).status()).toBe(404);
   const article = await request.get("/posts/test-post-2");
   expect(article.status()).toBe(200);

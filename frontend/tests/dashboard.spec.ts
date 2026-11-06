@@ -5,6 +5,199 @@ test.beforeEach(async ({ request }) => {
   await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
 });
 
+test("My Comments rejects non-USER access, foreign ownership and forged moderation or association fields", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  const own = `${base}/dashboard-my-comments/60000000-0000-4000-8000-000000000001`;
+  const foreign = `${base}/dashboard-my-comments/60000000-0000-4000-8000-000000000002`;
+  for (const role of ["SIGNED_OUT", "AUTHOR", "ADMIN"]) {
+    await request.post(`${base}/__test/dashboard?role=${role}`);
+    expect((await request.get(`${base}/dashboard-my-comments`)).status()).toBe(403);
+    expect((await request.patch(own, { data: { text: "نباید ذخیره شود" } })).status()).toBe(403);
+    expect((await request.delete(own)).status()).toBe(403);
+    await page.goto("/dashboard/my-comments");
+    await expect(page.getByRole("link", { name: "کامنت‌های من", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("main").getByRole("button", { name: "ویرایش", exact: true })).toHaveCount(0);
+  }
+  await request.post(`${base}/__test/dashboard?role=USER`);
+  const comments = await (await request.get(`${base}/dashboard-my-comments`)).json();
+  expect(comments).toHaveLength(1);
+  expect(comments[0].userId).toBe("user");
+  expect(comments[0]).not.toHaveProperty("postId");
+  expect((await request.patch(foreign, { data: { text: "نباید ذخیره شود" } })).status()).toBe(404);
+  expect((await request.delete(foreign)).status()).toBe(404);
+  for (const data of [{ text: " " }, { text: 4 }, { text: "متن", status: "APPROVED" }, { text: "متن", userId: "other" }, { text: "متن", postId: "other" }, { text: "متن", parentId: "other" }]) {
+    expect((await request.patch(own, { data })).status()).toBe(400);
+  }
+  expect((await request.post(`${base}/dashboard-my-comments`, { data: { text: "متن" } })).status()).toBe(405);
+  expect(await (await request.get(`${base}/dashboard-my-comments`)).json()).toEqual(comments);
+});
+
+test("My Comments validates edits, preserves failed writes and disables pending edit/delete confirmations", async ({ page, request }) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=USER";
+  await page.goto("/dashboard/my-comments");
+  const row = page.getByRole("main").getByRole("listitem");
+  await row.getByRole("button", { name: "ویرایش", exact: true }).click();
+  const edit = page.getByRole("dialog", { name: "ویرایش کامنت", exact: true });
+  const input = edit.getByLabel("متن کامنت", { exact: true });
+  const save = edit.getByRole("button", { name: "ثبت تغییرات", exact: true });
+  await expect(input).toBeFocused();
+  await input.fill("  ");
+  await save.click();
+  await expect(input).toHaveAccessibleDescription("متن دیدگاه را وارد کنید.");
+  await expect(input).toBeFocused();
+  const text = "ویرایش کامنت در انتظار تأیید";
+  await input.fill(text);
+  await request.post(`${control}&saveMode=error`);
+  await save.click();
+  await expect(edit.getByRole("alert")).toContainText("انجام عملیات ممکن نشد");
+  await expect(input).toHaveValue(text);
+  await request.post(`${control}&saveMode=slow`);
+  await save.click();
+  await expect(edit.getByRole("status")).toHaveText("در حال ثبت تغییرات…");
+  await expect(save).toBeDisabled();
+  await expect(input).toBeDisabled();
+  await expect(edit.getByRole("button", { name: "انصراف", exact: true })).toBeDisabled();
+  await expect(edit).not.toBeVisible();
+  await expect(row).toContainText(text);
+  await expect(row).toContainText("در انتظار تأیید");
+  await page.reload();
+  await expect(row).toContainText(text);
+  await request.post(`${control}&saveMode=error`);
+  await row.getByRole("button", { name: "حذف کامنت", exact: true }).click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("انجام عملیات ممکن نشد");
+  await expect(row).toHaveCount(1);
+  await request.post(`${control}&saveMode=slow`);
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog.getByRole("status")).toHaveText("در حال حذف کامنت…");
+  await expect(dialog.getByRole("button", { name: "تأیید حذف", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeDisabled();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByRole("main").getByRole("status")).toHaveText("کامنت حذف شد.");
+});
+
+test("My Comments reload resolves uncertain edit and deletion results without repeat actions", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER&saveMode=uncertain");
+  await page.goto("/dashboard/my-comments");
+  const row = page.getByRole("main").getByRole("listitem");
+  await row.getByRole("button", { name: "ویرایش", exact: true }).click();
+  const edit = page.getByRole("dialog", { name: "ویرایش کامنت", exact: true });
+  const text = "نتیجهٔ نامشخص ویرایش";
+  await edit.getByLabel("متن کامنت", { exact: true }).fill(text);
+  await edit.getByRole("button", { name: "ثبت تغییرات", exact: true }).click();
+  await expect(edit.getByRole("alert")).toContainText("نتیجهٔ عملیات مشخص نیست");
+  await expect(edit.getByLabel("متن کامنت", { exact: true })).toHaveValue(text);
+  await expect(edit.getByRole("button", { name: "ثبت تغییرات", exact: true })).toBeDisabled();
+  await edit.getByRole("button", { name: "انصراف", exact: true }).click();
+  await expect(row.getByRole("button", { name: "ویرایش", exact: true })).toBeDisabled();
+  await page.reload();
+  await expect(row).toContainText(text);
+  await expect(row).toContainText("در انتظار تأیید");
+  await row.getByRole("button", { name: "حذف کامنت", exact: true }).click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("نتیجهٔ عملیات مشخص نیست");
+  await expect(dialog.getByRole("button", { name: "تأیید حذف", exact: true })).toBeDisabled();
+  await page.reload();
+  await expect(row).toHaveCount(0);
+});
+
+test("My Comments loading, empty and rejected foreign/error states recover with stable mobile and desktop layout", async ({ page, request }, testInfo) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=USER";
+  const list = page.getByRole("region", { name: "فهرست کامنت‌های من", exact: true });
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await request.post(`${control}&commentsMode=slow`);
+    await page.goto("/dashboard/my-comments", { waitUntil: "commit" });
+    await expect(list.getByRole("status")).toHaveText("در حال دریافت کامنت‌های من…");
+    await page.evaluate(() => document.fonts.ready);
+    const before = await list.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY);
+    await expect(list.getByRole("button", { name: "ویرایش", exact: true })).toBeVisible();
+    const after = await list.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY);
+    expect(Math.abs(after - before)).toBeLessThanOrEqual(1);
+    await list.getByRole("button", { name: "حذف کامنت", exact: true }).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeFocused();
+    const bounds = await dialog.boundingBox();
+    expect(Math.abs(bounds!.x + bounds!.width / 2 - width / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(bounds!.y + bounds!.height / 2 - 450)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: testInfo.outputPath(`own-comments-modal-${width}.png`), fullPage: true });
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`own-comments-${width}.png`), fullPage: true });
+  }
+  for (const mode of ["error", "invalid", "foreign", "slow-error"]) {
+    await request.post(`${control}&commentsMode=${mode}`);
+    await page.reload({ waitUntil: mode === "slow-error" ? "commit" : "load" });
+    let before = 0;
+    if (mode === "slow-error") {
+      await expect(list.getByRole("status")).toHaveText("در حال دریافت کامنت‌های من…");
+      before = await list.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY);
+    }
+    await expect(list.getByRole("alert")).toContainText("دریافت کامنت‌های شما ممکن نشد");
+    await expect(list.getByRole("button", { name: "ویرایش", exact: true })).toHaveCount(0);
+    if (mode === "slow-error") expect(Math.abs(await list.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY) - before)).toBeLessThanOrEqual(1);
+  }
+  await request.post(`${control}&commentsMode=empty`);
+  await list.getByRole("button", { name: "تلاش دوباره", exact: true }).click();
+  await expect(list).toContainText("هنوز کامنتی ثبت نکرده‌اید.");
+  await request.post(control);
+  await page.reload();
+  await expect(list.getByRole("button", { name: "ویرایش", exact: true })).toBeVisible();
+});
+
+test("USER opens My Comments, edits approved content back to pending and deletes only after confirmation", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  const id = "60000000-0000-4000-8000-000000000001";
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  await request.patch(`${base}/dashboard-comments/${id}`, { data: { status: "APPROVED" } });
+  await request.post(`${base}/__test/dashboard?role=USER`);
+  await page.goto("/dashboard/workspace");
+  await page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true }).getByRole("link", { name: "کامنت‌های من", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/my-comments$/);
+  const row = page.getByRole("main").getByRole("listitem");
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText("تأییدشده");
+  await expect(page.getByRole("main")).not.toContainText("این دیدگاه قبلاً تأیید شده است.");
+  await row.getByRole("button", { name: "ویرایش", exact: true }).click();
+  const edit = page.getByRole("dialog", { name: "ویرایش کامنت", exact: true });
+  const text = "دیدگاه ویرایش‌شدهٔ خودم";
+  await edit.getByLabel("متن کامنت", { exact: true }).fill(text);
+  await edit.getByRole("button", { name: "ثبت تغییرات", exact: true }).click();
+  await expect(edit).not.toBeVisible();
+  await expect(row).toContainText(text);
+  await expect(row).toContainText("در انتظار تأیید");
+  await page.reload();
+  await expect(row).toContainText(text);
+  await expect(row).toContainText("در انتظار تأیید");
+  await page.goto("/posts/test-post-2");
+  await expect(page.getByRole("region", { name: "دیدگاه‌های مقاله", exact: true })).not.toContainText(text);
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  await page.goto("/dashboard/comments");
+  await page.getByRole("main").getByRole("listitem").filter({ hasText: text }).getByRole("button", { name: "تأیید", exact: true }).click();
+  await page.goto("/posts/test-post-2");
+  await expect(page.getByRole("region", { name: "دیدگاه‌های مقاله", exact: true })).toContainText(text);
+  await request.post(`${base}/__test/dashboard?role=USER`);
+  await page.goto("/dashboard/my-comments");
+  await row.getByRole("button", { name: "حذف کامنت", exact: true }).click();
+  const dialog = page.getByRole("alertdialog", { name: "حذف کامنت", exact: true });
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeFocused();
+  await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+  await expect(row).toHaveCount(1);
+  await page.reload();
+  await expect(row).toHaveCount(1);
+  await row.getByRole("button", { name: "حذف کامنت", exact: true }).click();
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(row).toHaveCount(0);
+  await expect(page.getByRole("main")).toContainText("هنوز کامنتی ثبت نکرده‌اید.");
+  await page.reload();
+  await expect(row).toHaveCount(0);
+  await page.goto("/posts/test-post-2");
+  await expect(page.getByRole("region", { name: "دیدگاه‌های مقاله", exact: true })).not.toContainText(text);
+});
+
 test("article comment validation, failed and uncertain submissions preserve input and pending actions cannot repeat", async ({ page, request }) => {
   await page.goto("/posts/test-post-2");
   const comments = page.getByRole("region", { name: "دیدگاه‌های مقاله", exact: true });
