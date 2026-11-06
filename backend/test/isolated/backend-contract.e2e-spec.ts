@@ -55,6 +55,7 @@ describe('Backend contracts with isolated I/O', () => {
     },
     role: { findUnique: query() },
     refreshToken: {
+      findUnique: query(),
       create: query(),
       findMany: query(),
       update: query(),
@@ -141,6 +142,12 @@ describe('Backend contracts with isolated I/O', () => {
       name: (args as { where: { name: string } }).where.name,
     }));
     persistence.refreshToken.create.mockResolvedValue({ id: 'session-1' });
+    persistence.refreshToken.findUnique.mockResolvedValue({
+      userId: 'user-1',
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 60000),
+      user: safeUser,
+    });
     persistence.refreshToken.findMany.mockResolvedValue([]);
     persistence.post.findFirst.mockResolvedValue(null);
     persistence.post.findUnique.mockReset();
@@ -166,8 +173,20 @@ describe('Backend contracts with isolated I/O', () => {
   afterAll(async () => {
     await app?.close();
   });
-  const auth = (role = 'ADMIN') =>
-    jwt.sign({ sub: 'user-1', email: safeUser.email, role });
+  const auth = (role = 'ADMIN') => {
+    persistence.refreshToken.findUnique.mockResolvedValue({
+      userId: 'user-1',
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 60000),
+      user: { ...safeUser, role: { name: role } },
+    });
+    return jwt.sign({
+      sub: 'user-1',
+      email: safeUser.email,
+      role,
+      sid: 'session-1',
+    });
+  };
 
   it('documents requests and declared responses with complete, resolvable schemas', async () => {
     const response = await request(app.getHttpServer())
@@ -536,6 +555,182 @@ describe('Backend contracts with isolated I/O', () => {
   });
 
   describe('Auth and Sessions', () => {
+    it('prevents shared caching for case-insensitive auth routes', async () => {
+      const login = await request(app.getHttpServer())
+        .post('/AUTH/login')
+        .send({ email: safeUser.email, password: 'CorrectPassword123!' })
+        .expect(200);
+      expect(login.headers['cache-control']).toBe('private, no-store');
+      const refresh = await request(app.getHttpServer())
+        .post('/Auth/refresh')
+        .send({ refreshToken: 'invalid' })
+        .expect(401);
+      expect(refresh.headers['cache-control']).toBe('private, no-store');
+    });
+    it('invalidates issued access and refresh tokens after logout and rejects disabled login/refresh', async () => {
+      let revoked = false;
+      let disabled = false;
+      let tokenHash = '';
+      persistence.user.findUnique.mockImplementation(async (args) => ({
+        ...safeUser,
+        disabledAt: disabled ? new Date() : null,
+        ...((args as { select?: unknown }).select ? {} : { passwordHash }),
+      }));
+      persistence.refreshToken.create.mockImplementation(async (args) => {
+        tokenHash = (args as { data: { tokenHash: string } }).data.tokenHash;
+        return { id: 's' };
+      });
+      persistence.refreshToken.findUnique.mockImplementation(async () => ({
+        userId: safeUser.id,
+        revokedAt: revoked ? new Date() : null,
+        expiresAt: new Date(Date.now() + 60000),
+        user: { ...safeUser, disabledAt: disabled ? new Date() : null },
+      }));
+      persistence.refreshToken.findMany.mockImplementation(async () =>
+        revoked ? [] : [{ id: 's', tokenHash }],
+      );
+      persistence.refreshToken.update.mockImplementation(async () => {
+        revoked = true;
+        return {};
+      });
+      const login = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: safeUser.email, password: 'CorrectPassword123!' })
+        .expect(200);
+      await request(app.getHttpServer())
+        .get('/auth/me')
+        .auth(login.body.accessToken, { type: 'bearer' })
+        .expect(200);
+      disabled = true;
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: safeUser.email, password: 'CorrectPassword123!' })
+        .expect(401);
+      await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refreshToken: login.body.refreshToken })
+        .expect(401);
+      disabled = false;
+      const refreshed = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refreshToken: login.body.refreshToken })
+        .expect(200);
+      await request(app.getHttpServer())
+        .post('/auth/logout')
+        .send({ refreshToken: login.body.refreshToken })
+        .expect(200);
+      for (const token of [login.body.accessToken, refreshed.body.accessToken])
+        await request(app.getHttpServer())
+          .get('/auth/me')
+          .auth(token, { type: 'bearer' })
+          .expect(401);
+      await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refreshToken: login.body.refreshToken })
+        .expect(401);
+      revoked = false;
+      persistence.refreshToken.updateMany.mockImplementation(async () => {
+        revoked = true;
+        return { count: 1 };
+      });
+      await request(app.getHttpServer())
+        .post('/auth/logout-all')
+        .auth(login.body.accessToken, { type: 'bearer' })
+        .expect(200);
+      await request(app.getHttpServer())
+        .get('/auth/me')
+        .auth(login.body.accessToken, { type: 'bearer' })
+        .expect(401);
+    });
+    it('marks token exchanges and authenticated failures private/no-store and ignores ambient cookies', async () => {
+      const login = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: safeUser.email, password: 'CorrectPassword123!' })
+        .expect(200);
+      expect(login.headers['cache-control']).toBe('private, no-store');
+      const denied = await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Cookie', `accessToken=${login.body.accessToken}`)
+        .expect(401);
+      expect(denied.headers['cache-control']).toBe('private, no-store');
+      expect(login.headers['set-cookie']).toBeUndefined();
+      const first = jwt.verify(login.body.accessToken);
+      expect(first.sid).toBe('session-1');
+      const second = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: safeUser.email, password: 'CorrectPassword123!' })
+        .expect(200);
+      expect(second.body.refreshToken).not.toBe(login.body.refreshToken);
+    });
+    it('rejects revoked, disabled and unbound access tokens and authorizes using the current role', async () => {
+      const accessToken = jwt.sign({
+        sub: 'user-1',
+        email: safeUser.email,
+        role: 'ADMIN',
+        sid: 's',
+      });
+      for (const session of [
+        null,
+        {
+          userId: 'other-user',
+          revokedAt: null,
+          expiresAt: new Date(Date.now() + 60000),
+          user: safeUser,
+        },
+        {
+          userId: safeUser.id,
+          revokedAt: null,
+          expiresAt: new Date(0),
+          user: safeUser,
+        },
+        {
+          userId: safeUser.id,
+          revokedAt: null,
+          expiresAt: new Date(Date.now() + 60000),
+          user: null,
+        },
+      ]) {
+        persistence.refreshToken.findUnique.mockResolvedValue(session);
+        await request(app.getHttpServer())
+          .get('/auth/me')
+          .auth(accessToken, { type: 'bearer' })
+          .expect(401);
+      }
+      persistence.refreshToken.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        revokedAt: new Date(),
+        expiresAt: new Date(Date.now() + 60000),
+        user: safeUser,
+      });
+      await request(app.getHttpServer())
+        .get('/admin/users')
+        .auth(accessToken, { type: 'bearer' })
+        .expect(401);
+      persistence.refreshToken.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60000),
+        user: { ...safeUser, disabledAt: new Date() },
+      });
+      await request(app.getHttpServer())
+        .get('/auth/me')
+        .auth(accessToken, { type: 'bearer' })
+        .expect(401);
+      persistence.refreshToken.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60000),
+        user: { ...safeUser, disabledAt: null },
+      });
+      await request(app.getHttpServer())
+        .get('/admin/users')
+        .auth(accessToken, { type: 'bearer' })
+        .expect(403);
+      await request(app.getHttpServer())
+        .get('/auth/me')
+        .auth(jwt.sign({ sub: 'user-1', role: 'ADMIN' }), { type: 'bearer' })
+        .expect(401);
+    });
     it('rejects invalid registration passwords, confirmations and role injection before persistence', async () => {
       const valid = { email: 'new@example.com', password: 'Valid123!' };
       for (const input of [

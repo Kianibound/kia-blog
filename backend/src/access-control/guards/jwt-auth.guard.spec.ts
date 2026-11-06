@@ -5,6 +5,7 @@ import type { JwtService } from '@nestjs/jwt';
 
 import { ROLE } from '../../roles/constants/role.constants';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import type { PrismaService } from '../../database/prisma.service';
 
 describe('JwtAuthGuard', () => {
   const createFixture = (authorization?: string) => {
@@ -14,14 +15,33 @@ describe('JwtAuthGuard', () => {
       },
     };
     const jwtService = {
-      verifyAsync: jest.fn(),
+      verifyAsync: jest.fn<() => Promise<unknown>>(),
     };
     const context = {
       switchToHttp: () => ({
         getRequest: () => request,
       }),
     } as ExecutionContext;
-    const guard = new JwtAuthGuard(jwtService as unknown as JwtService);
+    const prisma = {
+      refreshToken: {
+        findUnique: jest
+          .fn<() => Promise<unknown>>()
+          .mockResolvedValue({
+            userId: 'user-id',
+            revokedAt: null,
+            expiresAt: new Date(Date.now() + 60000),
+            user: {
+              email: 'user@example.com',
+              disabledAt: null,
+              role: { name: ROLE.AUTHOR },
+            },
+          }),
+      },
+    };
+    const guard = new JwtAuthGuard(
+      jwtService as unknown as JwtService,
+      prisma as unknown as PrismaService,
+    );
 
     return { context, guard, jwtService, request };
   };
@@ -51,6 +71,7 @@ describe('JwtAuthGuard', () => {
       sub: 'user-id',
       email: 'user@example.com',
       role: ROLE.AUTHOR,
+      sid: 'session-id',
     };
     jwtService.verifyAsync.mockResolvedValue(payload);
 

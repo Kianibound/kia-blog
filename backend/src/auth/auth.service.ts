@@ -92,7 +92,7 @@ export class AuthService {
 
     // Use the same error for unknown email or missing password
     // to avoid leaking whether an email exists
-    if (!user || !user.passwordHash) {
+    if (!user || user.disabledAt || !user.passwordHash) {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
@@ -116,14 +116,6 @@ export class AuthService {
       throw new UnauthorizedException('User role is invalid.');
     }
 
-    // Access token contains the data needed for authenticated
-    // and role-based requests
-    const accessToken = await this.tokenService.createAccessToken({
-      sub: user.id,
-      email: user.email,
-      role: user.role.name,
-    });
-
     // Refresh token only identifies the user/session.
     // Current role will be loaded from the database when refreshing.
     const refreshToken = await this.tokenService.createRefreshToken({
@@ -131,11 +123,17 @@ export class AuthService {
     });
 
     // Store only the hashed refresh token in the database
-    await this.sessionService.storeRefreshToken(
+    const session = await this.sessionService.storeRefreshToken(
       user.id,
       refreshToken,
       new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     );
+    const accessToken = await this.tokenService.createAccessToken({
+      sub: user.id,
+      email: user.email,
+      role: user.role.name,
+      sid: session.id,
+    });
 
     // Load the public/safe user response without passwordHash
     const safeUser = await this.usersService.findById(user.id);

@@ -89,6 +89,7 @@ export class SessionService {
       select: {
         id: true,
         email: true,
+        disabledAt: true,
         role: {
           select: {
             name: true,
@@ -98,7 +99,7 @@ export class SessionService {
     });
 
     // The user must still exist and have a valid role
-    if (!user || !user.role) {
+    if (!user || user.disabledAt || !user.role) {
       throw new UnauthorizedException('User or role is no longer available.');
     }
 
@@ -112,6 +113,7 @@ export class SessionService {
       sub: user.id,
       email: user.email,
       role: user.role.name,
+      sid: validToken.token.id,
     });
     return {
       accessToken,

@@ -280,8 +280,9 @@ not make eligibility-check/write sequences atomic against concurrent unpublishin
 ## Explicit database dependencies and test surface
 
 The database seam is explicit in Auth, Users, Roles, Posts, Published Posts,
-Categories, Tags, Comments, Bookmarks, Post Likes, and Media. Admin depends on
-Users, not persistence. Access Control and Mail do not import persistence. Prisma
+Categories, Tags, Comments, Bookmarks, Post Likes, Media, Access Control and Admin.
+Access Control checks live session/account state for protected requests. Admin
+imports persistence for the request guard; Mail does not import persistence. Prisma
 is provided only by DatabaseModule, never redeclared in feature providers.
 
 Tests cross real module interfaces for leverage and depth: features initialize

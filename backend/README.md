@@ -55,6 +55,54 @@ login does not currently require email verification. Login's existing password
 validation is unchanged and does not acquire registration complexity rules.
 No database migration or new configuration is required for this contract.
 
+### Server-managed browser session contract
+
+Nest remains a bearer API and does not read or set browser cookies. A Next.js
+server adapter calls `POST /auth/login` with email/password and stores the returned
+access/refresh credentials server-side, indexed by an opaque, unguessable browser
+session ID. The browser receives only that ID in a `Secure`, `HttpOnly`,
+`SameSite=Lax`, `Path=/` cookie, without Domain (`__Host-` name on HTTPS).
+JWTs must not enter localStorage, client props, URLs or browser-readable cookies.
+The adapter/UI itself is outside this issue.
+
+The adapter forwards `Authorization: Bearer <access>` and disables Next.js
+fetch/output caching. On access expiry it may call `POST /auth/refresh` with
+`{ refreshToken }`, then retry once. Refresh returns only `{ accessToken }` and
+retains the existing refresh credential/expiry. `GET /auth/me` returns the current
+safe account. `POST /auth/logout` revokes the matching session; authenticated
+`POST /auth/logout-all` revokes all of that account's sessions. Clear adapter
+credentials and the cookie on logout or terminal authentication failure; expire
+adapter storage no later than the backend refresh session.
+
+The adapter must check the exact trusted Origin and use CSRF protection for
+cookie-authenticated mutations, including login/logout. Never forward tokens to
+client-supplied destinations. Nest gains no authority from a Cookie header: token
+exchange requires explicit JSON credentials and protected routes require Bearer.
+CORS is not CSRF protection; no credentialed cross-origin cookie mode is added.
+
+Access JWTs include `sid`, the existing RefreshToken record ID. Each protected
+request checks its owner, expiry and revocation and loads the account's current
+role and `disabledAt`. Deleted/disabled accounts, invalid roles, expired/revoked
+sessions and access JWTs without sid return 401. Role changes apply on the next
+authorization check. Disabled accounts cannot log in or refresh. Re-enabling an
+account does not revoke old records; revoke sessions too for permanent sign-out.
+Authorization is a point-in-time check, not a lock over later mutations.
+
+Existing refresh records and Argon2 hashes remain valid. Legacy refresh tokens
+can obtain session-bound access tokens; old unbound access tokens must be
+refreshed or replaced by login. New refresh JWTs have random `jti` values so two
+logins in the same second have distinct credentials. Auth exchanges and requests
+carrying Authorization receive `Cache-Control: private, no-store` and
+`Pragma: no-cache`, including failures. Proxies must preserve these headers.
+
+Apply migration `20261106180000_add_user_disabled_at` before deployment and
+regenerate Prisma. It adds nullable `User.disabledAt`; existing users remain
+enabled and refresh rows are preserved. No new environment variables are added:
+existing `DATABASE_URL`, migration `DIRECT_URL`, `JWT_ACCESS_SECRET`,
+`JWT_REFRESH_SECRET`, and `JWT_ACCESS_EXPIRES_IN` remain required. Use independent
+strong JWT secrets. Live migration verification needs a disposable local database;
+isolated tests use substituted persistence and test-only JWT settings.
+
 ### Authorization
 
 Three application roles are supported:

@@ -1,4 +1,9 @@
-import { Module } from '@nestjs/common';
+import {
+  Module,
+  type NestModule,
+  type MiddlewareConsumer,
+} from '@nestjs/common';
+import type { Request, Response, NextFunction } from 'express';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -48,4 +53,19 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply((request: Request, response: Response, next: NextFunction) => {
+        if (
+          request.headers.authorization ||
+          request.originalUrl.toLowerCase().startsWith('/auth/')
+        ) {
+          response.setHeader('Cache-Control', 'private, no-store');
+          response.setHeader('Pragma', 'no-cache');
+        }
+        next();
+      })
+      .forRoutes('{*path}');
+  }
+}

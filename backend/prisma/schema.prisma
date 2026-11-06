@@ -21,6 +21,7 @@ model User {
   roleId                  String?
   role                    Role?                    @relation(fields: [roleId], references: [id])
   emailVerified           Boolean                  @default(false)
+  disabledAt              DateTime?
   comments                Comment[]
   bookmarks               Bookmark[]
   postLikes               PostLike[]

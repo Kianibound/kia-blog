@@ -27,6 +27,7 @@ describe('PostsModule HTTP contract', () => {
     update: jest.fn<(args: unknown) => Promise<unknown>>(),
     delete: jest.fn<(args: unknown) => Promise<unknown>>(),
   };
+  const sessions = { findUnique: jest.fn<() => Promise<unknown>>() };
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
@@ -44,7 +45,7 @@ describe('PostsModule HTTP contract', () => {
           })[key],
       })
       .overrideProvider(PrismaService)
-      .useValue({ post: repository })
+      .useValue({ post: repository, refreshToken: sessions })
       .compile();
     app = module.createNestApplication();
     app.useGlobalPipes(
@@ -68,7 +69,19 @@ describe('PostsModule HTTP contract', () => {
   afterAll(async () => {
     await app?.close();
   });
-  const token = (sub: string, role = 'AUTHOR') => jwt.sign({ sub, role });
+  const token = (sub: string, role = 'AUTHOR') => {
+    sessions.findUnique.mockResolvedValue({
+      userId: sub,
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 60000),
+      user: {
+        email: 'test@example.com',
+        role: { name: role },
+        disabledAt: null,
+      },
+    });
+    return jwt.sign({ sub, role, sid: 'test-session' });
+  };
 
   it('serves the public feed with transformed pagination', async () => {
     const response = await request(app.getHttpServer())

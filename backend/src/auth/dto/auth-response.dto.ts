@@ -3,12 +3,18 @@ import { UserResponseDto } from '../../users/dto/user-response.dto';
 import { MessageResponseDto } from '../../common/dto/response.dto';
 
 export class AccessTokenResponseDto {
-  @ApiProperty()
+  @ApiProperty({
+    description:
+      'Bearer JWT bound to a live refresh-token session via sid. Use only server-side in a browser adapter; do not place in browser storage.',
+  })
   accessToken: string;
 }
 
 export class LoginResponseDto extends AccessTokenResponseDto {
-  @ApiProperty()
+  @ApiProperty({
+    description:
+      'Server-managed refresh credential. Store securely on the Next.js server, associated with an HttpOnly browser session cookie.',
+  })
   refreshToken: string;
   @ApiProperty({ type: UserResponseDto })
   user: UserResponseDto;
