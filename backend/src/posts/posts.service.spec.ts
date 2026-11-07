@@ -55,7 +55,7 @@ describe('Posts behavior', () => {
         categoryIds: ['c'],
         tagIds: ['t'],
       }),
-    ).toBe(post);
+    ).toEqual({ ...post, contentMedia: [] });
     expect(repository.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         authorId: 'owner',
@@ -84,7 +84,7 @@ describe('Posts behavior', () => {
     expect(
       await service.findAll(2, 2, 'nest', 'oldest', 'alice', 'tech', 'node'),
     ).toEqual({
-      data: [post],
+      data: [{ ...post, contentMedia: [] }],
       meta: { page: 2, limit: 2, total: 5, totalPages: 3 },
     });
     const query = repository.findMany.mock.calls[0][0] as {
@@ -131,7 +131,9 @@ describe('Posts behavior', () => {
     );
   });
   it('lists only current author posts including drafts', async () => {
-    expect((await service.findMine('owner', 2, 2)).data).toEqual([post]);
+    expect((await service.findMine('owner', 2, 2)).data).toEqual([
+      { ...post, contentMedia: [] },
+    ]);
     expect(repository.findMany).toHaveBeenCalledWith({
       where: { authorId: 'owner' },
       orderBy: { createdAt: 'desc' },
@@ -154,8 +156,11 @@ describe('Posts behavior', () => {
     );
   });
   it('preserves public/admin detail projection and allows private admin lookup', async () => {
-    expect(await service.findBySlug('slug')).toBe(post);
-    expect(await service.findById('p')).toBe(post);
+    expect(await service.findBySlug('slug')).toEqual({
+      ...post,
+      contentMedia: [],
+    });
+    expect(await service.findById('p')).toEqual({ ...post, contentMedia: [] });
     const query = repository.findFirst.mock.calls[0][0] as { include: unknown };
     expect(query.include).toEqual({
       author: {

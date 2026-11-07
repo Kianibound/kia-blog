@@ -119,3 +119,8 @@ export type PostLike = Prisma.PostLikeModel
  * 
  */
 export type Media = Prisma.MediaModel
+/**
+ * Model PostMedia
+ * 
+ */
+export type PostMedia = Prisma.PostMediaModel

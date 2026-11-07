@@ -11,6 +11,22 @@ class DirectionAttributesDto {
 
 class NodeAttributesDto extends DirectionAttributesDto {
   @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Required on image only. Existing Media ID; never a URL.',
+  })
+  mediaId?: string;
+  @ApiPropertyOptional({
+    minLength: 1,
+    maxLength: 500,
+    description: 'Required nonblank alternative text on image only.',
+  })
+  alt?: string;
+  @ApiPropertyOptional({
+    maxLength: 256,
+    description: 'Image only; literal text.',
+  })
+  title?: string;
+  @ApiPropertyOptional({
     enum: [2, 3, 4],
     description: 'Required on heading; forbidden on other nodes.',
   })
@@ -94,13 +110,14 @@ export class TiptapNodeDto {
       'codeBlock',
       'hardBreak',
       'text',
+      'image',
     ],
   })
   type: string;
   @ApiPropertyOptional({
     type: NodeAttributesDto,
     description:
-      'Only node-specific attributes; text has no attributes. Unknown attributes are rejected.',
+      'Only node-specific attributes; image permits mediaId, alt and optional title only (no dir/src/URLs). Text has no attributes. Unknown attributes are rejected.',
   })
   attrs?: NodeAttributesDto;
   @ApiPropertyOptional({
@@ -131,7 +148,7 @@ export class TiptapDocumentDto {
     type: [TiptapNodeDto],
     minItems: 1,
     description:
-      'Block nodes only. Entire serialized document <=65536 UTF-8 bytes, depth <=16 including root/text, and <=2000 nodes plus marks. No images, covers, HTML or preview envelope.',
+      'Block nodes only, including image leaves. Entire serialized document <=65536 UTF-8 bytes, depth <=16 including root/text, and <=2000 nodes plus marks. No covers, HTML or preview envelope.',
   })
   content: TiptapNodeDto[];
 }

@@ -5,6 +5,12 @@ import type { UpdatePostDto } from './dto/update-post.dto';
 import { PostCommands } from './post-commands';
 import { PostQueries } from './post-queries';
 import type { PostStatus } from '../generated/prisma/client';
+import { PrismaService } from '../database/prisma.service';
+import {
+  resolveDocumentMedia,
+  presentPostsWithMedia,
+} from '../media/body-image';
+import { ROLE } from '../roles/constants/role.constants';
 
 // Stable external Posts interface; read/write organization stays private to the module.
 @Injectable()
@@ -12,13 +18,18 @@ export class PostsService {
   constructor(
     private readonly commands: PostCommands,
     private readonly queries: PostQueries,
+    private readonly prisma: PrismaService,
   ) {}
 
-  create(authorId: string, dto: CreatePostDto) {
-    return this.commands.create(authorId, dto);
+  async create(
+    authorId: string,
+    dto: CreatePostDto,
+    role: RoleName = ROLE.AUTHOR,
+  ) {
+    return this.present(await this.commands.create(authorId, dto, role));
   }
 
-  findAll(
+  async findAll(
     page: number,
     limit: number,
     search?: string,
@@ -27,7 +38,7 @@ export class PostsService {
     category?: string,
     tag?: string,
   ) {
-    return this.queries.findAll({
+    const result = await this.queries.findAll({
       page,
       limit,
       search,
@@ -36,42 +47,69 @@ export class PostsService {
       category,
       tag,
     });
+    return {
+      ...result,
+      data: await presentPostsWithMedia(this.prisma, result.data),
+    };
   }
 
-  findById(id: string) {
-    return this.queries.findById(id);
+  async findById(id: string) {
+    return this.present(await this.queries.findById(id));
   }
 
   findAdminInventory(page: number, limit: number) {
     return this.queries.findAdminInventory(page, limit);
   }
 
-  findMine(authorId: string, page: number, limit: number, status?: PostStatus) {
-    return this.queries.findMine(authorId, page, limit, status);
+  async findMine(
+    authorId: string,
+    page: number,
+    limit: number,
+    status?: PostStatus,
+  ) {
+    const result = await this.queries.findMine(authorId, page, limit, status);
+    return {
+      ...result,
+      data: await presentPostsWithMedia(this.prisma, result.data),
+    };
   }
 
-  findMineById(
+  async findMineById(
     postId: string,
     currentUserId: string,
     currentUserRole: RoleName,
   ) {
-    return this.queries.findMineById(postId, currentUserId, currentUserRole);
+    return this.present(
+      await this.queries.findMineById(postId, currentUserId, currentUserRole),
+    );
   }
 
-  findBySlug(slug: string) {
-    return this.queries.findBySlug(slug);
+  async findBySlug(slug: string) {
+    return this.present(await this.queries.findBySlug(slug));
   }
 
-  update(
+  async update(
     postId: string,
     currentUserId: string,
     currentUserRole: RoleName,
     dto: UpdatePostDto,
   ) {
-    return this.commands.update(postId, currentUserId, currentUserRole, dto);
+    return this.present(
+      await this.commands.update(postId, currentUserId, currentUserRole, dto),
+    );
   }
 
   remove(postId: string, currentUserId: string, currentUserRole: RoleName) {
     return this.commands.remove(postId, currentUserId, currentUserRole);
+  }
+
+  private async present<T extends { contentDocument?: unknown }>(post: T) {
+    return {
+      ...post,
+      contentMedia: await resolveDocumentMedia(
+        this.prisma,
+        post.contentDocument,
+      ),
+    };
   }
 }

@@ -92,9 +92,14 @@ describe('Backend contracts with isolated I/O', () => {
       count: query(),
     },
     comment: { create: query() },
-    bookmark: { create: query() },
+    bookmark: { create: query(), findMany: query() },
     postLike: { create: query() },
-    media: { findUnique: query() },
+    media: {
+      findUnique: query(),
+      findMany: query(),
+      delete: query(),
+      create: query(),
+    },
   };
   const mail = {
     sendEmailVerification: jest.fn(),
@@ -283,6 +288,10 @@ describe('Backend contracts with isolated I/O', () => {
     persistence.post.findMany.mockReset();
     persistence.post.count.mockReset();
     persistence.media.findUnique.mockResolvedValue(null);
+    persistence.media.findMany.mockReset();
+    persistence.media.delete.mockReset();
+    persistence.media.create.mockReset();
+    persistence.bookmark.findMany.mockReset();
     for (const delegate of [persistence.category, persistence.tag]) {
       Object.values(delegate).forEach((fn) => fn.mockReset());
       delegate.findUnique.mockResolvedValue({
@@ -1491,6 +1500,28 @@ describe('Backend contracts with isolated I/O', () => {
   });
 
   describe('Canonical rich article content', () => {
+    const imageId = '7a3e0fe6-81f3-4f42-b61e-361beea3a217';
+    const image = {
+      id: imageId,
+      ownerId: 'user-1',
+      resourceType: 'image',
+      format: 'png',
+      bytes: 128,
+      width: 10,
+      height: 20,
+      publicId: 'kia-blog/image',
+      url: 'https://res.cloudinary.com/test/image/upload/v1/kia-blog/image.png',
+    };
+    const imageDocument = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Article' }] },
+        {
+          type: 'image',
+          attrs: { mediaId: imageId, alt: 'A landscape', title: 'View' },
+        },
+      ],
+    };
     const document = {
       type: 'doc',
       attrs: { dir: 'rtl' },
@@ -1606,6 +1637,340 @@ describe('Backend contracts with isolated I/O', () => {
       );
       return { detail };
     };
+
+    it('round-trips stable body image references and resolves safe media fields for public readers', async () => {
+      articleStore();
+      persistence.media.findMany.mockResolvedValue([image]);
+      const created = await request(app.getHttpServer())
+        .post('/posts')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .send({
+          title: 'Rich article',
+          contentDocument: imageDocument,
+          status: 'PUBLISHED',
+        })
+        .expect(201);
+      expect(created.body.contentDocument).toEqual(imageDocument);
+      expect(created.body.content).toBe('Article\nA landscape');
+      expect(created.body.contentMedia).toEqual([
+        { id: imageId, url: image.url, width: 10, height: 20 },
+      ]);
+      const read = await request(app.getHttpServer())
+        .get('/posts/rich-article')
+        .expect(200);
+      expect(read.body.contentDocument).toEqual(imageDocument);
+      expect(read.body.contentMedia).toEqual(created.body.contentMedia);
+      persistence.bookmark.findMany.mockResolvedValue([
+        { id: 'bookmark', post: read.body },
+      ]);
+      const bookmarks = await request(app.getHttpServer())
+        .get('/bookmarks')
+        .auth(auth('USER'), { type: 'bearer' })
+        .expect(200);
+      expect(bookmarks.body[0].post.contentMedia).toEqual(
+        created.body.contentMedia,
+      );
+      const feed = await request(app.getHttpServer()).get('/posts').expect(200);
+      expect(feed.body.data[0].contentMedia).toEqual(created.body.contentMedia);
+    });
+
+    it('rejects deletion before remote I/O when a body image reference restricts it', async () => {
+      persistence.media.findUnique.mockResolvedValue(image);
+      persistence.media.delete.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('referenced', {
+          code: 'P2003',
+          clientVersion: 'test-double',
+        }),
+      );
+      await request(app.getHttpServer())
+        .delete(`/media/${imageId}`)
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .expect(409);
+      expect(cloudinary.deleteImage).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { label: 'missing', media: [] },
+      { label: 'SVG', media: [{ ...image, format: 'svg' }] },
+      { label: 'video', media: [{ ...image, resourceType: 'video' }] },
+      { label: 'oversized', media: [{ ...image, bytes: 5 * 1024 * 1024 }] },
+      { label: 'empty', media: [{ ...image, bytes: 0 }] },
+      {
+        label: 'insecure URL',
+        media: [
+          {
+            ...image,
+            url: 'http://res.cloudinary.com/test/image/upload/a.png',
+          },
+        ],
+      },
+      {
+        label: 'foreign URL',
+        media: [{ ...image, url: 'https://attacker.test/image.png' }],
+      },
+      {
+        label: 'credentials',
+        media: [
+          {
+            ...image,
+            url: 'https://user:pass@res.cloudinary.com/test/image/upload/a.png',
+          },
+        ],
+      },
+      {
+        label: 'non-image delivery',
+        media: [
+          { ...image, url: 'https://res.cloudinary.com/test/raw/upload/a.png' },
+        ],
+      },
+    ])('rejects $label media without writing an article', async ({ media }) => {
+      articleStore();
+      persistence.media.findMany.mockResolvedValue(media);
+      await request(app.getHttpServer())
+        .post('/posts')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .send({ title: 'Image article', contentDocument: imageDocument })
+        .expect(400);
+      expect(persistence.post.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects foreign-owned attachments for AUTHOR but permits ADMIN', async () => {
+      articleStore();
+      persistence.media.findMany.mockResolvedValue([
+        { ...image, ownerId: 'another-user' },
+      ]);
+      await request(app.getHttpServer())
+        .post('/posts')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .send({ title: 'Image article', contentDocument: imageDocument })
+        .expect(403);
+      await request(app.getHttpServer())
+        .post('/posts')
+        .auth(auth('ADMIN'), { type: 'bearer' })
+        .send({ title: 'Image article', contentDocument: imageDocument })
+        .expect(201);
+    });
+
+    it.each([
+      { mediaId: imageId, alt: '' },
+      { mediaId: imageId, alt: '   ' },
+      { mediaId: imageId, alt: 'a'.repeat(501) },
+      { mediaId: 'not-a-uuid', alt: 'Image' },
+      { mediaId: imageId, alt: 'Image', src: image.url },
+      { mediaId: imageId, alt: 'Image', width: 10 },
+      { mediaId: imageId, alt: 'Image', dir: 'rtl' },
+      { mediaId: imageId, alt: 'Image', title: null },
+    ])(
+      'rejects unsupported image attributes %j before media lookup',
+      async (attrs) => {
+        await request(app.getHttpServer())
+          .post('/posts')
+          .auth(auth('AUTHOR'), { type: 'bearer' })
+          .send({
+            title: 'Image article',
+            contentDocument: {
+              type: 'doc',
+              content: [{ type: 'image', attrs }],
+            },
+          })
+          .expect(400);
+        expect(persistence.media.findMany).not.toHaveBeenCalled();
+      },
+    );
+
+    it('preserves image references on metadata edits and replaces them when editing rich content', async () => {
+      articleStore();
+      persistence.media.findMany.mockResolvedValue([image]);
+      const token = auth('AUTHOR');
+      await request(app.getHttpServer())
+        .post('/posts')
+        .auth(token, { type: 'bearer' })
+        .send({ title: 'Image article', contentDocument: imageDocument })
+        .expect(201);
+      const metadata = await request(app.getHttpServer())
+        .patch('/posts/rich-post')
+        .auth(token, { type: 'bearer' })
+        .send({ title: 'Edited' })
+        .expect(200);
+      expect(metadata.body.contentDocument).toEqual(imageDocument);
+      const updatedDocument = {
+        ...imageDocument,
+        content: [imageDocument.content[1], imageDocument.content[1]],
+      };
+      const edited = await request(app.getHttpServer())
+        .patch('/posts/rich-post')
+        .auth(token, { type: 'bearer' })
+        .send({ contentDocument: updatedDocument })
+        .expect(200);
+      expect(edited.body.contentDocument).toEqual(updatedDocument);
+      expect(edited.body.contentMedia).toHaveLength(1);
+      const legacy = await request(app.getHttpServer())
+        .patch('/posts/rich-post')
+        .auth(token, { type: 'bearer' })
+        .send({ content: 'Literal legacy' })
+        .expect(200);
+      expect(legacy.body.contentDocument).toBeNull();
+      expect(legacy.body.contentMedia).toEqual([]);
+    });
+
+    it.each(['USER', 'AUTHOR'])(
+      'denies %s deleting someone else’s media',
+      async (role) => {
+        persistence.media.findUnique.mockResolvedValue({
+          ...image,
+          ownerId: 'another-user',
+        });
+        await request(app.getHttpServer())
+          .delete(`/media/${imageId}`)
+          .auth(auth(role), { type: 'bearer' })
+          .expect(403);
+        expect(persistence.media.delete).not.toHaveBeenCalled();
+        expect(cloudinary.deleteImage).not.toHaveBeenCalled();
+      },
+    );
+
+    it('allows ADMIN to delete unreferenced foreign media and returns 404 for missing media', async () => {
+      persistence.media.findUnique.mockResolvedValue({
+        ...image,
+        ownerId: 'another-user',
+      });
+      persistence.media.delete.mockResolvedValue(image);
+      cloudinary.deleteImage.mockResolvedValue({ result: 'ok' });
+      const token = auth('ADMIN');
+      await request(app.getHttpServer())
+        .delete(`/media/${imageId}`)
+        .auth(token, { type: 'bearer' })
+        .expect(200);
+      expect(cloudinary.deleteImage).toHaveBeenCalledWith(image.publicId);
+      persistence.media.findUnique.mockResolvedValue(null);
+      await request(app.getHttpServer())
+        .delete(`/media/${imageId}`)
+        .auth(token, { type: 'bearer' })
+        .expect(404);
+    });
+
+    it('rejects a concurrent attachment/deletion conflict safely', async () => {
+      articleStore();
+      persistence.media.findMany.mockResolvedValue([image]);
+      persistence.post.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('media vanished', {
+          code: 'P2003',
+          clientVersion: 'test-double',
+        }),
+      );
+      await request(app.getHttpServer())
+        .post('/posts')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .send({ title: 'Image article', contentDocument: imageDocument })
+        .expect(400);
+    });
+
+    it('uploads a validated PNG using existing Cloudinary I/O and returns its stable Media identity', async () => {
+      const png = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jIh8AAAAASUVORK5CYII=',
+        'base64',
+      );
+      cloudinary.uploadImage.mockResolvedValue({
+        secure_url: image.url,
+        public_id: image.publicId,
+        resource_type: 'image',
+        format: 'png',
+        bytes: png.length,
+        width: 1,
+        height: 1,
+      });
+      persistence.media.create.mockImplementation(async (args) => ({
+        id: imageId,
+        ...(args as { data: object }).data,
+      }));
+      const response = await request(app.getHttpServer())
+        .post('/media/images')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .attach('file', png, {
+          filename: 'image.png',
+          contentType: 'image/png',
+        })
+        .expect(201);
+      expect(response.body.id).toBe(imageId);
+      expect(response.body.ownerId).toBe('user-1');
+      expect(response.body.url).toBe(image.url);
+    });
+
+    it('rejects spoofed image bytes and oversized uploads before Cloudinary', async () => {
+      const token = auth('AUTHOR');
+      await request(app.getHttpServer())
+        .post('/media/images')
+        .auth(token, { type: 'bearer' })
+        .attach(
+          'file',
+          Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+          { filename: 'fake.png', contentType: 'image/png' },
+        )
+        .expect(422);
+      await request(app.getHttpServer())
+        .post('/media/images')
+        .auth(token, { type: 'bearer' })
+        .attach('file', Buffer.alloc(5 * 1024 * 1024 + 1), {
+          filename: 'large.png',
+          contentType: 'image/png',
+        })
+        .expect(413);
+      expect(cloudinary.uploadImage).not.toHaveBeenCalled();
+    });
+
+    it('requires authentication for upload and deletion', async () => {
+      await request(app.getHttpServer()).post('/media/images').expect(401);
+      await request(app.getHttpServer())
+        .delete(`/media/${imageId}`)
+        .expect(401);
+      expect(cloudinary.uploadImage).not.toHaveBeenCalled();
+      expect(cloudinary.deleteImage).not.toHaveBeenCalled();
+    });
+
+    it('keeps a referenced previous avatar after successful replacement without deleting the shared asset', async () => {
+      const png = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jIh8AAAAASUVORK5CYII=',
+        'base64',
+      );
+      persistence.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        avatarMedia: { id: imageId, publicId: image.publicId },
+      });
+      persistence.user.update.mockResolvedValue({
+        ...safeUser,
+        avatarUrl: 'https://res.cloudinary.com/test/image/upload/new.png',
+      });
+      persistence.media.findUnique.mockResolvedValue(image);
+      persistence.media.create.mockResolvedValue({
+        id: 'new-media',
+        url: 'https://res.cloudinary.com/test/image/upload/new.png',
+      });
+      persistence.media.delete.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('referenced', {
+          code: 'P2003',
+          clientVersion: 'test-double',
+        }),
+      );
+      cloudinary.uploadImage.mockResolvedValue({
+        secure_url: 'https://res.cloudinary.com/test/image/upload/new.png',
+        public_id: 'new-media',
+        resource_type: 'image',
+        format: 'png',
+        bytes: 128,
+      });
+      const response = await request(app.getHttpServer())
+        .patch('/media/avatar')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .attach('file', png, {
+          filename: 'image.png',
+          contentType: 'image/png',
+        })
+        .expect(200);
+      expect(response.body.avatarUrl).toBe(
+        'https://res.cloudinary.com/test/image/upload/new.png',
+      );
+      expect(cloudinary.deleteImage).not.toHaveBeenCalled();
+    });
 
     it('round-trips canonical JSON through creation, private detail, public detail and edit while deriving search text', async () => {
       articleStore();
@@ -2178,6 +2543,23 @@ describe('Backend contracts with isolated I/O', () => {
         '#/components/schemas/TiptapDocumentDto',
       );
       const nodes = api.components!.schemas!.TiptapNodeDto as SchemaObject;
+      expect((nodes.properties!.type as SchemaObject).enum).toContain('image');
+      expect(post.properties!.contentMedia).toMatchObject({
+        type: 'array',
+        items: { $ref: '#/components/schemas/ContentMediaResponseDto' },
+      });
+      const media = api.components!.schemas!
+        .ContentMediaResponseDto as SchemaObject;
+      expect(Object.keys(media.properties!).sort()).toEqual([
+        'height',
+        'id',
+        'url',
+        'width',
+      ]);
+      expect(
+        api.paths['/media/{mediaId}'].delete!.responses['409'],
+      ).toBeDefined();
+      expect(api.paths['/media/images'].post!.responses['413']).toBeDefined();
       expect(nodes.properties!.content).toMatchObject({
         type: 'array',
         items: { $ref: '#/components/schemas/TiptapNodeDto' },

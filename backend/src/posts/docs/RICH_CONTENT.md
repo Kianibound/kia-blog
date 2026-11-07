@@ -1,5 +1,9 @@
 # Canonical article content — Issue #47
 
+Issue #48 extends this grammar with stable body-image references. See
+[body image contracts](../../media/BODY_IMAGES.md) for authorization, response
+resolution, image attributes and restrictive deletion behavior.
+
 ## Storage and API contract
 
 Existing `Post.content` remains a non-null string. New nullable
@@ -53,12 +57,13 @@ editor defaults or converting to HTML. JSON object key order is not significant.
 
 All objects have allowlisted keys only. Unknown nodes, marks, attributes, extra
 fields, incorrect value types, NUL and unpaired UTF-16 surrogates are rejected.
-Every non-text node may have `attrs.dir`: `rtl`, `ltr`, `auto`, or null.
+Every non-text node except image may have `attrs.dir`: `rtl`, `ltr`, `auto`, or null.
 
 | Node | Allowed content | Other attributes |
 | --- | --- | --- |
 | `doc` | One or more paragraph, heading, list, blockquote or codeBlock nodes | None |
 | `paragraph` | Zero or more text/hardBreak nodes | None |
+| `image` | Leaf; no inline placement | Required `mediaId`, `alt`; optional `title`; see Issue #48 contract |
 | `heading` | Zero or more text/hardBreak nodes | Required numeric `level`: 2, 3 or 4 |
 | `bulletList` | One or more listItem nodes | None |
 | `orderedList` | One or more listItem nodes | Optional integer `start` 1–1,000,000; `type` null, `1`, `a`, `A`, `i` or `I` |
@@ -89,7 +94,7 @@ The rules match the current editor's heading levels, directions, list attributes
 code-block language and default link attributes. The backend also supports the
 explicitly requested blockquote and inline-code features, which the current
 frontend configuration disables. No frontend changes are made in this ticket.
-Image nodes/references, uploads, cover fields, tables, raw HTML, horizontal rules,
+Cover fields, tables, raw HTML, horizontal rules,
 strike, underline and textStyle marks are not accepted here. Media work belongs
 to Issues #48/#49.
 
@@ -126,7 +131,7 @@ The current UI preview envelope is not an accepted API format. A later frontend
 adapter must submit the editor's raw document as `contentDocument`, consume that
 field when non-null, and fall back to literal `content` for legacy rows. It must
 enable/handle blockquote and inline code before offering this full feature set.
-Images and covers must remain disabled until their respective contracts exist.
+Body images use the Issue #48 contract linked above. Covers remain excluded.
 
 ## Migration and verification
 

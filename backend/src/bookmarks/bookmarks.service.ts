@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PublishedPosts } from '../published-posts/published-posts';
 import { PrismaService } from '../database/prisma.service';
+import { presentPostsWithMedia } from '../media/body-image';
 
 @Injectable()
 export class BookmarksService {
@@ -61,7 +62,7 @@ export class BookmarksService {
   }
 
   async findMine(userId: string) {
-    return this.prisma.bookmark.findMany({
+    const bookmarks = await this.prisma.bookmark.findMany({
       where: {
         userId,
         post: this.publishedPosts.where(),
@@ -86,5 +87,13 @@ export class BookmarksService {
         },
       },
     });
+    const posts = await presentPostsWithMedia(
+      this.prisma,
+      bookmarks.map((bookmark) => bookmark.post),
+    );
+    return bookmarks.map((bookmark, index) => ({
+      ...bookmark,
+      post: posts[index],
+    }));
   }
 }

@@ -3,11 +3,13 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ConflictException,
 } from '@nestjs/common';
 
 import { PrismaService } from '../database/prisma.service';
 import { CloudinaryService } from './cloudinary.service';
 import { ROLE, RoleName } from '../roles/constants/role.constants';
+import { Prisma } from '../generated/prisma/client';
 
 @Injectable()
 export class MediaService {
@@ -64,16 +66,25 @@ export class MediaService {
       );
     }
 
-    // Delete Cloudinary first. If the database delete fails, retrying this
-    // operation is safe because remote deletion is idempotent.
-    await this.cloudinaryService.deleteImage(media.publicId);
-
-    // Remove its metadata from our database
-    await this.prisma.media.delete({
-      where: {
-        id: media.id,
-      },
-    });
+    try {
+      // Delete in an open transaction first: the restrictive FK blocks any
+      // referenced image before remote I/O and serializes concurrent attachment.
+      // Remote failure rolls metadata back; remote deletion is idempotent.
+      await this.prisma.$transaction(async (transaction) => {
+        await transaction.media.delete({ where: { id: media.id } });
+        await this.cloudinaryService.deleteImage(media.publicId);
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2003')
+          throw new ConflictException(
+            'Media is referenced by an article. Remove its image node first.',
+          );
+        if (error.code === 'P2025')
+          throw new NotFoundException('Media not found.');
+      }
+      throw error;
+    }
 
     return {
       message: 'Media deleted successfully.',
@@ -151,14 +162,10 @@ export class MediaService {
     // error response. Keeping the old row makes cleanup safely retryable.
     if (user.avatarMedia) {
       try {
-        await this.cloudinaryService.deleteImage(user.avatarMedia.publicId);
-
-        await this.prisma.media.delete({
-          where: {
-            id: user.avatarMedia.id,
-          },
-        });
+        await this.remove(user.avatarMedia.id, userId, ROLE.USER);
       } catch (error) {
+        // A shared article image is deliberately retained, not a cleanup error.
+        if (error instanceof ConflictException) return updatedUser;
         this.logger.error(
           `Failed to clean up previous avatar ${user.avatarMedia.id}.`,
           error instanceof Error ? error.stack : undefined,

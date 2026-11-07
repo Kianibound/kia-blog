@@ -7,7 +7,28 @@ import {
   TaxonomySummaryResponseDto,
 } from '../../common/dto/response.dto';
 
+export class ContentMediaResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id: string;
+  @ApiProperty({
+    format: 'uri',
+    description:
+      'HTTPS Cloudinary delivery URL resolved server-side; never supplied in document JSON.',
+  })
+  url: string;
+  @ApiProperty({ type: 'integer', nullable: true })
+  width: number | null;
+  @ApiProperty({ type: 'integer', nullable: true })
+  height: number | null;
+}
+
 export class PostResponseDto {
+  @ApiProperty({
+    type: [ContentMediaResponseDto],
+    description:
+      'Unique body image references in document order; empty for legacy or text-only documents. Contains no owner/provider IDs.',
+  })
+  contentMedia: ContentMediaResponseDto[];
   @ApiProperty({ format: 'uuid' })
   id: string;
   @ApiProperty()

@@ -66,7 +66,8 @@ export const ModelName = {
   Comment: 'Comment',
   Bookmark: 'Bookmark',
   PostLike: 'PostLike',
-  Media: 'Media'
+  Media: 'Media',
+  PostMedia: 'PostMedia'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -271,6 +272,14 @@ export const MediaScalarFieldEnum = {
 } as const
 
 export type MediaScalarFieldEnum = (typeof MediaScalarFieldEnum)[keyof typeof MediaScalarFieldEnum]
+
+
+export const PostMediaScalarFieldEnum = {
+  postId: 'postId',
+  mediaId: 'mediaId'
+} as const
+
+export type PostMediaScalarFieldEnum = (typeof PostMediaScalarFieldEnum)[keyof typeof PostMediaScalarFieldEnum]
 
 
 export const SortOrder = {

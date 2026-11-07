@@ -37,7 +37,16 @@ export class MediaController {
   constructor(private readonly mediaService: MediaService) {}
 
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Upload an image' })
+  @ApiOperation({
+    summary: 'Upload an image',
+    description:
+      'JPEG, PNG or WebP detected from file bytes; strictly below 5 MiB. Use the returned Media id in article image attrs.mediaId, never a URL.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 413,
+    description: 'Multipart file exceeds 5 MiB.',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -63,7 +72,9 @@ export class MediaController {
   })
   @Post('images')
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
+  )
   uploadImage(
     @CurrentUser() user: AccessTokenPayload,
     @UploadedFile(
@@ -95,6 +106,17 @@ export class MediaController {
     status: 403,
     description: 'User cannot delete this media.',
   })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 409,
+    description:
+      'Referenced by a draft, published or deprecated article; detach first. No remote image is deleted.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 404,
+    description: 'Media not found.',
+  })
   @Delete(':mediaId')
   @UseGuards(JwtAuthGuard)
   remove(
@@ -106,6 +128,11 @@ export class MediaController {
 
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Upload or replace the current user avatar' })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 413,
+    description: 'Multipart file exceeds 5 MiB.',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -131,7 +158,9 @@ export class MediaController {
   })
   @Patch('avatar')
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
+  )
   updateAvatar(
     @CurrentUser() user: AccessTokenPayload,
     @UploadedFile(

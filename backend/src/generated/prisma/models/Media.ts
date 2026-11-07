@@ -272,6 +272,7 @@ export type MediaWhereInput = {
   ownerId?: Prisma.StringFilter<"Media"> | string
   createdAt?: Prisma.DateTimeFilter<"Media"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Media"> | Date | string
+  bodyPosts?: Prisma.PostMediaListRelationFilter
   owner?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.UserWhereInput>
   avatarOf?: Prisma.XOR<Prisma.UserNullableScalarRelationFilter, Prisma.UserWhereInput> | null
 }
@@ -288,6 +289,7 @@ export type MediaOrderByWithRelationInput = {
   ownerId?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
+  bodyPosts?: Prisma.PostMediaOrderByRelationAggregateInput
   owner?: Prisma.UserOrderByWithRelationInput
   avatarOf?: Prisma.UserOrderByWithRelationInput
 }
@@ -307,6 +309,7 @@ export type MediaWhereUniqueInput = Prisma.AtLeast<{
   ownerId?: Prisma.StringFilter<"Media"> | string
   createdAt?: Prisma.DateTimeFilter<"Media"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Media"> | Date | string
+  bodyPosts?: Prisma.PostMediaListRelationFilter
   owner?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.UserWhereInput>
   avatarOf?: Prisma.XOR<Prisma.UserNullableScalarRelationFilter, Prisma.UserWhereInput> | null
 }, "id" | "publicId">
@@ -358,6 +361,7 @@ export type MediaCreateInput = {
   height?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  bodyPosts?: Prisma.PostMediaCreateNestedManyWithoutMediaInput
   owner: Prisma.UserCreateNestedOneWithoutMediaInput
   avatarOf?: Prisma.UserCreateNestedOneWithoutAvatarMediaInput
 }
@@ -374,6 +378,7 @@ export type MediaUncheckedCreateInput = {
   ownerId: string
   createdAt?: Date | string
   updatedAt?: Date | string
+  bodyPosts?: Prisma.PostMediaUncheckedCreateNestedManyWithoutMediaInput
   avatarOf?: Prisma.UserUncheckedCreateNestedOneWithoutAvatarMediaInput
 }
 
@@ -388,6 +393,7 @@ export type MediaUpdateInput = {
   height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  bodyPosts?: Prisma.PostMediaUpdateManyWithoutMediaNestedInput
   owner?: Prisma.UserUpdateOneRequiredWithoutMediaNestedInput
   avatarOf?: Prisma.UserUpdateOneWithoutAvatarMediaNestedInput
 }
@@ -404,6 +410,7 @@ export type MediaUncheckedUpdateInput = {
   ownerId?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  bodyPosts?: Prisma.PostMediaUncheckedUpdateManyWithoutMediaNestedInput
   avatarOf?: Prisma.UserUncheckedUpdateOneWithoutAvatarMediaNestedInput
 }
 
@@ -517,6 +524,11 @@ export type MediaSumOrderByAggregateInput = {
   height?: Prisma.SortOrder
 }
 
+export type MediaScalarRelationFilter = {
+  is?: Prisma.MediaWhereInput
+  isNot?: Prisma.MediaWhereInput
+}
+
 export type MediaCreateNestedOneWithoutAvatarOfInput = {
   create?: Prisma.XOR<Prisma.MediaCreateWithoutAvatarOfInput, Prisma.MediaUncheckedCreateWithoutAvatarOfInput>
   connectOrCreate?: Prisma.MediaCreateOrConnectWithoutAvatarOfInput
@@ -591,6 +603,20 @@ export type NullableIntFieldUpdateOperationsInput = {
   divide?: number
 }
 
+export type MediaCreateNestedOneWithoutBodyPostsInput = {
+  create?: Prisma.XOR<Prisma.MediaCreateWithoutBodyPostsInput, Prisma.MediaUncheckedCreateWithoutBodyPostsInput>
+  connectOrCreate?: Prisma.MediaCreateOrConnectWithoutBodyPostsInput
+  connect?: Prisma.MediaWhereUniqueInput
+}
+
+export type MediaUpdateOneRequiredWithoutBodyPostsNestedInput = {
+  create?: Prisma.XOR<Prisma.MediaCreateWithoutBodyPostsInput, Prisma.MediaUncheckedCreateWithoutBodyPostsInput>
+  connectOrCreate?: Prisma.MediaCreateOrConnectWithoutBodyPostsInput
+  upsert?: Prisma.MediaUpsertWithoutBodyPostsInput
+  connect?: Prisma.MediaWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.MediaUpdateToOneWithWhereWithoutBodyPostsInput, Prisma.MediaUpdateWithoutBodyPostsInput>, Prisma.MediaUncheckedUpdateWithoutBodyPostsInput>
+}
+
 export type MediaCreateWithoutAvatarOfInput = {
   id?: string
   url: string
@@ -602,6 +628,7 @@ export type MediaCreateWithoutAvatarOfInput = {
   height?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  bodyPosts?: Prisma.PostMediaCreateNestedManyWithoutMediaInput
   owner: Prisma.UserCreateNestedOneWithoutMediaInput
 }
 
@@ -617,6 +644,7 @@ export type MediaUncheckedCreateWithoutAvatarOfInput = {
   ownerId: string
   createdAt?: Date | string
   updatedAt?: Date | string
+  bodyPosts?: Prisma.PostMediaUncheckedCreateNestedManyWithoutMediaInput
 }
 
 export type MediaCreateOrConnectWithoutAvatarOfInput = {
@@ -635,6 +663,7 @@ export type MediaCreateWithoutOwnerInput = {
   height?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  bodyPosts?: Prisma.PostMediaCreateNestedManyWithoutMediaInput
   avatarOf?: Prisma.UserCreateNestedOneWithoutAvatarMediaInput
 }
 
@@ -649,6 +678,7 @@ export type MediaUncheckedCreateWithoutOwnerInput = {
   height?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  bodyPosts?: Prisma.PostMediaUncheckedCreateNestedManyWithoutMediaInput
   avatarOf?: Prisma.UserUncheckedCreateNestedOneWithoutAvatarMediaInput
 }
 
@@ -684,6 +714,7 @@ export type MediaUpdateWithoutAvatarOfInput = {
   height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  bodyPosts?: Prisma.PostMediaUpdateManyWithoutMediaNestedInput
   owner?: Prisma.UserUpdateOneRequiredWithoutMediaNestedInput
 }
 
@@ -699,6 +730,7 @@ export type MediaUncheckedUpdateWithoutAvatarOfInput = {
   ownerId?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  bodyPosts?: Prisma.PostMediaUncheckedUpdateManyWithoutMediaNestedInput
 }
 
 export type MediaUpsertWithWhereUniqueWithoutOwnerInput = {
@@ -734,6 +766,82 @@ export type MediaScalarWhereInput = {
   updatedAt?: Prisma.DateTimeFilter<"Media"> | Date | string
 }
 
+export type MediaCreateWithoutBodyPostsInput = {
+  id?: string
+  url: string
+  publicId: string
+  resourceType: string
+  format: string
+  bytes: number
+  width?: number | null
+  height?: number | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  owner: Prisma.UserCreateNestedOneWithoutMediaInput
+  avatarOf?: Prisma.UserCreateNestedOneWithoutAvatarMediaInput
+}
+
+export type MediaUncheckedCreateWithoutBodyPostsInput = {
+  id?: string
+  url: string
+  publicId: string
+  resourceType: string
+  format: string
+  bytes: number
+  width?: number | null
+  height?: number | null
+  ownerId: string
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  avatarOf?: Prisma.UserUncheckedCreateNestedOneWithoutAvatarMediaInput
+}
+
+export type MediaCreateOrConnectWithoutBodyPostsInput = {
+  where: Prisma.MediaWhereUniqueInput
+  create: Prisma.XOR<Prisma.MediaCreateWithoutBodyPostsInput, Prisma.MediaUncheckedCreateWithoutBodyPostsInput>
+}
+
+export type MediaUpsertWithoutBodyPostsInput = {
+  update: Prisma.XOR<Prisma.MediaUpdateWithoutBodyPostsInput, Prisma.MediaUncheckedUpdateWithoutBodyPostsInput>
+  create: Prisma.XOR<Prisma.MediaCreateWithoutBodyPostsInput, Prisma.MediaUncheckedCreateWithoutBodyPostsInput>
+  where?: Prisma.MediaWhereInput
+}
+
+export type MediaUpdateToOneWithWhereWithoutBodyPostsInput = {
+  where?: Prisma.MediaWhereInput
+  data: Prisma.XOR<Prisma.MediaUpdateWithoutBodyPostsInput, Prisma.MediaUncheckedUpdateWithoutBodyPostsInput>
+}
+
+export type MediaUpdateWithoutBodyPostsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  url?: Prisma.StringFieldUpdateOperationsInput | string
+  publicId?: Prisma.StringFieldUpdateOperationsInput | string
+  resourceType?: Prisma.StringFieldUpdateOperationsInput | string
+  format?: Prisma.StringFieldUpdateOperationsInput | string
+  bytes?: Prisma.IntFieldUpdateOperationsInput | number
+  width?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  owner?: Prisma.UserUpdateOneRequiredWithoutMediaNestedInput
+  avatarOf?: Prisma.UserUpdateOneWithoutAvatarMediaNestedInput
+}
+
+export type MediaUncheckedUpdateWithoutBodyPostsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  url?: Prisma.StringFieldUpdateOperationsInput | string
+  publicId?: Prisma.StringFieldUpdateOperationsInput | string
+  resourceType?: Prisma.StringFieldUpdateOperationsInput | string
+  format?: Prisma.StringFieldUpdateOperationsInput | string
+  bytes?: Prisma.IntFieldUpdateOperationsInput | number
+  width?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  ownerId?: Prisma.StringFieldUpdateOperationsInput | string
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  avatarOf?: Prisma.UserUncheckedUpdateOneWithoutAvatarMediaNestedInput
+}
+
 export type MediaCreateManyOwnerInput = {
   id?: string
   url: string
@@ -758,6 +866,7 @@ export type MediaUpdateWithoutOwnerInput = {
   height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  bodyPosts?: Prisma.PostMediaUpdateManyWithoutMediaNestedInput
   avatarOf?: Prisma.UserUpdateOneWithoutAvatarMediaNestedInput
 }
 
@@ -772,6 +881,7 @@ export type MediaUncheckedUpdateWithoutOwnerInput = {
   height?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  bodyPosts?: Prisma.PostMediaUncheckedUpdateManyWithoutMediaNestedInput
   avatarOf?: Prisma.UserUncheckedUpdateOneWithoutAvatarMediaNestedInput
 }
 
@@ -789,6 +899,35 @@ export type MediaUncheckedUpdateManyWithoutOwnerInput = {
 }
 
 
+/**
+ * Count Type MediaCountOutputType
+ */
+
+export type MediaCountOutputType = {
+  bodyPosts: number
+}
+
+export type MediaCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  bodyPosts?: boolean | MediaCountOutputTypeCountBodyPostsArgs
+}
+
+/**
+ * MediaCountOutputType without action
+ */
+export type MediaCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the MediaCountOutputType
+   */
+  select?: Prisma.MediaCountOutputTypeSelect<ExtArgs> | null
+}
+
+/**
+ * MediaCountOutputType without action
+ */
+export type MediaCountOutputTypeCountBodyPostsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.PostMediaWhereInput
+}
+
 
 export type MediaSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -802,8 +941,10 @@ export type MediaSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   ownerId?: boolean
   createdAt?: boolean
   updatedAt?: boolean
+  bodyPosts?: boolean | Prisma.Media$bodyPostsArgs<ExtArgs>
   owner?: boolean | Prisma.UserDefaultArgs<ExtArgs>
   avatarOf?: boolean | Prisma.Media$avatarOfArgs<ExtArgs>
+  _count?: boolean | Prisma.MediaCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["media"]>
 
 export type MediaSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -852,8 +993,10 @@ export type MediaSelectScalar = {
 
 export type MediaOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "url" | "publicId" | "resourceType" | "format" | "bytes" | "width" | "height" | "ownerId" | "createdAt" | "updatedAt", ExtArgs["result"]["media"]>
 export type MediaInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  bodyPosts?: boolean | Prisma.Media$bodyPostsArgs<ExtArgs>
   owner?: boolean | Prisma.UserDefaultArgs<ExtArgs>
   avatarOf?: boolean | Prisma.Media$avatarOfArgs<ExtArgs>
+  _count?: boolean | Prisma.MediaCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type MediaIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   owner?: boolean | Prisma.UserDefaultArgs<ExtArgs>
@@ -865,6 +1008,7 @@ export type MediaIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extens
 export type $MediaPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "Media"
   objects: {
+    bodyPosts: Prisma.$PostMediaPayload<ExtArgs>[]
     owner: Prisma.$UserPayload<ExtArgs>
     avatarOf: Prisma.$UserPayload<ExtArgs> | null
   }
@@ -1274,6 +1418,7 @@ readonly fields: MediaFieldRefs;
  */
 export interface Prisma__MediaClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
+  bodyPosts<T extends Prisma.Media$bodyPostsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Media$bodyPostsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PostMediaPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   owner<T extends Prisma.UserDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.UserDefaultArgs<ExtArgs>>): Prisma.Prisma__UserClient<runtime.Types.Result.GetResult<Prisma.$UserPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   avatarOf<T extends Prisma.Media$avatarOfArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Media$avatarOfArgs<ExtArgs>>): Prisma.Prisma__UserClient<runtime.Types.Result.GetResult<Prisma.$UserPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
@@ -1714,6 +1859,30 @@ export type MediaDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.Interna
    * Limit how many Media to delete.
    */
   limit?: number
+}
+
+/**
+ * Media.bodyPosts
+ */
+export type Media$bodyPostsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the PostMedia
+   */
+  select?: Prisma.PostMediaSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the PostMedia
+   */
+  omit?: Prisma.PostMediaOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.PostMediaInclude<ExtArgs> | null
+  where?: Prisma.PostMediaWhereInput
+  orderBy?: Prisma.PostMediaOrderByWithRelationInput | Prisma.PostMediaOrderByWithRelationInput[]
+  cursor?: Prisma.PostMediaWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.PostMediaScalarFieldEnum | Prisma.PostMediaScalarFieldEnum[]
 }
 
 /**

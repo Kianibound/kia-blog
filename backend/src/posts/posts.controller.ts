@@ -122,14 +122,15 @@ export class PostsController {
   @ApiResponse({
     type: ErrorResponseDto,
     status: 403,
-    description: 'Only AUTHOR or ADMIN can create posts.',
+    description:
+      'Only AUTHOR or ADMIN can create posts; AUTHOR can attach only media owned by the Post author.',
   })
   @Post()
   @ApiResponse({
     status: 400,
     type: ErrorResponseDto,
     description:
-      'Invalid fields, ambiguous content sources, unsupported/unsafe rich document, or document limits exceeded.',
+      'Invalid fields, ambiguous content sources, unsupported/unsafe rich document or media reference, or document limits exceeded.',
   })
   @ApiResponse({
     status: 413,
@@ -140,7 +141,7 @@ export class PostsController {
   @Roles(ROLE.AUTHOR, ROLE.ADMIN)
   create(@CurrentUser() user: AccessTokenPayload, @Body() dto: CreatePostDto) {
     // The author identity comes from the verified access token
-    return this.postsService.create(user.sub, dto);
+    return this.postsService.create(user.sub, dto, user.role);
   }
 
   @ApiOperation({ summary: 'Get published posts with pagination and filters' })
@@ -276,14 +277,14 @@ export class PostsController {
   @ApiResponse({
     type: ErrorResponseDto,
     status: 403,
-    description: 'User is not allowed to update this post.',
+    description: 'User cannot update this post or attach foreign-owned media.',
   })
   @Patch(':id')
   @ApiResponse({
     status: 400,
     type: ErrorResponseDto,
     description:
-      'Invalid fields, ambiguous content sources, unsupported/unsafe rich document, or document limits exceeded.',
+      'Invalid fields, ambiguous content sources, unsupported/unsafe rich document or media reference, or document limits exceeded.',
   })
   @ApiResponse({
     status: 413,

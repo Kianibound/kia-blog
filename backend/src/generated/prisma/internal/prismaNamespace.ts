@@ -412,7 +412,8 @@ export const ModelName = {
   Comment: 'Comment',
   Bookmark: 'Bookmark',
   PostLike: 'PostLike',
-  Media: 'Media'
+  Media: 'Media',
+  PostMedia: 'PostMedia'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -428,7 +429,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "githubIdentity" | "githubOAuthState" | "googleIdentity" | "googleOAuthState" | "role" | "refreshToken" | "emailVerificationToken" | "passwordResetToken" | "post" | "category" | "tag" | "comment" | "bookmark" | "postLike" | "media"
+    modelProps: "user" | "githubIdentity" | "githubOAuthState" | "googleIdentity" | "googleOAuthState" | "role" | "refreshToken" | "emailVerificationToken" | "passwordResetToken" | "post" | "category" | "tag" | "comment" | "bookmark" | "postLike" | "media" | "postMedia"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1616,6 +1617,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    PostMedia: {
+      payload: Prisma.$PostMediaPayload<ExtArgs>
+      fields: Prisma.PostMediaFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.PostMediaFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.PostMediaFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>
+        }
+        findFirst: {
+          args: Prisma.PostMediaFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.PostMediaFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>
+        }
+        findMany: {
+          args: Prisma.PostMediaFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>[]
+        }
+        create: {
+          args: Prisma.PostMediaCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>
+        }
+        createMany: {
+          args: Prisma.PostMediaCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.PostMediaCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>[]
+        }
+        delete: {
+          args: Prisma.PostMediaDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>
+        }
+        update: {
+          args: Prisma.PostMediaUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>
+        }
+        deleteMany: {
+          args: Prisma.PostMediaDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.PostMediaUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.PostMediaUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>[]
+        }
+        upsert: {
+          args: Prisma.PostMediaUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>
+        }
+        aggregate: {
+          args: Prisma.PostMediaAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregatePostMedia>
+        }
+        groupBy: {
+          args: Prisma.PostMediaGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PostMediaGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.PostMediaCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PostMediaCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -1841,6 +1916,14 @@ export const MediaScalarFieldEnum = {
 } as const
 
 export type MediaScalarFieldEnum = (typeof MediaScalarFieldEnum)[keyof typeof MediaScalarFieldEnum]
+
+
+export const PostMediaScalarFieldEnum = {
+  postId: 'postId',
+  mediaId: 'mediaId'
+} as const
+
+export type PostMediaScalarFieldEnum = (typeof PostMediaScalarFieldEnum)[keyof typeof PostMediaScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -2147,6 +2230,7 @@ export type GlobalOmitConfig = {
   bookmark?: Prisma.BookmarkOmit
   postLike?: Prisma.PostLikeOmit
   media?: Prisma.MediaOmit
+  postMedia?: Prisma.PostMediaOmit
 }
 
 /* Types for Logging */

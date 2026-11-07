@@ -11,56 +11,80 @@ import type { CreatePostDto } from './dto/create-post.dto';
 import type { UpdatePostDto } from './dto/update-post.dto';
 import slugify from 'slugify';
 import { preparePostContent } from './rich-document';
+import {
+  documentMediaIds,
+  resolveDocumentMedia,
+  rethrowMediaReferenceError,
+} from '../media/body-image';
+import { ROLE } from '../roles/constants/role.constants';
 
 // Internal to PostsModule: writes own lifecycle, relation changes, and slug allocation.
 @Injectable()
 export class PostCommands {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(authorId: string, dto: CreatePostDto) {
+  async create(
+    authorId: string,
+    dto: CreatePostDto,
+    role: RoleName = ROLE.AUTHOR,
+  ) {
     const contentFields = preparePostContent(dto);
     if (!contentFields)
       throw new BadRequestException('Supply content or contentDocument.');
+    const media = await resolveDocumentMedia(this.prisma, dto.contentDocument, {
+      authorId,
+      role,
+    });
     // Generate a unique public URL slug from the title
     const slug = await this.generateUniqueSlug(dto.title);
 
     // Set publication time only when the post starts as published
     const publishedAt = dto.status === PostStatus.PUBLISHED ? new Date() : null;
 
-    return this.prisma.post.create({
-      data: {
-        title: dto.title,
-        slug,
-        ...contentFields,
-        status: dto.status,
-        publishedAt,
-        authorId,
+    return this.prisma.post
+      .create({
+        data: {
+          title: dto.title,
+          slug,
+          ...contentFields,
+          status: dto.status,
+          publishedAt,
+          authorId,
+          ...(media.length
+            ? {
+                bodyMedia: { create: media.map(({ id }) => ({ mediaId: id })) },
+              }
+            : {}),
 
-        // Connect existing categories by id
-        categories: dto.categoryIds
-          ? {
-              connect: dto.categoryIds.map((id) => ({
-                id,
-              })),
-            }
-          : undefined,
+          // Connect existing categories by id
+          categories: dto.categoryIds
+            ? {
+                connect: dto.categoryIds.map((id) => ({
+                  id,
+                })),
+              }
+            : undefined,
 
-        // Connect existing tags by id
-        tags: dto.tagIds
-          ? {
-              connect: dto.tagIds.map((id) => ({
-                id,
-              })),
-            }
-          : undefined,
-      },
+          // Connect existing tags by id
+          tags: dto.tagIds
+            ? {
+                connect: dto.tagIds.map((id) => ({
+                  id,
+                })),
+              }
+            : undefined,
+        },
 
-      // Return attached categories and tags in the response
-      include: {
-        categories: true,
-        tags: true,
-      },
-    });
+        // Return attached categories and tags in the response
+        include: {
+          categories: true,
+          tags: true,
+        },
+      })
+      .catch((error: unknown) => {
+        if (media.length) rethrowMediaReferenceError(error);
+        throw error;
+      });
   }
 
   async update(
@@ -96,6 +120,11 @@ export class PostCommands {
       ...postData
     } = dto;
     const contentFields = preparePostContent(dto);
+    if (contentFields)
+      await resolveDocumentMedia(this.prisma, dto.contentDocument, {
+        authorId: post.authorId,
+        role: currentUserRole,
+      });
 
     if (
       dto.status === PostStatus.PUBLISHED &&
@@ -111,42 +140,58 @@ export class PostCommands {
     }
 
     // Update only the fields provided by the client
-    return this.prisma.post.update({
-      where: {
-        id: postId,
-      },
-      data: {
-        ...postData,
-        ...contentFields,
-        publishedAt,
-
-        // Replace categories only when categoryIds is provided
-        categories:
-          categoryIds !== undefined
+    return this.prisma.post
+      .update({
+        where: {
+          id: postId,
+        },
+        data: {
+          ...postData,
+          ...contentFields,
+          ...(contentFields
             ? {
-                set: categoryIds.map((id) => ({
-                  id,
-                })),
+                bodyMedia: {
+                  deleteMany: {},
+                  create: documentMediaIds(dto.contentDocument).map(
+                    (mediaId) => ({ mediaId }),
+                  ),
+                },
               }
-            : undefined,
+            : {}),
+          publishedAt,
 
-        // Replace tags only when tagIds is provided
-        tags:
-          tagIds !== undefined
-            ? {
-                set: tagIds.map((id) => ({
-                  id,
-                })),
-              }
-            : undefined,
-      },
+          // Replace categories only when categoryIds is provided
+          categories:
+            categoryIds !== undefined
+              ? {
+                  set: categoryIds.map((id) => ({
+                    id,
+                  })),
+                }
+              : undefined,
 
-      // Return updated relations in the response
-      include: {
-        categories: true,
-        tags: true,
-      },
-    });
+          // Replace tags only when tagIds is provided
+          tags:
+            tagIds !== undefined
+              ? {
+                  set: tagIds.map((id) => ({
+                    id,
+                  })),
+                }
+              : undefined,
+        },
+
+        // Return updated relations in the response
+        include: {
+          categories: true,
+          tags: true,
+        },
+      })
+      .catch((error: unknown) => {
+        if (documentMediaIds(dto.contentDocument).length)
+          rethrowMediaReferenceError(error);
+        throw error;
+      });
   }
 
   private async generateUniqueSlug(title: string): Promise<string> {

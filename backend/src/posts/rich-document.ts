@@ -19,6 +19,7 @@ const blocks = new Set([
   'listItem',
   'blockquote',
   'codeBlock',
+  'image',
 ]);
 const inline = new Set(['text', 'hardBreak']);
 const record = (value: unknown): value is Record<string, unknown> =>
@@ -143,6 +144,20 @@ export function parseRichDocument(value: unknown): {
       ensure(string(node.text) && node.text.length > 0);
       marks(node.marks, parent === 'codeBlock');
       return node.text;
+    }
+    if (type === 'image') {
+      keys(node, ['type', 'attrs']);
+      ensure(record(node.attrs));
+      keys(node.attrs, ['mediaId', 'alt', 'title']);
+      ensure(
+        string(node.attrs.mediaId, 36) &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+            node.attrs.mediaId,
+          ),
+      );
+      ensure(string(node.attrs.alt, 500) && node.attrs.alt.trim().length > 0);
+      if (node.attrs.title !== undefined) ensure(string(node.attrs.title, 256));
+      return node.attrs.alt;
     }
     ensure(type === 'doc' || blocks.has(type) || type === 'hardBreak');
     keys(

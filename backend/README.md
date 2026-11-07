@@ -382,7 +382,9 @@ content; a string replacement clears the JSON. Apply the additive
 `20261107193000_add_post_content_document` migration and regenerate Prisma first.
 See the [rich-content contract](src/posts/docs/RICH_CONTENT.md) for the node/mark
 allowlist, limits, round-trip rules, safe rendering and pending frontend adapter.
-Images, uploads and covers are excluded from this issue.
+Issue #48 adds body-image references using existing upload/Cloudinary infrastructure.
+See [body image contracts and deletion safety](src/media/BODY_IMAGES.md).
+Cover images and frontend integration remain excluded.
 
 ### Owned Post status filtering (Issue #45)
 

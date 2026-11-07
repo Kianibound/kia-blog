@@ -118,22 +118,23 @@ enum PostStatus {
 }
 
 model Post {
-  id              String     @id @default(uuid())
+  id              String      @id @default(uuid())
   title           String
-  slug            String     @unique
+  slug            String      @unique
   content         String
   contentDocument Json?
-  status          PostStatus @default(DRAFT)
+  bodyMedia       PostMedia[]
+  status          PostStatus  @default(DRAFT)
   publishedAt     DateTime?
   authorId        String
-  author          User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author          User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
   categories      Category[]
   tags            Tag[]
   comments        Comment[]
   bookmarks       Bookmark[]
   postLikes       PostLike[]
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   @@index([authorId])
   @@index([status])
@@ -208,9 +209,10 @@ model PostLike {
 }
 
 model Media {
-  id           String @id @default(uuid())
+  bodyPosts    PostMedia[]
+  id           String      @id @default(uuid())
   url          String
-  publicId     String @unique
+  publicId     String      @unique
   resourceType String
   format       String
   bytes        Int
@@ -224,4 +226,14 @@ model Media {
   updatedAt DateTime @updatedAt
 
   @@index([ownerId])
+}
+
+model PostMedia {
+  postId  String
+  mediaId String
+  post    Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  media   Media  @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+
+  @@id([postId, mediaId])
+  @@index([mediaId])
 }
