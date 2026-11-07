@@ -248,6 +248,7 @@ export type UserWhereInput = {
   avatarMedia?: Prisma.XOR<Prisma.MediaNullableScalarRelationFilter, Prisma.MediaWhereInput> | null
   media?: Prisma.MediaListRelationFilter
   posts?: Prisma.PostListRelationFilter
+  googleIdentity?: Prisma.XOR<Prisma.GoogleIdentityNullableScalarRelationFilter, Prisma.GoogleIdentityWhereInput> | null
 }
 
 export type UserOrderByWithRelationInput = {
@@ -273,6 +274,7 @@ export type UserOrderByWithRelationInput = {
   avatarMedia?: Prisma.MediaOrderByWithRelationInput
   media?: Prisma.MediaOrderByRelationAggregateInput
   posts?: Prisma.PostOrderByRelationAggregateInput
+  googleIdentity?: Prisma.GoogleIdentityOrderByWithRelationInput
 }
 
 export type UserWhereUniqueInput = Prisma.AtLeast<{
@@ -301,6 +303,7 @@ export type UserWhereUniqueInput = Prisma.AtLeast<{
   avatarMedia?: Prisma.XOR<Prisma.MediaNullableScalarRelationFilter, Prisma.MediaWhereInput> | null
   media?: Prisma.MediaListRelationFilter
   posts?: Prisma.PostListRelationFilter
+  googleIdentity?: Prisma.XOR<Prisma.GoogleIdentityNullableScalarRelationFilter, Prisma.GoogleIdentityWhereInput> | null
 }, "id" | "email" | "username" | "avatarMediaId">
 
 export type UserOrderByWithAggregationInput = {
@@ -360,6 +363,7 @@ export type UserCreateInput = {
   avatarMedia?: Prisma.MediaCreateNestedOneWithoutAvatarOfInput
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateInput = {
@@ -383,6 +387,7 @@ export type UserUncheckedCreateInput = {
   postLikes?: Prisma.PostLikeUncheckedCreateNestedManyWithoutUserInput
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserUpdateInput = {
@@ -406,6 +411,7 @@ export type UserUpdateInput = {
   avatarMedia?: Prisma.MediaUpdateOneWithoutAvatarOfNestedInput
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateInput = {
@@ -429,6 +435,7 @@ export type UserUncheckedUpdateInput = {
   postLikes?: Prisma.PostLikeUncheckedUpdateManyWithoutUserNestedInput
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateManyInput = {
@@ -519,6 +526,11 @@ export type UserMinOrderByAggregateInput = {
   updatedAt?: Prisma.SortOrder
 }
 
+export type UserScalarRelationFilter = {
+  is?: Prisma.UserWhereInput
+  isNot?: Prisma.UserWhereInput
+}
+
 export type UserListRelationFilter = {
   every?: Prisma.UserWhereInput
   some?: Prisma.UserWhereInput
@@ -527,11 +539,6 @@ export type UserListRelationFilter = {
 
 export type UserOrderByRelationAggregateInput = {
   _count?: Prisma.SortOrder
-}
-
-export type UserScalarRelationFilter = {
-  is?: Prisma.UserWhereInput
-  isNot?: Prisma.UserWhereInput
 }
 
 export type UserNullableScalarRelationFilter = {
@@ -557,6 +564,20 @@ export type NullableDateTimeFieldUpdateOperationsInput = {
 
 export type DateTimeFieldUpdateOperationsInput = {
   set?: Date | string
+}
+
+export type UserCreateNestedOneWithoutGoogleIdentityInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutGoogleIdentityInput, Prisma.UserUncheckedCreateWithoutGoogleIdentityInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutGoogleIdentityInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneRequiredWithoutGoogleIdentityNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutGoogleIdentityInput, Prisma.UserUncheckedCreateWithoutGoogleIdentityInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutGoogleIdentityInput
+  upsert?: Prisma.UserUpsertWithoutGoogleIdentityInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutGoogleIdentityInput, Prisma.UserUpdateWithoutGoogleIdentityInput>, Prisma.UserUncheckedUpdateWithoutGoogleIdentityInput>
 }
 
 export type UserCreateNestedManyWithoutRoleInput = {
@@ -745,6 +766,114 @@ export type UserUncheckedUpdateOneWithoutAvatarMediaNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutAvatarMediaInput, Prisma.UserUpdateWithoutAvatarMediaInput>, Prisma.UserUncheckedUpdateWithoutAvatarMediaInput>
 }
 
+export type UserCreateWithoutGoogleIdentityInput = {
+  id?: string
+  email: string
+  username: string
+  name?: string | null
+  avatarUrl?: string | null
+  passwordHash?: string | null
+  emailVerified?: boolean
+  disabledAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  refreshTokens?: Prisma.RefreshTokenCreateNestedManyWithoutUserInput
+  emailVerificationTokens?: Prisma.EmailVerificationTokenCreateNestedManyWithoutUserInput
+  passwordResetTokens?: Prisma.PasswordResetTokenCreateNestedManyWithoutUserInput
+  role?: Prisma.RoleCreateNestedOneWithoutUsersInput
+  comments?: Prisma.CommentCreateNestedManyWithoutAuthorInput
+  bookmarks?: Prisma.BookmarkCreateNestedManyWithoutUserInput
+  postLikes?: Prisma.PostLikeCreateNestedManyWithoutUserInput
+  avatarMedia?: Prisma.MediaCreateNestedOneWithoutAvatarOfInput
+  media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
+  posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
+}
+
+export type UserUncheckedCreateWithoutGoogleIdentityInput = {
+  id?: string
+  email: string
+  username: string
+  name?: string | null
+  avatarUrl?: string | null
+  passwordHash?: string | null
+  roleId?: string | null
+  emailVerified?: boolean
+  disabledAt?: Date | string | null
+  avatarMediaId?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  refreshTokens?: Prisma.RefreshTokenUncheckedCreateNestedManyWithoutUserInput
+  emailVerificationTokens?: Prisma.EmailVerificationTokenUncheckedCreateNestedManyWithoutUserInput
+  passwordResetTokens?: Prisma.PasswordResetTokenUncheckedCreateNestedManyWithoutUserInput
+  comments?: Prisma.CommentUncheckedCreateNestedManyWithoutAuthorInput
+  bookmarks?: Prisma.BookmarkUncheckedCreateNestedManyWithoutUserInput
+  postLikes?: Prisma.PostLikeUncheckedCreateNestedManyWithoutUserInput
+  media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
+  posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
+}
+
+export type UserCreateOrConnectWithoutGoogleIdentityInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutGoogleIdentityInput, Prisma.UserUncheckedCreateWithoutGoogleIdentityInput>
+}
+
+export type UserUpsertWithoutGoogleIdentityInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutGoogleIdentityInput, Prisma.UserUncheckedUpdateWithoutGoogleIdentityInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutGoogleIdentityInput, Prisma.UserUncheckedCreateWithoutGoogleIdentityInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutGoogleIdentityInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutGoogleIdentityInput, Prisma.UserUncheckedUpdateWithoutGoogleIdentityInput>
+}
+
+export type UserUpdateWithoutGoogleIdentityInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  username?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  avatarUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  refreshTokens?: Prisma.RefreshTokenUpdateManyWithoutUserNestedInput
+  emailVerificationTokens?: Prisma.EmailVerificationTokenUpdateManyWithoutUserNestedInput
+  passwordResetTokens?: Prisma.PasswordResetTokenUpdateManyWithoutUserNestedInput
+  role?: Prisma.RoleUpdateOneWithoutUsersNestedInput
+  comments?: Prisma.CommentUpdateManyWithoutAuthorNestedInput
+  bookmarks?: Prisma.BookmarkUpdateManyWithoutUserNestedInput
+  postLikes?: Prisma.PostLikeUpdateManyWithoutUserNestedInput
+  avatarMedia?: Prisma.MediaUpdateOneWithoutAvatarOfNestedInput
+  media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
+  posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
+}
+
+export type UserUncheckedUpdateWithoutGoogleIdentityInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  username?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  avatarUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  roleId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  avatarMediaId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  refreshTokens?: Prisma.RefreshTokenUncheckedUpdateManyWithoutUserNestedInput
+  emailVerificationTokens?: Prisma.EmailVerificationTokenUncheckedUpdateManyWithoutUserNestedInput
+  passwordResetTokens?: Prisma.PasswordResetTokenUncheckedUpdateManyWithoutUserNestedInput
+  comments?: Prisma.CommentUncheckedUpdateManyWithoutAuthorNestedInput
+  bookmarks?: Prisma.BookmarkUncheckedUpdateManyWithoutUserNestedInput
+  postLikes?: Prisma.PostLikeUncheckedUpdateManyWithoutUserNestedInput
+  media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
+  posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
+}
+
 export type UserCreateWithoutRoleInput = {
   id?: string
   email: string
@@ -765,6 +894,7 @@ export type UserCreateWithoutRoleInput = {
   avatarMedia?: Prisma.MediaCreateNestedOneWithoutAvatarOfInput
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutRoleInput = {
@@ -787,6 +917,7 @@ export type UserUncheckedCreateWithoutRoleInput = {
   postLikes?: Prisma.PostLikeUncheckedCreateNestedManyWithoutUserInput
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutRoleInput = {
@@ -853,6 +984,7 @@ export type UserCreateWithoutRefreshTokensInput = {
   avatarMedia?: Prisma.MediaCreateNestedOneWithoutAvatarOfInput
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutRefreshTokensInput = {
@@ -875,6 +1007,7 @@ export type UserUncheckedCreateWithoutRefreshTokensInput = {
   postLikes?: Prisma.PostLikeUncheckedCreateNestedManyWithoutUserInput
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutRefreshTokensInput = {
@@ -913,6 +1046,7 @@ export type UserUpdateWithoutRefreshTokensInput = {
   avatarMedia?: Prisma.MediaUpdateOneWithoutAvatarOfNestedInput
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutRefreshTokensInput = {
@@ -935,6 +1069,7 @@ export type UserUncheckedUpdateWithoutRefreshTokensInput = {
   postLikes?: Prisma.PostLikeUncheckedUpdateManyWithoutUserNestedInput
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutEmailVerificationTokensInput = {
@@ -957,6 +1092,7 @@ export type UserCreateWithoutEmailVerificationTokensInput = {
   avatarMedia?: Prisma.MediaCreateNestedOneWithoutAvatarOfInput
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutEmailVerificationTokensInput = {
@@ -979,6 +1115,7 @@ export type UserUncheckedCreateWithoutEmailVerificationTokensInput = {
   postLikes?: Prisma.PostLikeUncheckedCreateNestedManyWithoutUserInput
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutEmailVerificationTokensInput = {
@@ -1017,6 +1154,7 @@ export type UserUpdateWithoutEmailVerificationTokensInput = {
   avatarMedia?: Prisma.MediaUpdateOneWithoutAvatarOfNestedInput
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutEmailVerificationTokensInput = {
@@ -1039,6 +1177,7 @@ export type UserUncheckedUpdateWithoutEmailVerificationTokensInput = {
   postLikes?: Prisma.PostLikeUncheckedUpdateManyWithoutUserNestedInput
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutPasswordResetTokensInput = {
@@ -1061,6 +1200,7 @@ export type UserCreateWithoutPasswordResetTokensInput = {
   avatarMedia?: Prisma.MediaCreateNestedOneWithoutAvatarOfInput
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutPasswordResetTokensInput = {
@@ -1083,6 +1223,7 @@ export type UserUncheckedCreateWithoutPasswordResetTokensInput = {
   postLikes?: Prisma.PostLikeUncheckedCreateNestedManyWithoutUserInput
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutPasswordResetTokensInput = {
@@ -1121,6 +1262,7 @@ export type UserUpdateWithoutPasswordResetTokensInput = {
   avatarMedia?: Prisma.MediaUpdateOneWithoutAvatarOfNestedInput
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutPasswordResetTokensInput = {
@@ -1143,6 +1285,7 @@ export type UserUncheckedUpdateWithoutPasswordResetTokensInput = {
   postLikes?: Prisma.PostLikeUncheckedUpdateManyWithoutUserNestedInput
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutPostsInput = {
@@ -1165,6 +1308,7 @@ export type UserCreateWithoutPostsInput = {
   postLikes?: Prisma.PostLikeCreateNestedManyWithoutUserInput
   avatarMedia?: Prisma.MediaCreateNestedOneWithoutAvatarOfInput
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
+  googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutPostsInput = {
@@ -1187,6 +1331,7 @@ export type UserUncheckedCreateWithoutPostsInput = {
   bookmarks?: Prisma.BookmarkUncheckedCreateNestedManyWithoutUserInput
   postLikes?: Prisma.PostLikeUncheckedCreateNestedManyWithoutUserInput
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutPostsInput = {
@@ -1225,6 +1370,7 @@ export type UserUpdateWithoutPostsInput = {
   postLikes?: Prisma.PostLikeUpdateManyWithoutUserNestedInput
   avatarMedia?: Prisma.MediaUpdateOneWithoutAvatarOfNestedInput
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutPostsInput = {
@@ -1247,6 +1393,7 @@ export type UserUncheckedUpdateWithoutPostsInput = {
   bookmarks?: Prisma.BookmarkUncheckedUpdateManyWithoutUserNestedInput
   postLikes?: Prisma.PostLikeUncheckedUpdateManyWithoutUserNestedInput
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutCommentsInput = {
@@ -1269,6 +1416,7 @@ export type UserCreateWithoutCommentsInput = {
   avatarMedia?: Prisma.MediaCreateNestedOneWithoutAvatarOfInput
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutCommentsInput = {
@@ -1291,6 +1439,7 @@ export type UserUncheckedCreateWithoutCommentsInput = {
   postLikes?: Prisma.PostLikeUncheckedCreateNestedManyWithoutUserInput
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutCommentsInput = {
@@ -1329,6 +1478,7 @@ export type UserUpdateWithoutCommentsInput = {
   avatarMedia?: Prisma.MediaUpdateOneWithoutAvatarOfNestedInput
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutCommentsInput = {
@@ -1351,6 +1501,7 @@ export type UserUncheckedUpdateWithoutCommentsInput = {
   postLikes?: Prisma.PostLikeUncheckedUpdateManyWithoutUserNestedInput
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutBookmarksInput = {
@@ -1373,6 +1524,7 @@ export type UserCreateWithoutBookmarksInput = {
   avatarMedia?: Prisma.MediaCreateNestedOneWithoutAvatarOfInput
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutBookmarksInput = {
@@ -1395,6 +1547,7 @@ export type UserUncheckedCreateWithoutBookmarksInput = {
   postLikes?: Prisma.PostLikeUncheckedCreateNestedManyWithoutUserInput
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutBookmarksInput = {
@@ -1433,6 +1586,7 @@ export type UserUpdateWithoutBookmarksInput = {
   avatarMedia?: Prisma.MediaUpdateOneWithoutAvatarOfNestedInput
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutBookmarksInput = {
@@ -1455,6 +1609,7 @@ export type UserUncheckedUpdateWithoutBookmarksInput = {
   postLikes?: Prisma.PostLikeUncheckedUpdateManyWithoutUserNestedInput
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutPostLikesInput = {
@@ -1477,6 +1632,7 @@ export type UserCreateWithoutPostLikesInput = {
   avatarMedia?: Prisma.MediaCreateNestedOneWithoutAvatarOfInput
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutPostLikesInput = {
@@ -1499,6 +1655,7 @@ export type UserUncheckedCreateWithoutPostLikesInput = {
   bookmarks?: Prisma.BookmarkUncheckedCreateNestedManyWithoutUserInput
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutPostLikesInput = {
@@ -1537,6 +1694,7 @@ export type UserUpdateWithoutPostLikesInput = {
   avatarMedia?: Prisma.MediaUpdateOneWithoutAvatarOfNestedInput
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutPostLikesInput = {
@@ -1559,6 +1717,7 @@ export type UserUncheckedUpdateWithoutPostLikesInput = {
   bookmarks?: Prisma.BookmarkUncheckedUpdateManyWithoutUserNestedInput
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutMediaInput = {
@@ -1581,6 +1740,7 @@ export type UserCreateWithoutMediaInput = {
   postLikes?: Prisma.PostLikeCreateNestedManyWithoutUserInput
   avatarMedia?: Prisma.MediaCreateNestedOneWithoutAvatarOfInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutMediaInput = {
@@ -1603,6 +1763,7 @@ export type UserUncheckedCreateWithoutMediaInput = {
   bookmarks?: Prisma.BookmarkUncheckedCreateNestedManyWithoutUserInput
   postLikes?: Prisma.PostLikeUncheckedCreateNestedManyWithoutUserInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutMediaInput = {
@@ -1630,6 +1791,7 @@ export type UserCreateWithoutAvatarMediaInput = {
   postLikes?: Prisma.PostLikeCreateNestedManyWithoutUserInput
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutAvatarMediaInput = {
@@ -1652,6 +1814,7 @@ export type UserUncheckedCreateWithoutAvatarMediaInput = {
   postLikes?: Prisma.PostLikeUncheckedCreateNestedManyWithoutUserInput
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutAvatarMediaInput = {
@@ -1690,6 +1853,7 @@ export type UserUpdateWithoutMediaInput = {
   postLikes?: Prisma.PostLikeUpdateManyWithoutUserNestedInput
   avatarMedia?: Prisma.MediaUpdateOneWithoutAvatarOfNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutMediaInput = {
@@ -1712,6 +1876,7 @@ export type UserUncheckedUpdateWithoutMediaInput = {
   bookmarks?: Prisma.BookmarkUncheckedUpdateManyWithoutUserNestedInput
   postLikes?: Prisma.PostLikeUncheckedUpdateManyWithoutUserNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserUpsertWithoutAvatarMediaInput = {
@@ -1745,6 +1910,7 @@ export type UserUpdateWithoutAvatarMediaInput = {
   postLikes?: Prisma.PostLikeUpdateManyWithoutUserNestedInput
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutAvatarMediaInput = {
@@ -1767,6 +1933,7 @@ export type UserUncheckedUpdateWithoutAvatarMediaInput = {
   postLikes?: Prisma.PostLikeUncheckedUpdateManyWithoutUserNestedInput
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateManyRoleInput = {
@@ -1803,6 +1970,7 @@ export type UserUpdateWithoutRoleInput = {
   avatarMedia?: Prisma.MediaUpdateOneWithoutAvatarOfNestedInput
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutRoleInput = {
@@ -1825,6 +1993,7 @@ export type UserUncheckedUpdateWithoutRoleInput = {
   postLikes?: Prisma.PostLikeUncheckedUpdateManyWithoutUserNestedInput
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateManyWithoutRoleInput = {
@@ -1958,6 +2127,7 @@ export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   avatarMedia?: boolean | Prisma.User$avatarMediaArgs<ExtArgs>
   media?: boolean | Prisma.User$mediaArgs<ExtArgs>
   posts?: boolean | Prisma.User$postsArgs<ExtArgs>
+  googleIdentity?: boolean | Prisma.User$googleIdentityArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["user"]>
 
@@ -2022,6 +2192,7 @@ export type UserInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   avatarMedia?: boolean | Prisma.User$avatarMediaArgs<ExtArgs>
   media?: boolean | Prisma.User$mediaArgs<ExtArgs>
   posts?: boolean | Prisma.User$postsArgs<ExtArgs>
+  googleIdentity?: boolean | Prisma.User$googleIdentityArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type UserIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -2046,6 +2217,7 @@ export type $UserPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     avatarMedia: Prisma.$MediaPayload<ExtArgs> | null
     media: Prisma.$MediaPayload<ExtArgs>[]
     posts: Prisma.$PostPayload<ExtArgs>[]
+    googleIdentity: Prisma.$GoogleIdentityPayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -2464,6 +2636,7 @@ export interface Prisma__UserClient<T, Null = never, ExtArgs extends runtime.Typ
   avatarMedia<T extends Prisma.User$avatarMediaArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$avatarMediaArgs<ExtArgs>>): Prisma.Prisma__MediaClient<runtime.Types.Result.GetResult<Prisma.$MediaPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   media<T extends Prisma.User$mediaArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$mediaArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$MediaPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   posts<T extends Prisma.User$postsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$postsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PostPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  googleIdentity<T extends Prisma.User$googleIdentityArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$googleIdentityArgs<ExtArgs>>): Prisma.Prisma__GoogleIdentityClient<runtime.Types.Result.GetResult<Prisma.$GoogleIdentityPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -3133,6 +3306,25 @@ export type User$postsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs
   take?: number
   skip?: number
   distinct?: Prisma.PostScalarFieldEnum | Prisma.PostScalarFieldEnum[]
+}
+
+/**
+ * User.googleIdentity
+ */
+export type User$googleIdentityArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the GoogleIdentity
+   */
+  select?: Prisma.GoogleIdentitySelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the GoogleIdentity
+   */
+  omit?: Prisma.GoogleIdentityOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.GoogleIdentityInclude<ExtArgs> | null
+  where?: Prisma.GoogleIdentityWhereInput
 }
 
 /**

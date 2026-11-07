@@ -103,6 +103,85 @@ existing `DATABASE_URL`, migration `DIRECT_URL`, `JWT_ACCESS_SECRET`,
 strong JWT secrets. Live migration verification needs a disposable local database;
 isolated tests use substituted persistence and test-only JWT settings.
 
+### Google OAuth server-adapter contract (Issue #40)
+
+Nest remains cookie-free. These are server-to-server JSON endpoints; they are
+not browser redirect handlers and must not be called from frontend JavaScript.
+No Next.js adapter is implemented by this issue.
+
+Required backend configuration: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and
+`GOOGLE_REDIRECT_URI`. Missing/invalid configuration disables these endpoints
+with 503 without disabling existing authentication. Store credentials in local
+environment/secret storage only. Existing database and JWT settings still apply.
+
+For local integration, the Next.js adapter must run on port **3001** and own
+**`GET /auth/google/callback`**. Configure exactly this Authorized redirect URI
+on the Google Cloud OAuth **Web application** client and use the same value for
+`GOOGLE_REDIRECT_URI`:
+
+```text
+http://localhost:3001/auth/google/callback
+```
+
+This is the future Next.js URL, not Nest's port 3000. Deployment requires an
+explicit HTTPS adapter origin with this same callback path; query strings,
+fragments, userinfo and non-local HTTP are rejected. Do not derive redirect URIs
+from request headers or client input.
+
+1. The future adapter starts login only after checking trusted Origin/CSRF and
+   binding it to the initiating browser's opaque server session. It calls
+   `POST http://localhost:3000/auth/google` with no credentials/body required.
+   Response: `{ authorizationUrl, flowVerifier, expiresIn: 600 }`.
+2. It stores `flowVerifier` and the URL's `state` **server-side**, bound to that
+   browser session, for at most ten minutes, then redirects the browser to
+   `authorizationUrl`. The private verifier must never enter browser props,
+   cookies, logs, URLs or redirect parameters. State is public and goes to Google;
+   neither state alone nor a provider code is enough to exchange credentials.
+3. On its callback, the adapter checks exact state/session binding, atomically
+   consumes its own pending login, and forwards only `{ code, state,
+   flowVerifier }` as JSON to `POST http://localhost:3000/auth/google/callback`.
+   For provider denial it sends `{ error, state, flowVerifier }` instead.
+   Google may include other redirect parameters; the adapter must not forward
+   them. Nest rejects undeclared callback fields, including role/redirect input.
+4. Nest atomically consumes the matching, unexpired state before contacting
+   Google. It exchanges the code with S256 PKCE and validates the ID token using
+   Google's official SDK (signature, issuer, audience, lifetime) plus OIDC nonce
+   and verified email. State cannot be replayed, including after provider errors;
+   start a new flow to retry. No Google access/refresh token is stored or returned.
+5. Success returns the existing `{ accessToken, refreshToken, user }` login
+   response. The adapter stores these server-side and issues only its opaque
+   browser session cookie as specified above. Redirect to a fixed trusted page;
+   never put JWTs or `flowVerifier` in URLs. Use HTTPS between services outside
+   local development, no caching, and redact auth request bodies/query values
+   in application/proxy logs. Nest auth responses include no-store headers.
+
+Identity is the Google `sub`, persisted in `GoogleIdentity` with one Google
+subject per User. New accounts get `USER`, a stable `google_<sha256(sub)>`
+username, verified email and no password. Linked accounts retain their stored
+email/profile and Role even if Google's email changes. Disabled or unsupported
+role accounts cannot log in. Matching email (case-insensitive) **never** links an
+existing account: 409 asks the caller to use its existing sign-in method. Unique
+constraint races also return 409 without linking or issuing credentials. Manual
+linking, invitations, GitHub OAuth and frontend integration are out of scope.
+
+Callback errors: 400 for invalid field formats/extra fields; 401 for invalid,
+expired or consumed state, missing code/provider denial, failed provider or
+identity verification, disabled account or invalid Role; 409 for account
+collisions; 503 for unavailable configuration. Provider details are not returned.
+
+Apply `20261107120000_add_google_oauth` and regenerate Prisma before running the
+new endpoints. It adds `GoogleIdentity` and `GoogleOAuthState`, without rewriting
+existing Users, passwords, Roles or RefreshTokens. State/verifier are stored only
+as SHA-256 hashes. Expired/used state rows are inert; operational retention cleanup
+can delete expired rows later (no scheduled job is introduced here).
+
+Reproduce safe checks with `npm run build`, `npm run lint`,
+`npm test -- --runInBand`, and `npm run test:isolated`. The existing isolated HTTP
+suite uses a mocked Google SDK I/O boundary and substituted persistence, without
+live Google credentials. A live Google test additionally needs the future adapter,
+the configured redirect URI/consent screen (and permitted test users if applicable),
+securely supplied credentials, and a migrated disposable development database.
+
 ### Authorization
 
 Three application roles are supported:
@@ -554,7 +633,9 @@ The backend MVP currently includes:
 - Production deployment
 - Production PostgreSQL database
 
-Features such as social OAuth, following authors, newsletters, and advanced analytics are outside the current MVP scope.
+Google OAuth's backend exchange is implemented; its browser adapter is pending.
+GitHub OAuth, following authors, newsletters and advanced analytics are not
+implemented here.
 
 ## Architecture
 

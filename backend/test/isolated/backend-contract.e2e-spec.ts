@@ -5,6 +5,8 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import * as argon2 from 'argon2';
+import { createHash } from 'node:crypto';
+import { OAuth2Client } from 'google-auth-library';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/database/prisma.service';
 import { MailService } from '../../src/mail/mail.service';
@@ -13,6 +15,7 @@ import { userPublicSelect } from '../../src/users/user.select';
 import { ThrottlerStorage } from '@nestjs/throttler';
 import { Prisma } from '../../src/generated/prisma/client';
 import { setupSwagger } from '../../src/swagger';
+import { GOOGLE_OAUTH_CLIENT } from '../../src/auth/services/google-oauth.service';
 import type {
   OpenAPIObject,
   SchemaObject,
@@ -45,9 +48,12 @@ describe('Backend contracts with isolated I/O', () => {
     role: { name: 'USER' },
   };
   const persistence = {
+    googleOAuthState: { create: query(), updateMany: query() },
+    googleIdentity: { findUnique: query() },
     onModuleInit: jest.fn(),
     onModuleDestroy: jest.fn(),
     user: {
+      findFirst: query(),
       findUnique: query(),
       findMany: query(),
       create: query(),
@@ -75,17 +81,39 @@ describe('Backend contracts with isolated I/O', () => {
     sendPasswordReset: jest.fn(),
   };
   const cloudinary = { uploadImage: jest.fn(), deleteImage: jest.fn() };
+  // Google SDK boundary only; no real provider requests or credentials.
+  const googleUrlClient = new OAuth2Client();
+  const google = {
+    generateAuthUrl: googleUrlClient.generateAuthUrl.bind(googleUrlClient),
+    getToken: jest.fn(),
+    verifyIdToken: jest.fn(),
+  };
   const settings: Record<string, string> = {
+    GOOGLE_CLIENT_ID: 'isolated-test-client',
+    GOOGLE_CLIENT_SECRET: 'isolated-test-secret',
+    GOOGLE_REDIRECT_URI: 'http://localhost:3001/auth/google/callback',
     JWT_ACCESS_SECRET: 'backend-contract-access-secret',
     JWT_ACCESS_EXPIRES_IN: '900',
     JWT_REFRESH_SECRET: 'backend-contract-refresh-secret',
     EMAIL_ENABLED: 'false',
     APP_URL: 'https://example.invalid',
   };
+  // In-memory persistence test double for atomic state consumption only.
+  const googleStates = new Map<
+    string,
+    {
+      stateHash: string;
+      verifierHash: string;
+      expiresAt: Date;
+      usedAt: Date | null;
+    }
+  >();
 
   beforeAll(async () => {
     passwordHash = await argon2.hash('CorrectPassword123!');
     const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(GOOGLE_OAUTH_CLIENT)
+      .useValue(google)
       .overrideProvider(ConfigService)
       .useValue({
         get: (key: string) => settings[key],
@@ -126,6 +154,40 @@ describe('Backend contracts with isolated I/O', () => {
   });
   beforeEach(() => {
     jest.clearAllMocks();
+    persistence.googleOAuthState.create.mockReset();
+    persistence.googleOAuthState.updateMany.mockReset();
+    persistence.googleIdentity.findUnique.mockReset();
+    google.getToken.mockReset();
+    google.verifyIdToken.mockReset();
+    googleStates.clear();
+    persistence.googleOAuthState.create.mockImplementation(async (args) => {
+      const { data } = args as {
+        data: { stateHash: string; verifierHash: string; expiresAt: Date };
+      };
+      googleStates.set(data.stateHash, { ...data, usedAt: null });
+      return data;
+    });
+    persistence.googleOAuthState.updateMany.mockImplementation(async (args) => {
+      const { where, data } = args as {
+        where: {
+          stateHash: string;
+          verifierHash: string;
+          usedAt: null;
+          expiresAt: { gt: Date };
+        };
+        data: { usedAt: Date };
+      };
+      const row = googleStates.get(where.stateHash);
+      if (
+        !row ||
+        row.verifierHash !== where.verifierHash ||
+        row.usedAt !== where.usedAt ||
+        row.expiresAt <= where.expiresAt.gt
+      )
+        return { count: 0 };
+      row.usedAt = data.usedAt;
+      return { count: 1 };
+    });
     Object.values(persistence.user).forEach((fn) => fn.mockReset());
     Object.values(persistence.refreshToken).forEach((fn) => fn.mockReset());
     persistence.role.findUnique.mockReset();
@@ -187,6 +249,398 @@ describe('Backend contracts with isolated I/O', () => {
       sid: 'session-1',
     });
   };
+
+  it('initiates Google login with state and S256 PKCE for the server adapter', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/auth/google')
+      .send({})
+      .expect(200);
+    const url = new URL(response.body.authorizationUrl);
+    expect(url.origin).toBe('https://accounts.google.com');
+    expect(url.searchParams.get('redirect_uri')).toBe(
+      'http://localhost:3001/auth/google/callback',
+    );
+    expect(url.searchParams.get('code_challenge_method')).toBe('S256');
+    expect(url.searchParams.get('state')).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(response.body.flowVerifier).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(url.searchParams.has('flowVerifier')).toBe(false);
+    expect(response.headers['set-cookie']).toBeUndefined();
+    expect(response.headers['cache-control']).toBe('private, no-store');
+  });
+
+  it('rejects unknown, expired, consumed or wrong-verifier Google state before contacting Google', async () => {
+    persistence.googleOAuthState.updateMany.mockResolvedValue({ count: 0 });
+    await request(app.getHttpServer())
+      .post('/auth/google/callback')
+      .send({
+        state: 's'.repeat(43),
+        flowVerifier: 'v'.repeat(43),
+        code: 'test-code',
+      })
+      .expect(401);
+    expect(google.getToken).not.toHaveBeenCalled();
+    expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+  });
+
+  it('logs in a linked Google AUTHOR using the stored role and existing session JWT contract', async () => {
+    const state = 's'.repeat(43);
+    persistence.googleOAuthState.updateMany.mockResolvedValue({ count: 1 });
+    persistence.googleIdentity.findUnique.mockResolvedValue({
+      subject: 'google-subject-1',
+      user: { ...safeUser, disabledAt: null, role: { name: 'AUTHOR' } },
+    });
+    google.getToken.mockResolvedValue({
+      tokens: { id_token: 'test-only-id-token' },
+    });
+    google.verifyIdToken.mockResolvedValue({
+      getPayload: () => ({
+        sub: 'google-subject-1',
+        email: safeUser.email,
+        email_verified: true,
+        nonce: createHash('sha256').update(state).digest('base64url'),
+      }),
+    });
+    const response = await request(app.getHttpServer())
+      .post('/auth/google/callback')
+      .send({
+        state,
+        flowVerifier: 'v'.repeat(43),
+        code: 'test-code',
+      })
+      .expect(200);
+    expect(jwt.verify(response.body.accessToken)).toMatchObject({
+      sub: safeUser.id,
+      role: 'AUTHOR',
+      sid: 'session-1',
+    });
+    expect(response.body.refreshToken).toEqual(expect.any(String));
+    expect(response.body.user).not.toHaveProperty('passwordHash');
+    expect(response.headers['set-cookie']).toBeUndefined();
+    expect(response.headers['cache-control']).toBe('private, no-store');
+    expect(google.getToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        codeVerifier: 'v'.repeat(43),
+        redirect_uri: 'http://localhost:3001/auth/google/callback',
+      }),
+    );
+  });
+
+  it('registers a new Google subject as USER with no password and atomically linked identity', async () => {
+    persistence.googleOAuthState.updateMany.mockResolvedValue({ count: 1 });
+    persistence.googleIdentity.findUnique.mockResolvedValue(null);
+    persistence.user.findFirst.mockResolvedValue(null);
+    google.getToken.mockResolvedValue({
+      tokens: { id_token: 'test-only-id-token' },
+    });
+    google.verifyIdToken.mockResolvedValue({
+      getPayload: () => ({
+        sub: 'new-google-subject',
+        email: safeUser.email,
+        email_verified: true,
+        nonce: createHash('sha256').update('s'.repeat(43)).digest('base64url'),
+      }),
+    });
+    const response = await request(app.getHttpServer())
+      .post('/auth/google/callback')
+      .send({
+        state: 's'.repeat(43),
+        flowVerifier: 'v'.repeat(43),
+        code: 'test-code',
+      })
+      .expect(200);
+    expect(jwt.verify(response.body.accessToken)).toMatchObject({
+      role: 'USER',
+    });
+    expect(persistence.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          googleIdentity: { create: { subject: 'new-google-subject' } },
+          roleId: 'role-id',
+          emailVerified: true,
+        }),
+      }),
+    );
+    expect(persistence.role.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { name: 'USER' } }),
+    );
+    expect(persistence.user.create.mock.calls[0][0]).not.toHaveProperty(
+      'data.passwordHash',
+    );
+  });
+
+  it('refuses email-based linking to an existing account without changing it or issuing a session', async () => {
+    persistence.googleOAuthState.updateMany.mockResolvedValue({ count: 1 });
+    persistence.googleIdentity.findUnique.mockResolvedValue(null);
+    persistence.user.findFirst.mockResolvedValue({ id: safeUser.id });
+    google.getToken.mockResolvedValue({
+      tokens: { id_token: 'test-only-id-token' },
+    });
+    google.verifyIdToken.mockResolvedValue({
+      getPayload: () => ({
+        sub: 'unlinked-subject',
+        email: 'READER@example.com',
+        email_verified: true,
+        nonce: createHash('sha256').update('s'.repeat(43)).digest('base64url'),
+      }),
+    });
+    await request(app.getHttpServer())
+      .post('/auth/google/callback')
+      .send({
+        state: 's'.repeat(43),
+        flowVerifier: 'v'.repeat(43),
+        code: 'test-code',
+      })
+      .expect(409);
+    expect(persistence.user.create).not.toHaveBeenCalled();
+    expect(persistence.user.update).not.toHaveBeenCalled();
+    expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+    expect(persistence.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { email: { equals: 'READER@example.com', mode: 'insensitive' } },
+      }),
+    );
+  });
+
+  it('returns a safe conflict if simultaneous Google registration hits a unique constraint', async () => {
+    persistence.googleOAuthState.updateMany.mockResolvedValue({ count: 1 });
+    persistence.googleIdentity.findUnique.mockResolvedValue(null);
+    persistence.user.findFirst.mockResolvedValue(null);
+    persistence.user.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('private collision detail', {
+        code: 'P2002',
+        clientVersion: 'test',
+      }),
+    );
+    google.getToken.mockResolvedValue({
+      tokens: { id_token: 'test-only-id-token' },
+    });
+    google.verifyIdToken.mockResolvedValue({
+      getPayload: () => ({
+        sub: 'racing-subject',
+        email: safeUser.email,
+        email_verified: true,
+        nonce: createHash('sha256').update('s'.repeat(43)).digest('base64url'),
+      }),
+    });
+    const result = await request(app.getHttpServer())
+      .post('/auth/google/callback')
+      .send({
+        state: 's'.repeat(43),
+        flowVerifier: 'v'.repeat(43),
+        code: 'test-code',
+      })
+      .expect(409);
+    expect(JSON.stringify(result.body)).not.toContain(
+      'private collision detail',
+    );
+    expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+  });
+
+  const validGooglePayload = () => ({
+    sub: 'google-subject-1',
+    email: safeUser.email,
+    email_verified: true,
+    nonce: createHash('sha256').update('s'.repeat(43)).digest('base64url'),
+  });
+  const googleCallback = (overrides: object = {}) =>
+    request(app.getHttpServer())
+      .post('/auth/google/callback')
+      .send({
+        state: 's'.repeat(43),
+        flowVerifier: 'v'.repeat(43),
+        code: 'test-code',
+        ...overrides,
+      });
+  const linkedGoogle = (user: object = { ...safeUser, disabledAt: null }) => {
+    persistence.googleOAuthState.updateMany.mockResolvedValue({ count: 1 });
+    persistence.googleIdentity.findUnique.mockResolvedValue({
+      subject: 'google-subject-1',
+      user,
+    });
+    google.getToken.mockResolvedValue({
+      tokens: { id_token: 'test-only-id-token' },
+    });
+    google.verifyIdToken.mockResolvedValue({ getPayload: validGooglePayload });
+  };
+
+  it.each([
+    {
+      label: 'disabled account',
+      user: { ...safeUser, disabledAt: new Date() },
+    },
+    {
+      label: 'missing role',
+      user: { ...safeUser, disabledAt: null, role: null },
+    },
+    {
+      label: 'unsupported role',
+      user: { ...safeUser, disabledAt: null, role: { name: 'OWNER' } },
+    },
+  ])('rejects Google login for $label', async ({ user }) => {
+    linkedGoogle(user);
+    await googleCallback().expect(401);
+    expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { label: 'missing subject', payload: { sub: '' } },
+    { label: 'non-string subject', payload: { sub: 42 } },
+    { label: 'missing email', payload: { email: undefined } },
+    { label: 'malformed email', payload: { email: 'invalid-email' } },
+    { label: 'unverified email', payload: { email_verified: false } },
+    { label: 'wrong nonce', payload: { nonce: 'wrong-nonce' } },
+  ])(
+    'rejects Google identity with $label before account lookup',
+    async ({ payload }) => {
+      linkedGoogle();
+      google.verifyIdToken.mockResolvedValue({
+        getPayload: () => ({ ...validGooglePayload(), ...payload }),
+      });
+      await googleCallback().expect(401);
+      expect(persistence.googleIdentity.findUnique).not.toHaveBeenCalled();
+      expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['exchange', 'verification', 'missing-token'])(
+    'sanitizes Google %s failures without issuing a session',
+    async (failure) => {
+      linkedGoogle();
+      if (failure === 'exchange')
+        google.getToken.mockRejectedValue(new Error('private-provider-detail'));
+      if (failure === 'verification')
+        google.verifyIdToken.mockRejectedValue(
+          new Error('private-provider-detail'),
+        );
+      if (failure === 'missing-token')
+        google.getToken.mockResolvedValue({ tokens: {} });
+      const response = await googleCallback().expect(401);
+      expect(JSON.stringify(response.body)).not.toContain(
+        'private-provider-detail',
+      );
+      expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not accept role selection or redirect overrides in the Google callback', async () => {
+    await googleCallback({
+      role: 'ADMIN',
+      redirectUri: 'https://attacker.invalid',
+    }).expect(400);
+    expect(google.getToken).not.toHaveBeenCalled();
+  });
+
+  it('keeps the linked account identity even if the Google email changes', async () => {
+    linkedGoogle();
+    google.verifyIdToken.mockResolvedValue({
+      getPayload: () => ({
+        ...validGooglePayload(),
+        email: 'changed@example.com',
+      }),
+    });
+    const response = await googleCallback().expect(200);
+    expect(jwt.verify(response.body.accessToken)).toMatchObject({
+      sub: safeUser.id,
+      email: safeUser.email,
+    });
+    expect(persistence.user.update).not.toHaveBeenCalled();
+  });
+
+  it('consumes real initiated state once, rejects replay and requires the private verifier', async () => {
+    const start = await request(app.getHttpServer())
+      .post('/auth/google')
+      .send({})
+      .expect(200);
+    const state = new URL(start.body.authorizationUrl).searchParams.get(
+      'state',
+    )!;
+    const body = {
+      state,
+      flowVerifier: start.body.flowVerifier,
+      error: 'access_denied',
+    };
+    await request(app.getHttpServer())
+      .post('/auth/google/callback')
+      .send({ ...body, flowVerifier: 'x'.repeat(43) })
+      .expect(401);
+    const denied = await request(app.getHttpServer())
+      .post('/auth/google/callback')
+      .send(body)
+      .expect(401);
+    expect(denied.body.message).toBe('Google login failed.');
+    const replay = await request(app.getHttpServer())
+      .post('/auth/google/callback')
+      .send(body)
+      .expect(401);
+    expect(replay.body.message).toBe('Invalid or expired Google login state.');
+    expect(google.getToken).not.toHaveBeenCalled();
+  });
+
+  it('rejects expired initiated Google state', async () => {
+    const start = await request(app.getHttpServer())
+      .post('/auth/google')
+      .send({})
+      .expect(200);
+    const state = new URL(start.body.authorizationUrl).searchParams.get(
+      'state',
+    )!;
+    for (const row of googleStates.values()) row.expiresAt = new Date(0);
+    await googleCallback({
+      state,
+      flowVerifier: start.body.flowVerifier,
+    }).expect(401);
+    expect(google.getToken).not.toHaveBeenCalled();
+  });
+
+  it('allows only one of two simultaneous callbacks for the same initiated Google state', async () => {
+    const start = await request(app.getHttpServer())
+      .post('/auth/google')
+      .send({})
+      .expect(200);
+    const state = new URL(start.body.authorizationUrl).searchParams.get(
+      'state',
+    )!;
+    persistence.googleIdentity.findUnique.mockResolvedValue({
+      subject: 'google-subject-1',
+      user: { ...safeUser, disabledAt: null },
+    });
+    google.getToken.mockResolvedValue({
+      tokens: { id_token: 'test-only-id-token' },
+    });
+    google.verifyIdToken.mockResolvedValue({
+      getPayload: () => ({
+        ...validGooglePayload(),
+        nonce: createHash('sha256').update(state).digest('base64url'),
+      }),
+    });
+    const responses = await Promise.all([
+      googleCallback({ state, flowVerifier: start.body.flowVerifier }),
+      googleCallback({ state, flowVerifier: start.body.flowVerifier }),
+    ]);
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 401]);
+    expect(google.getToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables Google login safely when configuration is absent or redirect URI is unsafe', async () => {
+    const original = settings.GOOGLE_REDIRECT_URI;
+    try {
+      for (const redirect of [
+        '',
+        'http://example.com/auth/google/callback',
+        'https://example.com/wrong-path',
+        'https://example.com/auth/google/callback?next=evil',
+      ]) {
+        settings.GOOGLE_REDIRECT_URI = redirect;
+        await request(app.getHttpServer())
+          .post('/auth/google')
+          .send({})
+          .expect(503);
+      }
+    } finally {
+      settings.GOOGLE_REDIRECT_URI = original;
+    }
+    expect(persistence.googleOAuthState.create).not.toHaveBeenCalled();
+  });
 
   it('documents requests and declared responses with complete, resolvable schemas', async () => {
     const response = await request(app.getHttpServer())

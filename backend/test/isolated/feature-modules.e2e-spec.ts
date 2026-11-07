@@ -34,6 +34,8 @@ const featureModules = [
   AdminModule,
 ];
 const config = {
+  // Google OAuth is optional; module initialization needs no provider credentials.
+  get: (_key: string) => undefined,
   getOrThrow: (key: string) => {
     const values: Record<string, string> = {
       JWT_ACCESS_SECRET: 'module-isolation-test-secret',

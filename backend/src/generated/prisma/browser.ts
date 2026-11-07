@@ -23,6 +23,16 @@ export * from './enums.js';
  */
 export type User = Prisma.UserModel
 /**
+ * Model GoogleIdentity
+ * 
+ */
+export type GoogleIdentity = Prisma.GoogleIdentityModel
+/**
+ * Model GoogleOAuthState
+ * 
+ */
+export type GoogleOAuthState = Prisma.GoogleOAuthStateModel
+/**
  * Model Role
  * 
  */

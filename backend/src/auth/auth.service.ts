@@ -106,6 +106,18 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
+    return this.createSession(user);
+  }
+
+  async createSession(user: {
+    id: string;
+    email: string;
+    disabledAt: Date | null;
+    role: { name: string } | null;
+  }) {
+    if (user.disabledAt)
+      throw new UnauthorizedException('Account is unavailable.');
+
     // Every authenticated user must have a valid role
     if (!user.role) {
       throw new UnauthorizedException('User role is not available.');

@@ -19,6 +19,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { GoogleOAuthService } from './services/google-oauth.service';
+import {
+  GoogleAuthorizationResponseDto,
+  GoogleCallbackDto,
+} from './dto/google-oauth.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtAuthGuard } from '../access-control/guards/jwt-auth.guard';
@@ -40,7 +45,63 @@ import {
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly googleOAuth: GoogleOAuthService,
+  ) {}
+
+  @Post('google')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Begin Google login (server adapter only)',
+    description:
+      'Retain flowVerifier server-side bound to the initiating browser session. Redirect the browser only to authorizationUrl. Nest sets no cookies.',
+  })
+  @ApiResponse({ status: 200, type: GoogleAuthorizationResponseDto })
+  @ApiResponse({
+    status: 503,
+    type: ErrorResponseDto,
+    description: 'Google login configuration unavailable.',
+  })
+  google() {
+    return this.googleOAuth.initiate();
+  }
+
+  @Post('google/callback')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Exchange Google code (server adapter only)',
+    description:
+      'The adapter posts code/error and state from the redirect plus its private flowVerifier. Returns existing login credentials for server-side storage only. Never redirect with tokens. State is consumed before provider exchange, including denial/failure.',
+  })
+  @ApiBody({ type: GoogleCallbackDto })
+  @ApiResponse({ status: 200, type: LoginResponseDto })
+  @ApiResponse({
+    status: 400,
+    type: ErrorResponseDto,
+    description: 'Malformed callback.',
+  })
+  @ApiResponse({
+    status: 401,
+    type: ErrorResponseDto,
+    description:
+      'Invalid state, provider identity, denial or disabled account.',
+  })
+  @ApiResponse({
+    status: 409,
+    type: ErrorResponseDto,
+    description: 'Account collision; no automatic linking.',
+  })
+  @ApiResponse({
+    status: 503,
+    type: ErrorResponseDto,
+    description: 'Google login configuration unavailable.',
+  })
+  googleCallback(@Body() dto: GoogleCallbackDto) {
+    return this.googleOAuth.callback(dto);
+  }
 
   @ApiOperation({
     summary: 'Register a USER account',
