@@ -42,6 +42,10 @@ export class PostsService {
     return this.queries.findById(id);
   }
 
+  findAdminInventory(page: number, limit: number) {
+    return this.queries.findAdminInventory(page, limit);
+  }
+
   findMine(authorId: string, page: number, limit: number, status?: PostStatus) {
     return this.queries.findMine(authorId, page, limit, status);
   }

@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, PickType } from '@nestjs/swagger';
 import { PostStatus } from '../../generated/prisma/client';
 import {
   AuthorResponseDto,
@@ -64,6 +64,29 @@ export class MyPostsResponseDto {
 export class PostFeedResponseDto {
   @ApiProperty({ type: [PostDetailResponseDto] })
   data: PostDetailResponseDto[];
+  @ApiProperty({ type: PaginationMetaResponseDto })
+  meta: PaginationMetaResponseDto;
+}
+
+export class AdminPostSummaryResponseDto extends PickType(
+  PostDetailResponseDto,
+  [
+    'id',
+    'title',
+    'slug',
+    'status',
+    'authorId',
+    'author',
+    'publishedAt',
+    'createdAt',
+    'updatedAt',
+  ] as const,
+) {}
+
+export class AdminPostsResponseDto {
+  @ApiProperty({ type: [AdminPostSummaryResponseDto] })
+  data: AdminPostSummaryResponseDto[];
+
   @ApiProperty({ type: PaginationMetaResponseDto })
   meta: PaginationMetaResponseDto;
 }

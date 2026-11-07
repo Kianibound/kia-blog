@@ -1483,6 +1483,310 @@ describe('Backend contracts with isolated I/O', () => {
     });
   });
 
+  describe('ADMIN post inventory', () => {
+    // Test-only rows behind the existing persistence seam, including private
+    // author data so response projection is exercised rather than assumed.
+    const entry = (
+      id: string,
+      authorId: string,
+      status: string,
+      day: number,
+    ) => ({
+      id,
+      authorId,
+      status,
+      title: `Title ${id}`,
+      slug: `slug-${id}`,
+      content: 'Body excluded from inventory',
+      createdAt: new Date(`2020-01-${String(day).padStart(2, '0')}T00:00:00Z`),
+      updatedAt: new Date('2020-02-01'),
+      publishedAt: status === 'PUBLISHED' ? new Date('2020-01-01') : null,
+      author: {
+        id: authorId,
+        username: authorId,
+        name: `Author ${authorId}`,
+        avatarUrl: null,
+        email: 'private@example.invalid',
+        passwordHash: 'test-only-private-hash',
+        disabledAt: authorId === 'author-b' ? new Date('2020-01-01') : null,
+        refreshTokens: ['test-only-private-token'],
+      },
+    });
+    const entries = [
+      entry('p1', 'author-a', 'DRAFT', 1),
+      entry('p4', 'author-b', 'PUBLISHED', 3),
+      entry('p3', 'author-a', 'DEPRECATED', 2),
+      entry('p5', 'author-b', 'DRAFT', 3),
+      entry('p2', 'author-c', 'PUBLISHED', 1),
+    ];
+    beforeEach(() => {
+      const matching = (where: { authorId?: string; status?: string } = {}) =>
+        entries.filter(
+          (post) =>
+            (!where.authorId || post.authorId === where.authorId) &&
+            (!where.status || post.status === where.status),
+        );
+      persistence.post.findMany.mockImplementation(async (args) => {
+        const { where, orderBy, skip, take, select } = args as {
+          where?: { authorId?: string; status?: string };
+          orderBy: Record<string, string> | Array<Record<string, string>>;
+          skip: number;
+          take: number;
+          select?: Record<
+            string,
+            boolean | { select: Record<string, boolean> }
+          >;
+        };
+        const selected = matching(where);
+        const order = Array.isArray(orderBy) ? orderBy : [orderBy];
+        selected.sort((a, b) => {
+          for (const clause of order)
+            for (const [key, direction] of Object.entries(clause)) {
+              const left = a[key as keyof typeof a];
+              const right = b[key as keyof typeof b];
+              const result =
+                left instanceof Date && right instanceof Date
+                  ? left.getTime() - right.getTime()
+                  : String(left).localeCompare(String(right));
+              if (result) return direction === 'desc' ? -result : result;
+            }
+          return 0;
+        });
+        return selected.slice(skip, skip + take).map((post) =>
+          !select
+            ? post
+            : Object.fromEntries(
+                Object.entries(select)
+                  .filter(([, value]) => value)
+                  .map(([key, value]) => [
+                    key,
+                    key === 'author' && typeof value === 'object'
+                      ? Object.fromEntries(
+                          Object.keys(value.select)
+                            .filter((field) => value.select[field])
+                            .map((field) => [
+                              field,
+                              post.author[field as keyof typeof post.author],
+                            ]),
+                        )
+                      : post[key as keyof typeof post],
+                  ]),
+              ),
+        );
+      });
+      persistence.post.count.mockImplementation(
+        async (args) =>
+          matching(
+            (
+              args as
+                { where?: { authorId?: string; status?: string } } | undefined
+            )?.where,
+          ).length,
+      );
+    });
+
+    it('lets ADMIN inventory all authors and statuses with safe author identity and action identifiers', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/posts/admin/inventory')
+        .auth(auth(), { type: 'bearer' })
+        .expect(200);
+      expect(response.body.meta).toEqual({
+        page: 1,
+        limit: 10,
+        total: 5,
+        totalPages: 1,
+      });
+      expect(response.body.data.map((post: { id: string }) => post.id)).toEqual(
+        ['p5', 'p4', 'p3', 'p2', 'p1'],
+      );
+      expect(
+        new Set(
+          response.body.data.map((post: { status: string }) => post.status),
+        ),
+      ).toEqual(new Set(['DRAFT', 'PUBLISHED', 'DEPRECATED']));
+      expect(
+        new Set(
+          response.body.data.map((post: { authorId: string }) => post.authorId),
+        ),
+      ).toEqual(new Set(['author-a', 'author-b', 'author-c']));
+      for (const post of response.body.data) {
+        expect(Object.keys(post).sort()).toEqual([
+          'author',
+          'authorId',
+          'createdAt',
+          'id',
+          'publishedAt',
+          'slug',
+          'status',
+          'title',
+          'updatedAt',
+        ]);
+        expect(post.author).toMatchObject({
+          id: post.authorId,
+          username: post.authorId,
+          name: expect.any(String),
+          avatarUrl: null,
+        });
+        expect(Object.keys(post.author).sort()).toEqual([
+          'avatarUrl',
+          'id',
+          'name',
+          'username',
+        ]);
+      }
+      expect(JSON.stringify(response.body)).not.toContain('test-only-private');
+    });
+
+    it.each(['anonymous', 'USER', 'AUTHOR'])(
+      'denies ADMIN inventory to %s before reading posts',
+      async (role) => {
+        const operation = request(app.getHttpServer()).get(
+          '/posts/admin/inventory',
+        );
+        if (role !== 'anonymous')
+          operation.auth(auth(role), { type: 'bearer' });
+        await operation.expect(role === 'anonymous' ? 401 : 403);
+        expect(persistence.post.findMany).not.toHaveBeenCalled();
+        expect(persistence.post.count).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      { page: 1, ids: ['p5', 'p4'] },
+      { page: 2, ids: ['p3', 'p2'] },
+      { page: 3, ids: ['p1'] },
+      { page: 4, ids: [] },
+    ])(
+      'paginates the complete inventory at page $page with deterministic ties',
+      async ({ page, ids }) => {
+        const response = await request(app.getHttpServer())
+          .get('/posts/admin/inventory')
+          .query({ page, limit: 2 })
+          .auth(auth(), { type: 'bearer' })
+          .expect(200);
+        expect(
+          response.body.data.map((post: { id: string }) => post.id),
+        ).toEqual(ids);
+        expect(response.body.meta).toEqual({
+          page,
+          limit: 2,
+          total: 5,
+          totalPages: 3,
+        });
+      },
+    );
+
+    it('returns an empty inventory with zero pages when no posts exist', async () => {
+      persistence.post.findMany.mockResolvedValue([]);
+      persistence.post.count.mockResolvedValue(0);
+      const response = await request(app.getHttpServer())
+        .get('/posts/admin/inventory')
+        .auth(auth(), { type: 'bearer' })
+        .expect(200);
+      expect(response.body).toEqual({
+        data: [],
+        meta: { page: 1, limit: 10, total: 0, totalPages: 0 },
+      });
+    });
+
+    it('reuses pagination bounds and rejects filters that are outside inventory scope', async () => {
+      for (const query of [
+        'page=0',
+        'page=1.5',
+        'page=wrong',
+        'limit=0',
+        'limit=51',
+        'status=DRAFT',
+        'author=author-a',
+        'search=Title',
+        'sort=oldest',
+      ]) {
+        await request(app.getHttpServer())
+          .get(`/posts/admin/inventory?${query}`)
+          .auth(auth(), { type: 'bearer' })
+          .expect(400);
+      }
+      expect(persistence.post.findMany).not.toHaveBeenCalled();
+      expect(persistence.post.count).not.toHaveBeenCalled();
+    });
+
+    it('does not reserve the existing public article slug admin', async () => {
+      persistence.post.findFirst.mockResolvedValue({
+        id: 'public-admin',
+        slug: 'admin',
+        title: 'Public admin article',
+        status: 'PUBLISHED',
+      });
+      const response = await request(app.getHttpServer())
+        .get('/posts/admin')
+        .expect(200);
+      expect(response.body.id).toBe('public-admin');
+      expect(persistence.post.findMany).not.toHaveBeenCalled();
+    });
+
+    it('documents inventory authorization, pagination and exact safe summary fields', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api-json')
+        .expect(200);
+      const document: OpenAPIObject = response.body;
+      const operation = document.paths['/posts/admin/inventory'].get!;
+      expect(operation.security).toEqual([{ 'access-token': [] }]);
+      expect(Object.keys(operation.responses)).toEqual(
+        expect.arrayContaining(['200', '400', '401', '403']),
+      );
+      expect(
+        operation
+          .parameters!.map((parameter) =>
+            'name' in parameter ? parameter.name : '',
+          )
+          .sort(),
+      ).toEqual(['limit', 'page']);
+      expect(operation.responses['200']).toMatchObject({
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/AdminPostsResponseDto' },
+          },
+        },
+      });
+      const envelope = document.components!.schemas!
+        .AdminPostsResponseDto as SchemaObject;
+      expect(envelope.properties!.data).toMatchObject({
+        type: 'array',
+        items: { $ref: '#/components/schemas/AdminPostSummaryResponseDto' },
+      });
+      expect(envelope.properties!.meta).toMatchObject({
+        $ref: '#/components/schemas/PaginationMetaResponseDto',
+      });
+      const summary = document.components!.schemas!
+        .AdminPostSummaryResponseDto as SchemaObject;
+      expect(Object.keys(summary.properties!).sort()).toEqual([
+        'author',
+        'authorId',
+        'createdAt',
+        'id',
+        'publishedAt',
+        'slug',
+        'status',
+        'title',
+        'updatedAt',
+      ]);
+      expect(summary.properties!.status).toMatchObject({
+        enum: ['DRAFT', 'PUBLISHED', 'DEPRECATED'],
+      });
+      expect(summary.properties!.author).toMatchObject({
+        $ref: '#/components/schemas/AuthorResponseDto',
+      });
+      const author = document.components!.schemas!
+        .AuthorResponseDto as SchemaObject;
+      expect(Object.keys(author.properties!).sort()).toEqual([
+        'avatarUrl',
+        'id',
+        'name',
+        'username',
+      ]);
+    });
+  });
+
   describe('Own-post status filters', () => {
     // Test-only posts behind the existing substituted persistence boundary.
     const row = (

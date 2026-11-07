@@ -3,6 +3,7 @@ import {
   PostFeedResponseDto,
   PostDetailResponseDto,
   MyPostsResponseDto,
+  AdminPostsResponseDto,
 } from './dto/post-response.dto';
 import {
   ErrorResponseDto,
@@ -21,6 +22,7 @@ import {
 } from '@nestjs/common';
 import { PaginationQueryDto } from './dto/pagination-query.dto';
 import { MyPostsQueryDto } from './dto/my-posts-query.dto';
+import { AdminPostsQueryDto } from './dto/admin-posts-query.dto';
 
 import { UpdatePostDto } from './dto/update-post.dto';
 import { JwtAuthGuard } from '../access-control/guards/jwt-auth.guard';
@@ -46,6 +48,39 @@ import {
 @Controller('posts')
 export class PostsController {
   constructor(private readonly postsService: PostsService) {}
+
+  @Get('admin/inventory')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLE.ADMIN)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Inventory all posts (admin only)',
+    description:
+      'All authors and publication statuses, including DRAFT and DEPRECATED. Pagination only. Ordered by createdAt descending, then id descending for ties. Returns compact summaries and safe author identity; existing mutation endpoints are unchanged.',
+  })
+  @ApiResponse({
+    status: 200,
+    type: AdminPostsResponseDto,
+    description: 'Paginated inventory across all authors and statuses.',
+  })
+  @ApiResponse({
+    status: 400,
+    type: ErrorResponseDto,
+    description: 'Invalid pagination or unsupported query fields.',
+  })
+  @ApiResponse({
+    status: 401,
+    type: ErrorResponseDto,
+    description: 'Valid authenticated session required.',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'ADMIN required.',
+  })
+  findAdminInventory(@Query() query: AdminPostsQueryDto) {
+    return this.postsService.findAdminInventory(query.page, query.limit);
+  }
 
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Create a new post' })

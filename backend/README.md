@@ -394,6 +394,34 @@ No migration, new environment variable, frontend or CRUD subsystem is required.
 The page and count remain separate concurrent reads, as before; this does not add
 a snapshot guarantee against concurrent Post changes.
 
+### ADMIN all-author Post inventory (Issue #46)
+
+`GET /posts/admin/inventory` requires an authenticated, enabled ADMIN with a valid
+session. It lists every stored Post across all authors, including disabled
+authors, and all publication statuses: DRAFT, PUBLISHED and DEPRECATED. It has
+only `page` and `limit` query parameters, reusing the existing defaults (1/10) and
+validation (positive integer page, integer limit 1–50). Additional filters are
+rejected; no search, status, author or sort filter is introduced.
+
+HTTP **200** returns `{ data, meta: { page, limit, total, totalPages } }`. Each
+summary contains `id`, `title`, `slug`, `status`, `authorId`, `publishedAt`,
+`createdAt`, `updatedAt`, and `author: { id, username, name, avatarUrl }`.
+`id` identifies the existing administrative read/mutation targets; no invented
+action URLs or new mutations are returned. Article bodies, taxonomy relations,
+author email, credentials, session data and account status are not selected.
+
+Ordering is `createdAt` descending, then `id` descending for deterministic ties.
+Count covers the complete inventory. Empty inventories have total/totalPages 0;
+out-of-range pages return empty data and retain the requested page and totals.
+Page/count remain separate concurrent reads without a snapshot guarantee.
+
+Errors are **400** for invalid pagination/extra query fields, **401** for missing
+or invalid sessions, and **403** for USER/AUTHOR callers. Swagger `/api-json`
+documents the pagination, access rules, summary and envelope schemas. The static
+two-segment route does not reserve the existing public Post slug `admin`.
+Existing edit, publish, unpublish and delete behavior is unchanged. No migration,
+environment variable, frontend change or new infrastructure is required.
+
 ### Categories and Tags
 
 - Public listing

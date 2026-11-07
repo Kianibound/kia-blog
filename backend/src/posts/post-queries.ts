@@ -17,6 +17,18 @@ const detailProjection = {
   tags: taxonomyProjection,
 } satisfies Prisma.PostInclude;
 
+const inventoryProjection = {
+  id: true,
+  title: true,
+  slug: true,
+  status: true,
+  authorId: true,
+  author: authorProjection,
+  publishedAt: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.PostSelect;
+
 export type PostFeedQuery = {
   page: number;
   limit: number;
@@ -34,6 +46,23 @@ export class PostQueries {
     private readonly prisma: PrismaService,
     private readonly publishedPosts: PublishedPosts,
   ) {}
+
+  async findAdminInventory(page: number, limit: number) {
+    const [posts, total] = await Promise.all([
+      this.prisma.post.findMany({
+        // No owner or publication predicate: ADMIN sees every stored Post.
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+        select: inventoryProjection,
+      }),
+      this.prisma.post.count(),
+    ]);
+    return {
+      data: posts,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
 
   async findAll({
     page,
