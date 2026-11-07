@@ -84,6 +84,8 @@ describe('Backend contracts with isolated I/O', () => {
     category: taxonomy(),
     tag: taxonomy(),
     post: {
+      create: query(),
+      update: query(),
       findFirst: query(),
       findUnique: query(),
       findMany: query(),
@@ -276,6 +278,8 @@ describe('Backend contracts with isolated I/O', () => {
     persistence.refreshToken.findMany.mockResolvedValue([]);
     persistence.post.findFirst.mockResolvedValue(null);
     persistence.post.findUnique.mockReset();
+    persistence.post.create.mockReset();
+    persistence.post.update.mockReset();
     persistence.post.findMany.mockReset();
     persistence.post.count.mockReset();
     persistence.media.findUnique.mockResolvedValue(null);
@@ -1207,8 +1211,11 @@ describe('Backend contracts with isolated I/O', () => {
       '$ref' in schema
         ? resolve(document.components!.schemas![schema.$ref.split('/').pop()!])
         : schema;
+    const checkedSchemas = new Set<SchemaObject>();
     const checkSchema = (schema: SchemaObject | ReferenceObject): void => {
       const resolved = resolve(schema);
+      if (checkedSchemas.has(resolved)) return; // Recursive Tiptap node schema.
+      checkedSchemas.add(resolved);
       expect(resolved).toBeDefined();
       if (resolved.allOf || resolved.oneOf || resolved.anyOf) {
         for (const variant of resolved.allOf ??
@@ -1257,7 +1264,7 @@ describe('Backend contracts with isolated I/O', () => {
       }
     }
     const create = resolve(document.components!.schemas!.CreatePostDto);
-    expect(create.required).toEqual(['title', 'content']);
+    expect(create.required).toEqual(['title']);
     const registration = resolve(document.components!.schemas!.RegisterDto);
     expect(registration.required).toEqual(['email', 'password']);
     expect(registration.properties!.password).toMatchObject({
@@ -1481,6 +1488,714 @@ describe('Backend contracts with isolated I/O', () => {
         where: { id: 'term-1' },
       });
     });
+  });
+
+  describe('Canonical rich article content', () => {
+    const document = {
+      type: 'doc',
+      attrs: { dir: 'rtl' },
+      content: [
+        {
+          type: 'heading',
+          attrs: { level: 2, dir: 'rtl' },
+          content: [{ type: 'text', text: 'Heading' }],
+        },
+        {
+          type: 'paragraph',
+          attrs: { dir: 'ltr' },
+          content: [
+            {
+              type: 'text',
+              text: 'Searchable words',
+              marks: [{ type: 'bold' }, { type: 'italic' }],
+            },
+          ],
+        },
+      ],
+    };
+    // Stateful Post I/O double: the real controller, validators, commands and queries run.
+    const articleStore = () => {
+      let saved: Record<string, unknown> | undefined;
+      const detail = () =>
+        saved
+          ? {
+              ...structuredClone(saved),
+              author: {
+                id: 'user-1',
+                username: 'reader',
+                name: 'Reader',
+                avatarUrl: null,
+              },
+              categories: [],
+              tags: [],
+            }
+          : null;
+      persistence.post.create.mockImplementation(async (args) => {
+        const { data } = args as { data: Record<string, unknown> };
+        const fields = Object.fromEntries(
+          Object.entries(data)
+            .filter(([, value]) => value !== undefined)
+            .map(([key, value]) => [
+              key,
+              key === 'contentDocument' && value === Prisma.DbNull
+                ? null
+                : structuredClone(value),
+            ]),
+        );
+        saved = {
+          id: 'rich-post',
+          createdAt: new Date('2020-01-01'),
+          updatedAt: new Date('2020-01-01'),
+          status: 'DRAFT',
+          publishedAt: null,
+          contentDocument: null,
+          ...fields,
+          categories: [],
+          tags: [],
+        };
+        return detail();
+      });
+      persistence.post.update.mockImplementation(async (args) => {
+        const { data } = args as { data: Record<string, unknown> };
+        for (const [key, value] of Object.entries(data))
+          if (value !== undefined && key !== 'categories' && key !== 'tags')
+            saved![key] =
+              key === 'contentDocument' && value === Prisma.DbNull
+                ? null
+                : structuredClone(value);
+        return detail();
+      });
+      persistence.post.findUnique.mockImplementation(async (args) =>
+        (args as { where: { slug?: string } }).where.slug ? null : detail(),
+      );
+      persistence.post.findFirst.mockImplementation(async () =>
+        saved?.status === 'PUBLISHED' ? detail() : null,
+      );
+      const matches = (args: unknown) => {
+        const { where } = (args ?? {}) as {
+          where?: {
+            status?: string;
+            authorId?: string;
+            OR?: Array<{
+              title?: { contains: string };
+              content?: { contains: string };
+            }>;
+          };
+        };
+        return (
+          !!saved &&
+          (!where?.status || saved.status === where.status) &&
+          (!where?.authorId || saved.authorId === where.authorId) &&
+          (!where?.OR ||
+            where.OR.some((term) =>
+              term.title
+                ? String(saved!.title)
+                    .toLowerCase()
+                    .includes(term.title.contains.toLowerCase())
+                : String(saved!.content)
+                    .toLowerCase()
+                    .includes(term.content!.contains.toLowerCase()),
+            ))
+        );
+      };
+      persistence.post.findMany.mockImplementation(async (args) =>
+        matches(args) ? [detail()] : [],
+      );
+      persistence.post.count.mockImplementation(async (args) =>
+        matches(args) ? 1 : 0,
+      );
+      return { detail };
+    };
+
+    it('round-trips canonical JSON through creation, private detail, public detail and edit while deriving search text', async () => {
+      articleStore();
+      const token = auth('AUTHOR');
+      const created = await request(app.getHttpServer())
+        .post('/posts')
+        .auth(token, { type: 'bearer' })
+        .send({
+          title: 'Rich article',
+          contentDocument: document,
+          status: 'PUBLISHED',
+        })
+        .expect(201);
+      expect(created.body.contentDocument).toEqual(document);
+      expect(created.body.content).toBe('Heading\nSearchable words');
+      const own = await request(app.getHttpServer())
+        .get('/posts/mine/rich-post')
+        .auth(token, { type: 'bearer' })
+        .expect(200);
+      const published = await request(app.getHttpServer())
+        .get('/posts/rich-article')
+        .expect(200);
+      expect(own.body.contentDocument).toEqual(document);
+      expect(published.body.contentDocument).toEqual(document);
+      const edited = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [{ type: 'text', text: 'Edited plain projection' }],
+          },
+        ],
+      };
+      const updated = await request(app.getHttpServer())
+        .patch('/posts/rich-post')
+        .auth(token, { type: 'bearer' })
+        .send({ contentDocument: edited })
+        .expect(200);
+      expect(updated.body.contentDocument).toEqual(edited);
+      expect(updated.body.content).toBe('Edited plain projection');
+      const listed = await request(app.getHttpServer())
+        .get('/posts')
+        .expect(200);
+      expect(listed.body.data[0].contentDocument).toEqual(edited);
+    });
+
+    it('rejects excessively deep raw JSON safely before DTO transformation', async () => {
+      let node: object = { type: 'paragraph' };
+      for (let depth = 0; depth < 2000; depth++)
+        node = { type: 'blockquote', content: [node] };
+      await request(app.getHttpServer())
+        .post('/posts')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .send({
+          title: 'Too deep',
+          contentDocument: { type: 'doc', content: [node] },
+        })
+        .expect(400);
+      expect(persistence.post.create).not.toHaveBeenCalled();
+    });
+
+    const textDocument = (text: string) => ({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+    });
+    const createDocument = (contentDocument: unknown) =>
+      request(app.getHttpServer())
+        .post('/posts')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .send({ title: 'Rich article', contentDocument });
+
+    it('preserves lists, blockquotes, inline/code-block text, links, directions and text marks exactly', async () => {
+      articleStore();
+      const formatted = {
+        type: 'doc',
+        attrs: { dir: 'rtl' },
+        content: [
+          {
+            type: 'heading',
+            attrs: { level: 3, dir: 'rtl' },
+            content: [
+              {
+                type: 'text',
+                text: 'عنوان',
+                marks: [{ type: 'bold' }, { type: 'italic' }],
+              },
+            ],
+          },
+          {
+            type: 'bulletList',
+            attrs: { dir: 'rtl' },
+            content: [
+              {
+                type: 'listItem',
+                attrs: { dir: 'rtl' },
+                content: [
+                  {
+                    type: 'paragraph',
+                    content: [{ type: 'text', text: 'First' }],
+                  },
+                ],
+              },
+              {
+                type: 'listItem',
+                content: [
+                  {
+                    type: 'paragraph',
+                    content: [{ type: 'text', text: 'Second' }],
+                  },
+                  {
+                    type: 'orderedList',
+                    attrs: { start: 3, type: 'I', dir: 'rtl' },
+                    content: [
+                      {
+                        type: 'listItem',
+                        content: [
+                          {
+                            type: 'paragraph',
+                            content: [{ type: 'text', text: 'Nested' }],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            type: 'blockquote',
+            attrs: { dir: 'auto' },
+            content: [
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: 'Quoted' }],
+              },
+            ],
+          },
+          {
+            type: 'codeBlock',
+            attrs: { dir: 'ltr', language: 'typescript' },
+            content: [{ type: 'text', text: 'const n = 123;\n// فارسی ۱۲۳' }],
+          },
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: 'Inline ' },
+              { type: 'text', text: 'code', marks: [{ type: 'code' }] },
+              { type: 'hardBreak', attrs: { dir: 'rtl' } },
+              {
+                type: 'text',
+                text: 'Guide',
+                marks: [
+                  {
+                    type: 'link',
+                    attrs: {
+                      href: 'https://example.test/guide',
+                      target: '_blank',
+                      rel: 'noopener noreferrer nofollow',
+                      class: null,
+                      title: null,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      const response = await createDocument(formatted).expect(201);
+      expect(response.body.contentDocument).toEqual(formatted);
+      expect(response.body.content).toBe(
+        'عنوان\nFirst\nSecond\nNested\nQuoted\nconst n = 123;\n// فارسی ۱۲۳\nInline code\nGuide',
+      );
+    });
+
+    it.each([
+      { label: 'null', document: null },
+      { label: 'serialized JSON', document: JSON.stringify(document) },
+      { label: 'array root', document: [] },
+      { label: 'wrong root', document: { type: 'paragraph' } },
+      { label: 'empty doc', document: { type: 'doc', content: [] } },
+      {
+        label: 'unknown node',
+        document: { type: 'doc', content: [{ type: 'table' }] },
+      },
+      {
+        label: 'image',
+        document: {
+          type: 'doc',
+          content: [
+            { type: 'image', attrs: { src: 'https://example.test/image.png' } },
+          ],
+        },
+      },
+      {
+        label: 'raw HTML attribute',
+        document: {
+          type: 'doc',
+          content: [{ type: 'paragraph', attrs: { onclick: 'unsafe' } }],
+        },
+      },
+      {
+        label: 'heading level',
+        document: {
+          type: 'doc',
+          content: [{ type: 'heading', attrs: { level: 1 } }],
+        },
+      },
+      {
+        label: 'heading string level',
+        document: {
+          type: 'doc',
+          content: [{ type: 'heading', attrs: { level: '2' } }],
+        },
+      },
+      {
+        label: 'invalid child',
+        document: {
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ type: 'paragraph' }] }],
+        },
+      },
+      {
+        label: 'marked code block text',
+        document: {
+          type: 'doc',
+          content: [
+            {
+              type: 'codeBlock',
+              content: [
+                { type: 'text', text: 'Code', marks: [{ type: 'bold' }] },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        label: 'list without items',
+        document: {
+          type: 'doc',
+          content: [{ type: 'bulletList', content: [{ type: 'paragraph' }] }],
+        },
+      },
+      {
+        label: 'invalid list item',
+        document: {
+          type: 'doc',
+          content: [
+            {
+              type: 'orderedList',
+              content: [
+                {
+                  type: 'listItem',
+                  content: [{ type: 'heading', attrs: { level: 2 } }],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        label: 'invalid start',
+        document: {
+          type: 'doc',
+          content: [
+            {
+              type: 'orderedList',
+              attrs: { start: -1 },
+              content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }],
+            },
+          ],
+        },
+      },
+      {
+        label: 'invalid direction',
+        document: {
+          type: 'doc',
+          attrs: { dir: ['rtl'] },
+          content: [{ type: 'paragraph' }],
+        },
+      },
+      { label: 'empty text', document: textDocument('') },
+      { label: 'NUL text', document: textDocument('bad\u0000text') },
+      { label: 'unpaired surrogate', document: textDocument('bad\ud800text') },
+      {
+        label: 'unknown field',
+        document: { ...document, version: 'fixture-preview' },
+      },
+      {
+        label: 'preview envelope',
+        document: { format: 'tiptap-ui-proposal-1', document },
+      },
+    ])(
+      'rejects $label rich documents before writes',
+      async ({ document: invalid }) => {
+        await createDocument(invalid).expect(400);
+        expect(persistence.post.create).not.toHaveBeenCalled();
+        expect(persistence.post.findUnique).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      { marks: [{ type: 'strike' }] },
+      { marks: [{ type: 'underline' }] },
+      { marks: [{ type: 'textStyle' }] },
+      { marks: [{ type: 'bold', attrs: { style: 'color:red' } }] },
+      { marks: [{ type: 'bold' }, { type: 'bold' }] },
+      { marks: [{ type: 'code' }, { type: 'bold' }] },
+    ])(
+      'rejects unsupported or incompatible marks $marks',
+      async ({ marks }) => {
+        await createDocument({
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: 'Marked', marks }],
+            },
+          ],
+        }).expect(400);
+        expect(persistence.post.create).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      'javascript:alert(1)',
+      'data:text/html,unsafe',
+      'blob:unsafe',
+      'file:///tmp/test',
+      'mailto:user@example.test',
+      '/relative',
+      '//example.test',
+      'https://user:pass@example.test',
+      'https://example.test/\nunsafe',
+    ])('rejects unsafe or unsupported link %s', async (href) => {
+      await createDocument({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'Link',
+                marks: [{ type: 'link', attrs: { href } }],
+              },
+            ],
+          },
+        ],
+      }).expect(400);
+      expect(persistence.post.create).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { target: 'named-window' },
+      { target: '_blank', rel: null },
+      { rel: 'opener' },
+      { class: 'unsafe-class' },
+      { onclick: 'unsafe' },
+      { title: 'x'.repeat(257) },
+    ])('rejects unsafe link attributes %j', async (attrs) => {
+      await createDocument({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'Link',
+                marks: [
+                  {
+                    type: 'link',
+                    attrs: { href: 'https://example.test', ...attrs },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }).expect(400);
+      expect(persistence.post.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects prototype keys from the raw document before transformation can discard them', async () => {
+      const hostile: unknown = JSON.parse(
+        '{"type":"doc","attrs":{"__proto__":{"injected":true}},"content":[{"type":"paragraph"}]}',
+      );
+      await createDocument(hostile).expect(400);
+      expect(persistence.post.create).not.toHaveBeenCalled();
+    });
+
+    it('bounds serialized UTF-8 bytes, structural depth and node/mark count', async () => {
+      articleStore();
+      const overhead = Buffer.byteLength(JSON.stringify(textDocument('')));
+      const boundary = textDocument('a'.repeat(65536 - overhead));
+      await createDocument(boundary).expect(201);
+      await createDocument(textDocument('a'.repeat(65537 - overhead))).expect(
+        400,
+      );
+      await createDocument(textDocument('ی'.repeat(32768))).expect(400);
+      const nested = (levels: number) => {
+        let node: object = {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Nested' }],
+        };
+        for (let i = 0; i < levels; i++)
+          node = { type: 'blockquote', content: [node] };
+        return { type: 'doc', content: [node] };
+      };
+      await createDocument(nested(13)).expect(201);
+      await createDocument(nested(14)).expect(400);
+      await createDocument({
+        type: 'doc',
+        content: Array.from({ length: 1999 }, () => ({ type: 'paragraph' })),
+      }).expect(201);
+      await createDocument({
+        type: 'doc',
+        content: Array.from({ length: 2000 }, () => ({ type: 'paragraph' })),
+      }).expect(400);
+    });
+
+    it('never parses legacy strings, preserves omitted content, and clears JSON on explicit legacy replacement', async () => {
+      articleStore();
+      const token = auth('AUTHOR');
+      const literal =
+        '{"type":"doc","content":[]} <script>literal only</script> ۱۲۳';
+      const old = await request(app.getHttpServer())
+        .post('/posts')
+        .auth(token, { type: 'bearer' })
+        .send({ title: 'Legacy', content: literal, status: 'PUBLISHED' })
+        .expect(201);
+      expect(old.body.content).toBe(literal);
+      expect(old.body.contentDocument).toBeNull();
+      const rich = await request(app.getHttpServer())
+        .patch('/posts/rich-post')
+        .auth(token, { type: 'bearer' })
+        .send({ contentDocument: document })
+        .expect(200);
+      const metadata = await request(app.getHttpServer())
+        .patch('/posts/rich-post')
+        .auth(token, { type: 'bearer' })
+        .send({ title: 'Title only' })
+        .expect(200);
+      expect(metadata.body.contentDocument).toEqual(document);
+      expect(metadata.body.content).toBe(rich.body.content);
+      const legacy = await request(app.getHttpServer())
+        .patch('/posts/rich-post')
+        .auth(token, { type: 'bearer' })
+        .send({ content: literal })
+        .expect(200);
+      expect(legacy.body.content).toBe(literal);
+      expect(legacy.body.contentDocument).toBeNull();
+      const published = await request(app.getHttpServer())
+        .get('/posts/legacy')
+        .expect(200);
+      expect(published.body.content).toBe(literal);
+      const largeLegacy = 'x'.repeat(70000);
+      const retainedPolicy = await request(app.getHttpServer())
+        .patch('/posts/rich-post')
+        .auth(token, { type: 'bearer' })
+        .send({ content: largeLegacy })
+        .expect(200);
+      expect(retainedPolicy.body.content).toBe(largeLegacy);
+    });
+
+    it('rejects ambiguous content sources, explicit nulls and malformed transport JSON', async () => {
+      articleStore();
+      const token = auth('AUTHOR');
+      for (const input of [
+        { title: 'Missing' },
+        { title: 'Both', content: 'text', contentDocument: document },
+        { title: 'Null', content: null },
+      ]) {
+        await request(app.getHttpServer())
+          .post('/posts')
+          .auth(token, { type: 'bearer' })
+          .send(input)
+          .expect(400);
+      }
+      for (const input of [
+        { content: 'text', contentDocument: document },
+        { contentDocument: null },
+        { content: null },
+      ]) {
+        await request(app.getHttpServer())
+          .patch('/posts/rich-post')
+          .auth(token, { type: 'bearer' })
+          .send(input)
+          .expect(400);
+      }
+      await request(app.getHttpServer())
+        .post('/posts')
+        .auth(token, { type: 'bearer' })
+        .set('Content-Type', 'application/json')
+        .send('{"title":')
+        .expect(400);
+      expect(persistence.post.create).not.toHaveBeenCalled();
+      expect(persistence.post.update).not.toHaveBeenCalled();
+    });
+
+    it('searches derived text across inline marks without indexing JSON metadata or link attributes', async () => {
+      articleStore();
+      const rich = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: 'Need', marks: [{ type: 'bold' }] },
+              { type: 'text', text: 'leWord', marks: [{ type: 'italic' }] },
+              {
+                type: 'text',
+                text: ' Guide',
+                marks: [
+                  {
+                    type: 'link',
+                    attrs: { href: 'https://example.test/secret-keyword' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      await request(app.getHttpServer())
+        .post('/posts')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .send({
+          title: 'Search article',
+          status: 'PUBLISHED',
+          contentDocument: rich,
+        })
+        .expect(201);
+      const found = await request(app.getHttpServer())
+        .get('/posts?search=NeedleWord')
+        .expect(200);
+      expect(found.body.meta.total).toBe(1);
+      expect(found.body.data[0].content).toBe('NeedleWord Guide');
+      for (const term of ['secret-keyword', 'paragraph']) {
+        const absent = await request(app.getHttpServer())
+          .get('/posts')
+          .query({ search: term })
+          .expect(200);
+        expect(absent.body).toMatchObject({
+          data: [],
+          meta: { total: 0, totalPages: 0 },
+        });
+      }
+    });
+
+    it('documents mutually exclusive content inputs and recursive nullable response JSON', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api-json')
+        .expect(200);
+      const api: OpenAPIObject = response.body;
+      const create = api.paths['/posts'].post!.requestBody;
+      expect(create).toMatchObject({
+        content: {
+          'application/json': { schema: { oneOf: expect.any(Array) } },
+        },
+      });
+      const post = api.components!.schemas!.PostResponseDto as SchemaObject;
+      expect(post.properties!.content).toMatchObject({ type: 'string' });
+      expect(post.properties!.contentDocument).toMatchObject({
+        nullable: true,
+      });
+      expect(JSON.stringify(post.properties!.contentDocument)).toContain(
+        '#/components/schemas/TiptapDocumentDto',
+      );
+      const nodes = api.components!.schemas!.TiptapNodeDto as SchemaObject;
+      expect(nodes.properties!.content).toMatchObject({
+        type: 'array',
+        items: { $ref: '#/components/schemas/TiptapNodeDto' },
+      });
+    });
+
+    it.each(['anonymous', 'USER'])(
+      'preserves create permissions for rich content submitted by %s',
+      async (role) => {
+        const operation = request(app.getHttpServer()).post('/posts');
+        if (role !== 'anonymous')
+          operation.auth(auth(role), { type: 'bearer' });
+        await operation
+          .send({ title: 'Rich', contentDocument: document })
+          .expect(role === 'anonymous' ? 401 : 403);
+        expect(persistence.post.create).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('ADMIN post inventory', () => {

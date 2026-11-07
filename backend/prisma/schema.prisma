@@ -118,21 +118,22 @@ enum PostStatus {
 }
 
 model Post {
-  id          String     @id @default(uuid())
-  title       String
-  slug        String     @unique
-  content     String
-  status      PostStatus @default(DRAFT)
-  publishedAt DateTime?
-  authorId    String
-  author      User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  categories  Category[]
-  tags        Tag[]
-  comments    Comment[]
-  bookmarks   Bookmark[]
-  postLikes   PostLike[]
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id              String     @id @default(uuid())
+  title           String
+  slug            String     @unique
+  content         String
+  contentDocument Json?
+  status          PostStatus @default(DRAFT)
+  publishedAt     DateTime?
+  authorId        String
+  author          User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  categories      Category[]
+  tags            Tag[]
+  comments        Comment[]
+  bookmarks       Bookmark[]
+  postLikes       PostLike[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   @@index([authorId])
   @@index([status])

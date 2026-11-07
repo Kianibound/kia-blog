@@ -6,9 +6,13 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Validate,
+  ValidateIf,
 } from 'class-validator';
 
 import { PostStatus } from '../../generated/prisma/client';
+import { RichDocumentConstraint } from '../rich-document';
+import { TiptapDocumentDto } from './tiptap-document.dto';
 
 export class UpdatePostDto {
   @ApiPropertyOptional({ minLength: 1 })
@@ -18,10 +22,19 @@ export class UpdatePostDto {
   title?: string;
 
   @ApiPropertyOptional({ minLength: 1 })
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsString()
   @IsNotEmpty()
   content?: string;
+
+  @ApiPropertyOptional({
+    type: TiptapDocumentDto,
+    description:
+      'Canonical Tiptap document; mutually exclusive with content. A legacy content update clears it; omission preserves it.',
+  })
+  @ValidateIf((_object, value) => value !== undefined)
+  @Validate(RichDocumentConstraint)
+  contentDocument?: unknown;
 
   @ApiPropertyOptional({ enum: PostStatus })
   @IsOptional()

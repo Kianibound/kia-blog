@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import type { RoleName } from '../roles/constants/role.constants';
 import { PostStatus } from '../generated/prisma/client';
@@ -6,6 +10,7 @@ import { assertPostAccess } from './post-access.policy';
 import type { CreatePostDto } from './dto/create-post.dto';
 import type { UpdatePostDto } from './dto/update-post.dto';
 import slugify from 'slugify';
+import { preparePostContent } from './rich-document';
 
 // Internal to PostsModule: writes own lifecycle, relation changes, and slug allocation.
 @Injectable()
@@ -13,6 +18,9 @@ export class PostCommands {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(authorId: string, dto: CreatePostDto) {
+    const contentFields = preparePostContent(dto);
+    if (!contentFields)
+      throw new BadRequestException('Supply content or contentDocument.');
     // Generate a unique public URL slug from the title
     const slug = await this.generateUniqueSlug(dto.title);
 
@@ -23,7 +31,7 @@ export class PostCommands {
       data: {
         title: dto.title,
         slug,
-        content: dto.content,
+        ...contentFields,
         status: dto.status,
         publishedAt,
         authorId,
@@ -80,7 +88,14 @@ export class PostCommands {
     let publishedAt = post.publishedAt;
 
     // Separate relation ids from regular post fields
-    const { categoryIds, tagIds, ...postData } = dto;
+    const {
+      categoryIds,
+      tagIds,
+      content: _content,
+      contentDocument: _document,
+      ...postData
+    } = dto;
+    const contentFields = preparePostContent(dto);
 
     if (
       dto.status === PostStatus.PUBLISHED &&
@@ -102,6 +117,7 @@ export class PostCommands {
       },
       data: {
         ...postData,
+        ...contentFields,
         publishedAt,
 
         // Replace categories only when categoryIds is provided

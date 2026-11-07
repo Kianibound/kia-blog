@@ -1,5 +1,6 @@
 import { ApiProperty, PickType } from '@nestjs/swagger';
-import { PostStatus } from '../../generated/prisma/client';
+import { PostStatus, type Prisma } from '../../generated/prisma/client';
+import { TiptapDocumentDto } from './tiptap-document.dto';
 import {
   AuthorResponseDto,
   TaxonomyResponseDto,
@@ -13,8 +14,18 @@ export class PostResponseDto {
   title: string;
   @ApiProperty()
   slug: string;
-  @ApiProperty()
+  @ApiProperty({
+    description:
+      'Literal legacy string or server-derived plain-text projection of contentDocument. Never HTML.',
+  })
   content: string;
+  @ApiProperty({
+    type: TiptapDocumentDto,
+    nullable: true,
+    description:
+      'Validated canonical document for rich posts; null for legacy text. Treat as untrusted data and render with an allowlisted schema, not raw HTML.',
+  })
+  contentDocument: Prisma.JsonValue | null;
   @ApiProperty({ enum: PostStatus })
   status: PostStatus;
   @ApiProperty({ type: String, format: 'date-time', nullable: true })

@@ -372,6 +372,18 @@ Examples:
 - Filter by category
 - Filter by tag
 
+### Canonical rich article content (Issue #47)
+
+Article create/update accepts either legacy string `content` or validated Tiptap
+JSON in `contentDocument`, never both. Rich writes derive the existing `content`
+search string on the server. Responses return both fields; legacy rows have null
+`contentDocument` and are never parsed or backfilled. Metadata-only edits preserve
+content; a string replacement clears the JSON. Apply the additive
+`20261107193000_add_post_content_document` migration and regenerate Prisma first.
+See the [rich-content contract](src/posts/docs/RICH_CONTENT.md) for the node/mark
+allowlist, limits, round-trip rules, safe rendering and pending frontend adapter.
+Images, uploads and covers are excluded from this issue.
+
 ### Owned Post status filtering (Issue #45)
 
 `GET /posts/mine` remains restricted to authenticated AUTHOR/ADMIN accounts and

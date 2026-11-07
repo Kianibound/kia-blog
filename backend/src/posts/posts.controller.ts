@@ -23,6 +23,7 @@ import {
 import { PaginationQueryDto } from './dto/pagination-query.dto';
 import { MyPostsQueryDto } from './dto/my-posts-query.dto';
 import { AdminPostsQueryDto } from './dto/admin-posts-query.dto';
+import { RichDocumentGuard } from './rich-document.guard';
 
 import { UpdatePostDto } from './dto/update-post.dto';
 import { JwtAuthGuard } from '../access-control/guards/jwt-auth.guard';
@@ -42,9 +43,12 @@ import {
   ApiOperation,
   ApiResponse,
   ApiTags,
+  ApiExtraModels,
+  getSchemaPath,
 } from '@nestjs/swagger';
 
 @ApiTags('Posts')
+@ApiExtraModels(CreatePostDto, UpdatePostDto)
 @Controller('posts')
 export class PostsController {
   constructor(private readonly postsService: PostsService) {}
@@ -85,7 +89,21 @@ export class PostsController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Create a new post' })
   @ApiBody({
-    type: CreatePostDto,
+    schema: {
+      allOf: [{ $ref: getSchemaPath(CreatePostDto) }],
+      oneOf: [
+        {
+          type: 'object',
+          required: ['content'],
+          not: { required: ['contentDocument'] },
+        },
+        {
+          type: 'object',
+          required: ['contentDocument'],
+          not: { required: ['content'] },
+        },
+      ],
+    },
     examples: {
       default: {
         value: {
@@ -107,7 +125,18 @@ export class PostsController {
     description: 'Only AUTHOR or ADMIN can create posts.',
   })
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiResponse({
+    status: 400,
+    type: ErrorResponseDto,
+    description:
+      'Invalid fields, ambiguous content sources, unsupported/unsafe rich document, or document limits exceeded.',
+  })
+  @ApiResponse({
+    status: 413,
+    type: ErrorResponseDto,
+    description: 'Request exceeds the existing HTTP parser body limit.',
+  })
+  @UseGuards(JwtAuthGuard, RolesGuard, RichDocumentGuard)
   @Roles(ROLE.AUTHOR, ROLE.ADMIN)
   create(@CurrentUser() user: AccessTokenPayload, @Body() dto: CreatePostDto) {
     // The author identity comes from the verified access token
@@ -223,7 +252,10 @@ export class PostsController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update a post owned by the current author' })
   @ApiBody({
-    type: UpdatePostDto,
+    schema: {
+      allOf: [{ $ref: getSchemaPath(UpdatePostDto) }],
+      not: { required: ['content', 'contentDocument'] },
+    },
     examples: {
       default: {
         value: {
@@ -247,7 +279,18 @@ export class PostsController {
     description: 'User is not allowed to update this post.',
   })
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiResponse({
+    status: 400,
+    type: ErrorResponseDto,
+    description:
+      'Invalid fields, ambiguous content sources, unsupported/unsafe rich document, or document limits exceeded.',
+  })
+  @ApiResponse({
+    status: 413,
+    type: ErrorResponseDto,
+    description: 'Request exceeds the existing HTTP parser body limit.',
+  })
+  @UseGuards(JwtAuthGuard, RolesGuard, RichDocumentGuard)
   @Roles(ROLE.AUTHOR, ROLE.ADMIN)
   update(
     @Param('id') id: string,
