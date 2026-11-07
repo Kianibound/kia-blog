@@ -9,6 +9,8 @@
  * 🟢 You can import this file directly.
  */
 export type * from './models/User.js'
+export type * from './models/GithubIdentity.js'
+export type * from './models/GithubOAuthState.js'
 export type * from './models/GoogleIdentity.js'
 export type * from './models/GoogleOAuthState.js'
 export type * from './models/Role.js'

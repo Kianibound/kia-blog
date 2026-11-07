@@ -45,6 +45,16 @@ export { Prisma }
  */
 export type User = Prisma.UserModel
 /**
+ * Model GithubIdentity
+ * 
+ */
+export type GithubIdentity = Prisma.GithubIdentityModel
+/**
+ * Model GithubOAuthState
+ * 
+ */
+export type GithubOAuthState = Prisma.GithubOAuthStateModel
+/**
  * Model GoogleIdentity
  * 
  */

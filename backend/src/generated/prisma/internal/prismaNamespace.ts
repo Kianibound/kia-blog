@@ -398,6 +398,8 @@ type FieldRefInputType<Model, FieldType> = Model extends never ? never : FieldRe
 
 export const ModelName = {
   User: 'User',
+  GithubIdentity: 'GithubIdentity',
+  GithubOAuthState: 'GithubOAuthState',
   GoogleIdentity: 'GoogleIdentity',
   GoogleOAuthState: 'GoogleOAuthState',
   Role: 'Role',
@@ -426,7 +428,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "googleIdentity" | "googleOAuthState" | "role" | "refreshToken" | "emailVerificationToken" | "passwordResetToken" | "post" | "category" | "tag" | "comment" | "bookmark" | "postLike" | "media"
+    modelProps: "user" | "githubIdentity" | "githubOAuthState" | "googleIdentity" | "googleOAuthState" | "role" | "refreshToken" | "emailVerificationToken" | "passwordResetToken" | "post" | "category" | "tag" | "comment" | "bookmark" | "postLike" | "media"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -501,6 +503,154 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.UserCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.UserCountAggregateOutputType> | number
+        }
+      }
+    }
+    GithubIdentity: {
+      payload: Prisma.$GithubIdentityPayload<ExtArgs>
+      fields: Prisma.GithubIdentityFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.GithubIdentityFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.GithubIdentityFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>
+        }
+        findFirst: {
+          args: Prisma.GithubIdentityFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.GithubIdentityFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>
+        }
+        findMany: {
+          args: Prisma.GithubIdentityFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>[]
+        }
+        create: {
+          args: Prisma.GithubIdentityCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>
+        }
+        createMany: {
+          args: Prisma.GithubIdentityCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.GithubIdentityCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>[]
+        }
+        delete: {
+          args: Prisma.GithubIdentityDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>
+        }
+        update: {
+          args: Prisma.GithubIdentityUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>
+        }
+        deleteMany: {
+          args: Prisma.GithubIdentityDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.GithubIdentityUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.GithubIdentityUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>[]
+        }
+        upsert: {
+          args: Prisma.GithubIdentityUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>
+        }
+        aggregate: {
+          args: Prisma.GithubIdentityAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateGithubIdentity>
+        }
+        groupBy: {
+          args: Prisma.GithubIdentityGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GithubIdentityGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.GithubIdentityCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GithubIdentityCountAggregateOutputType> | number
+        }
+      }
+    }
+    GithubOAuthState: {
+      payload: Prisma.$GithubOAuthStatePayload<ExtArgs>
+      fields: Prisma.GithubOAuthStateFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.GithubOAuthStateFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.GithubOAuthStateFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>
+        }
+        findFirst: {
+          args: Prisma.GithubOAuthStateFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.GithubOAuthStateFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>
+        }
+        findMany: {
+          args: Prisma.GithubOAuthStateFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>[]
+        }
+        create: {
+          args: Prisma.GithubOAuthStateCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>
+        }
+        createMany: {
+          args: Prisma.GithubOAuthStateCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.GithubOAuthStateCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>[]
+        }
+        delete: {
+          args: Prisma.GithubOAuthStateDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>
+        }
+        update: {
+          args: Prisma.GithubOAuthStateUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>
+        }
+        deleteMany: {
+          args: Prisma.GithubOAuthStateDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.GithubOAuthStateUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.GithubOAuthStateUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>[]
+        }
+        upsert: {
+          args: Prisma.GithubOAuthStateUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>
+        }
+        aggregate: {
+          args: Prisma.GithubOAuthStateAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateGithubOAuthState>
+        }
+        groupBy: {
+          args: Prisma.GithubOAuthStateGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GithubOAuthStateGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.GithubOAuthStateCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GithubOAuthStateCountAggregateOutputType> | number
         }
       }
     }
@@ -1523,6 +1673,24 @@ export const UserScalarFieldEnum = {
 export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]
 
 
+export const GithubIdentityScalarFieldEnum = {
+  subject: 'subject',
+  userId: 'userId'
+} as const
+
+export type GithubIdentityScalarFieldEnum = (typeof GithubIdentityScalarFieldEnum)[keyof typeof GithubIdentityScalarFieldEnum]
+
+
+export const GithubOAuthStateScalarFieldEnum = {
+  stateHash: 'stateHash',
+  verifierHash: 'verifierHash',
+  expiresAt: 'expiresAt',
+  usedAt: 'usedAt'
+} as const
+
+export type GithubOAuthStateScalarFieldEnum = (typeof GithubOAuthStateScalarFieldEnum)[keyof typeof GithubOAuthStateScalarFieldEnum]
+
+
 export const GoogleIdentityScalarFieldEnum = {
   subject: 'subject',
   userId: 'userId'
@@ -1932,6 +2100,8 @@ export interface PrismaClientOptionsWithAdapter extends PrismaClientBaseOptions 
 export type PrismaClientOptions = PrismaClientOptionsWithAccelerateUrl | PrismaClientOptionsWithAdapter
 export type GlobalOmitConfig = {
   user?: Prisma.UserOmit
+  githubIdentity?: Prisma.GithubIdentityOmit
+  githubOAuthState?: Prisma.GithubOAuthStateOmit
   googleIdentity?: Prisma.GoogleIdentityOmit
   googleOAuthState?: Prisma.GoogleOAuthStateOmit
   role?: Prisma.RoleOmit

@@ -13,6 +13,10 @@ import { AccessControlModule } from '../access-control/access-control.module';
 import { ConfigService } from '@nestjs/config';
 import { OAuth2Client } from 'google-auth-library';
 import {
+  GITHUB_FETCH,
+  GithubOAuthService,
+} from './services/github-oauth.service';
+import {
   GOOGLE_OAUTH_CLIENT,
   GoogleOAuthService,
 } from './services/google-oauth.service';
@@ -27,6 +31,8 @@ import {
   ],
   controllers: [AuthController],
   providers: [
+    GithubOAuthService,
+    { provide: GITHUB_FETCH, useValue: globalThis.fetch },
     GoogleOAuthService,
     {
       provide: GOOGLE_OAUTH_CLIENT,

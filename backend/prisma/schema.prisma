@@ -31,6 +31,22 @@ model User {
   updatedAt               DateTime                 @updatedAt
   posts                   Post[]
   googleIdentity          GoogleIdentity?
+  githubIdentity          GithubIdentity?
+}
+
+model GithubIdentity {
+  subject String @id
+  userId  String @unique
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model GithubOAuthState {
+  stateHash    String    @id
+  verifierHash String
+  expiresAt    DateTime
+  usedAt       DateTime?
+
+  @@index([expiresAt])
 }
 
 model GoogleIdentity {

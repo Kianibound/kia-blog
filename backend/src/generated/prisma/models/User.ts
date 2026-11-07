@@ -249,6 +249,7 @@ export type UserWhereInput = {
   media?: Prisma.MediaListRelationFilter
   posts?: Prisma.PostListRelationFilter
   googleIdentity?: Prisma.XOR<Prisma.GoogleIdentityNullableScalarRelationFilter, Prisma.GoogleIdentityWhereInput> | null
+  githubIdentity?: Prisma.XOR<Prisma.GithubIdentityNullableScalarRelationFilter, Prisma.GithubIdentityWhereInput> | null
 }
 
 export type UserOrderByWithRelationInput = {
@@ -275,6 +276,7 @@ export type UserOrderByWithRelationInput = {
   media?: Prisma.MediaOrderByRelationAggregateInput
   posts?: Prisma.PostOrderByRelationAggregateInput
   googleIdentity?: Prisma.GoogleIdentityOrderByWithRelationInput
+  githubIdentity?: Prisma.GithubIdentityOrderByWithRelationInput
 }
 
 export type UserWhereUniqueInput = Prisma.AtLeast<{
@@ -304,6 +306,7 @@ export type UserWhereUniqueInput = Prisma.AtLeast<{
   media?: Prisma.MediaListRelationFilter
   posts?: Prisma.PostListRelationFilter
   googleIdentity?: Prisma.XOR<Prisma.GoogleIdentityNullableScalarRelationFilter, Prisma.GoogleIdentityWhereInput> | null
+  githubIdentity?: Prisma.XOR<Prisma.GithubIdentityNullableScalarRelationFilter, Prisma.GithubIdentityWhereInput> | null
 }, "id" | "email" | "username" | "avatarMediaId">
 
 export type UserOrderByWithAggregationInput = {
@@ -364,6 +367,7 @@ export type UserCreateInput = {
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateInput = {
@@ -388,6 +392,7 @@ export type UserUncheckedCreateInput = {
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserUpdateInput = {
@@ -412,6 +417,7 @@ export type UserUpdateInput = {
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateInput = {
@@ -436,6 +442,7 @@ export type UserUncheckedUpdateInput = {
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateManyInput = {
@@ -564,6 +571,20 @@ export type NullableDateTimeFieldUpdateOperationsInput = {
 
 export type DateTimeFieldUpdateOperationsInput = {
   set?: Date | string
+}
+
+export type UserCreateNestedOneWithoutGithubIdentityInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutGithubIdentityInput, Prisma.UserUncheckedCreateWithoutGithubIdentityInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutGithubIdentityInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneRequiredWithoutGithubIdentityNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutGithubIdentityInput, Prisma.UserUncheckedCreateWithoutGithubIdentityInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutGithubIdentityInput
+  upsert?: Prisma.UserUpsertWithoutGithubIdentityInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutGithubIdentityInput, Prisma.UserUpdateWithoutGithubIdentityInput>, Prisma.UserUncheckedUpdateWithoutGithubIdentityInput>
 }
 
 export type UserCreateNestedOneWithoutGoogleIdentityInput = {
@@ -766,6 +787,118 @@ export type UserUncheckedUpdateOneWithoutAvatarMediaNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutAvatarMediaInput, Prisma.UserUpdateWithoutAvatarMediaInput>, Prisma.UserUncheckedUpdateWithoutAvatarMediaInput>
 }
 
+export type UserCreateWithoutGithubIdentityInput = {
+  id?: string
+  email: string
+  username: string
+  name?: string | null
+  avatarUrl?: string | null
+  passwordHash?: string | null
+  emailVerified?: boolean
+  disabledAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  refreshTokens?: Prisma.RefreshTokenCreateNestedManyWithoutUserInput
+  emailVerificationTokens?: Prisma.EmailVerificationTokenCreateNestedManyWithoutUserInput
+  passwordResetTokens?: Prisma.PasswordResetTokenCreateNestedManyWithoutUserInput
+  role?: Prisma.RoleCreateNestedOneWithoutUsersInput
+  comments?: Prisma.CommentCreateNestedManyWithoutAuthorInput
+  bookmarks?: Prisma.BookmarkCreateNestedManyWithoutUserInput
+  postLikes?: Prisma.PostLikeCreateNestedManyWithoutUserInput
+  avatarMedia?: Prisma.MediaCreateNestedOneWithoutAvatarOfInput
+  media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
+  posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
+}
+
+export type UserUncheckedCreateWithoutGithubIdentityInput = {
+  id?: string
+  email: string
+  username: string
+  name?: string | null
+  avatarUrl?: string | null
+  passwordHash?: string | null
+  roleId?: string | null
+  emailVerified?: boolean
+  disabledAt?: Date | string | null
+  avatarMediaId?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  refreshTokens?: Prisma.RefreshTokenUncheckedCreateNestedManyWithoutUserInput
+  emailVerificationTokens?: Prisma.EmailVerificationTokenUncheckedCreateNestedManyWithoutUserInput
+  passwordResetTokens?: Prisma.PasswordResetTokenUncheckedCreateNestedManyWithoutUserInput
+  comments?: Prisma.CommentUncheckedCreateNestedManyWithoutAuthorInput
+  bookmarks?: Prisma.BookmarkUncheckedCreateNestedManyWithoutUserInput
+  postLikes?: Prisma.PostLikeUncheckedCreateNestedManyWithoutUserInput
+  media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
+  posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
+}
+
+export type UserCreateOrConnectWithoutGithubIdentityInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutGithubIdentityInput, Prisma.UserUncheckedCreateWithoutGithubIdentityInput>
+}
+
+export type UserUpsertWithoutGithubIdentityInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutGithubIdentityInput, Prisma.UserUncheckedUpdateWithoutGithubIdentityInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutGithubIdentityInput, Prisma.UserUncheckedCreateWithoutGithubIdentityInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutGithubIdentityInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutGithubIdentityInput, Prisma.UserUncheckedUpdateWithoutGithubIdentityInput>
+}
+
+export type UserUpdateWithoutGithubIdentityInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  username?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  avatarUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  refreshTokens?: Prisma.RefreshTokenUpdateManyWithoutUserNestedInput
+  emailVerificationTokens?: Prisma.EmailVerificationTokenUpdateManyWithoutUserNestedInput
+  passwordResetTokens?: Prisma.PasswordResetTokenUpdateManyWithoutUserNestedInput
+  role?: Prisma.RoleUpdateOneWithoutUsersNestedInput
+  comments?: Prisma.CommentUpdateManyWithoutAuthorNestedInput
+  bookmarks?: Prisma.BookmarkUpdateManyWithoutUserNestedInput
+  postLikes?: Prisma.PostLikeUpdateManyWithoutUserNestedInput
+  avatarMedia?: Prisma.MediaUpdateOneWithoutAvatarOfNestedInput
+  media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
+  posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
+}
+
+export type UserUncheckedUpdateWithoutGithubIdentityInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  username?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  avatarUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  passwordHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  roleId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  emailVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  disabledAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  avatarMediaId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  refreshTokens?: Prisma.RefreshTokenUncheckedUpdateManyWithoutUserNestedInput
+  emailVerificationTokens?: Prisma.EmailVerificationTokenUncheckedUpdateManyWithoutUserNestedInput
+  passwordResetTokens?: Prisma.PasswordResetTokenUncheckedUpdateManyWithoutUserNestedInput
+  comments?: Prisma.CommentUncheckedUpdateManyWithoutAuthorNestedInput
+  bookmarks?: Prisma.BookmarkUncheckedUpdateManyWithoutUserNestedInput
+  postLikes?: Prisma.PostLikeUncheckedUpdateManyWithoutUserNestedInput
+  media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
+  posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
+  googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
+}
+
 export type UserCreateWithoutGoogleIdentityInput = {
   id?: string
   email: string
@@ -787,6 +920,7 @@ export type UserCreateWithoutGoogleIdentityInput = {
   avatarMedia?: Prisma.MediaCreateNestedOneWithoutAvatarOfInput
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
+  githubIdentity?: Prisma.GithubIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutGoogleIdentityInput = {
@@ -810,6 +944,7 @@ export type UserUncheckedCreateWithoutGoogleIdentityInput = {
   postLikes?: Prisma.PostLikeUncheckedCreateNestedManyWithoutUserInput
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutGoogleIdentityInput = {
@@ -849,6 +984,7 @@ export type UserUpdateWithoutGoogleIdentityInput = {
   avatarMedia?: Prisma.MediaUpdateOneWithoutAvatarOfNestedInput
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
+  githubIdentity?: Prisma.GithubIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutGoogleIdentityInput = {
@@ -872,6 +1008,7 @@ export type UserUncheckedUpdateWithoutGoogleIdentityInput = {
   postLikes?: Prisma.PostLikeUncheckedUpdateManyWithoutUserNestedInput
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutRoleInput = {
@@ -895,6 +1032,7 @@ export type UserCreateWithoutRoleInput = {
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutRoleInput = {
@@ -918,6 +1056,7 @@ export type UserUncheckedCreateWithoutRoleInput = {
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutRoleInput = {
@@ -985,6 +1124,7 @@ export type UserCreateWithoutRefreshTokensInput = {
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutRefreshTokensInput = {
@@ -1008,6 +1148,7 @@ export type UserUncheckedCreateWithoutRefreshTokensInput = {
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutRefreshTokensInput = {
@@ -1047,6 +1188,7 @@ export type UserUpdateWithoutRefreshTokensInput = {
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutRefreshTokensInput = {
@@ -1070,6 +1212,7 @@ export type UserUncheckedUpdateWithoutRefreshTokensInput = {
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutEmailVerificationTokensInput = {
@@ -1093,6 +1236,7 @@ export type UserCreateWithoutEmailVerificationTokensInput = {
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutEmailVerificationTokensInput = {
@@ -1116,6 +1260,7 @@ export type UserUncheckedCreateWithoutEmailVerificationTokensInput = {
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutEmailVerificationTokensInput = {
@@ -1155,6 +1300,7 @@ export type UserUpdateWithoutEmailVerificationTokensInput = {
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutEmailVerificationTokensInput = {
@@ -1178,6 +1324,7 @@ export type UserUncheckedUpdateWithoutEmailVerificationTokensInput = {
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutPasswordResetTokensInput = {
@@ -1201,6 +1348,7 @@ export type UserCreateWithoutPasswordResetTokensInput = {
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutPasswordResetTokensInput = {
@@ -1224,6 +1372,7 @@ export type UserUncheckedCreateWithoutPasswordResetTokensInput = {
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutPasswordResetTokensInput = {
@@ -1263,6 +1412,7 @@ export type UserUpdateWithoutPasswordResetTokensInput = {
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutPasswordResetTokensInput = {
@@ -1286,6 +1436,7 @@ export type UserUncheckedUpdateWithoutPasswordResetTokensInput = {
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutPostsInput = {
@@ -1309,6 +1460,7 @@ export type UserCreateWithoutPostsInput = {
   avatarMedia?: Prisma.MediaCreateNestedOneWithoutAvatarOfInput
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutPostsInput = {
@@ -1332,6 +1484,7 @@ export type UserUncheckedCreateWithoutPostsInput = {
   postLikes?: Prisma.PostLikeUncheckedCreateNestedManyWithoutUserInput
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutPostsInput = {
@@ -1371,6 +1524,7 @@ export type UserUpdateWithoutPostsInput = {
   avatarMedia?: Prisma.MediaUpdateOneWithoutAvatarOfNestedInput
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutPostsInput = {
@@ -1394,6 +1548,7 @@ export type UserUncheckedUpdateWithoutPostsInput = {
   postLikes?: Prisma.PostLikeUncheckedUpdateManyWithoutUserNestedInput
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutCommentsInput = {
@@ -1417,6 +1572,7 @@ export type UserCreateWithoutCommentsInput = {
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutCommentsInput = {
@@ -1440,6 +1596,7 @@ export type UserUncheckedCreateWithoutCommentsInput = {
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutCommentsInput = {
@@ -1479,6 +1636,7 @@ export type UserUpdateWithoutCommentsInput = {
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutCommentsInput = {
@@ -1502,6 +1660,7 @@ export type UserUncheckedUpdateWithoutCommentsInput = {
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutBookmarksInput = {
@@ -1525,6 +1684,7 @@ export type UserCreateWithoutBookmarksInput = {
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutBookmarksInput = {
@@ -1548,6 +1708,7 @@ export type UserUncheckedCreateWithoutBookmarksInput = {
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutBookmarksInput = {
@@ -1587,6 +1748,7 @@ export type UserUpdateWithoutBookmarksInput = {
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutBookmarksInput = {
@@ -1610,6 +1772,7 @@ export type UserUncheckedUpdateWithoutBookmarksInput = {
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutPostLikesInput = {
@@ -1633,6 +1796,7 @@ export type UserCreateWithoutPostLikesInput = {
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutPostLikesInput = {
@@ -1656,6 +1820,7 @@ export type UserUncheckedCreateWithoutPostLikesInput = {
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutPostLikesInput = {
@@ -1695,6 +1860,7 @@ export type UserUpdateWithoutPostLikesInput = {
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutPostLikesInput = {
@@ -1718,6 +1884,7 @@ export type UserUncheckedUpdateWithoutPostLikesInput = {
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateWithoutMediaInput = {
@@ -1741,6 +1908,7 @@ export type UserCreateWithoutMediaInput = {
   avatarMedia?: Prisma.MediaCreateNestedOneWithoutAvatarOfInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutMediaInput = {
@@ -1764,6 +1932,7 @@ export type UserUncheckedCreateWithoutMediaInput = {
   postLikes?: Prisma.PostLikeUncheckedCreateNestedManyWithoutUserInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutMediaInput = {
@@ -1792,6 +1961,7 @@ export type UserCreateWithoutAvatarMediaInput = {
   media?: Prisma.MediaCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutAvatarMediaInput = {
@@ -1815,6 +1985,7 @@ export type UserUncheckedCreateWithoutAvatarMediaInput = {
   media?: Prisma.MediaUncheckedCreateNestedManyWithoutOwnerInput
   posts?: Prisma.PostUncheckedCreateNestedManyWithoutAuthorInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedCreateNestedOneWithoutUserInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutAvatarMediaInput = {
@@ -1854,6 +2025,7 @@ export type UserUpdateWithoutMediaInput = {
   avatarMedia?: Prisma.MediaUpdateOneWithoutAvatarOfNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutMediaInput = {
@@ -1877,6 +2049,7 @@ export type UserUncheckedUpdateWithoutMediaInput = {
   postLikes?: Prisma.PostLikeUncheckedUpdateManyWithoutUserNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserUpsertWithoutAvatarMediaInput = {
@@ -1911,6 +2084,7 @@ export type UserUpdateWithoutAvatarMediaInput = {
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutAvatarMediaInput = {
@@ -1934,6 +2108,7 @@ export type UserUncheckedUpdateWithoutAvatarMediaInput = {
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateManyRoleInput = {
@@ -1971,6 +2146,7 @@ export type UserUpdateWithoutRoleInput = {
   media?: Prisma.MediaUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutRoleInput = {
@@ -1994,6 +2170,7 @@ export type UserUncheckedUpdateWithoutRoleInput = {
   media?: Prisma.MediaUncheckedUpdateManyWithoutOwnerNestedInput
   posts?: Prisma.PostUncheckedUpdateManyWithoutAuthorNestedInput
   googleIdentity?: Prisma.GoogleIdentityUncheckedUpdateOneWithoutUserNestedInput
+  githubIdentity?: Prisma.GithubIdentityUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateManyWithoutRoleInput = {
@@ -2128,6 +2305,7 @@ export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   media?: boolean | Prisma.User$mediaArgs<ExtArgs>
   posts?: boolean | Prisma.User$postsArgs<ExtArgs>
   googleIdentity?: boolean | Prisma.User$googleIdentityArgs<ExtArgs>
+  githubIdentity?: boolean | Prisma.User$githubIdentityArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["user"]>
 
@@ -2193,6 +2371,7 @@ export type UserInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   media?: boolean | Prisma.User$mediaArgs<ExtArgs>
   posts?: boolean | Prisma.User$postsArgs<ExtArgs>
   googleIdentity?: boolean | Prisma.User$googleIdentityArgs<ExtArgs>
+  githubIdentity?: boolean | Prisma.User$githubIdentityArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type UserIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -2218,6 +2397,7 @@ export type $UserPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     media: Prisma.$MediaPayload<ExtArgs>[]
     posts: Prisma.$PostPayload<ExtArgs>[]
     googleIdentity: Prisma.$GoogleIdentityPayload<ExtArgs> | null
+    githubIdentity: Prisma.$GithubIdentityPayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -2637,6 +2817,7 @@ export interface Prisma__UserClient<T, Null = never, ExtArgs extends runtime.Typ
   media<T extends Prisma.User$mediaArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$mediaArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$MediaPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   posts<T extends Prisma.User$postsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$postsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PostPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   googleIdentity<T extends Prisma.User$googleIdentityArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$googleIdentityArgs<ExtArgs>>): Prisma.Prisma__GoogleIdentityClient<runtime.Types.Result.GetResult<Prisma.$GoogleIdentityPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+  githubIdentity<T extends Prisma.User$githubIdentityArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$githubIdentityArgs<ExtArgs>>): Prisma.Prisma__GithubIdentityClient<runtime.Types.Result.GetResult<Prisma.$GithubIdentityPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -3325,6 +3506,25 @@ export type User$googleIdentityArgs<ExtArgs extends runtime.Types.Extensions.Int
    */
   include?: Prisma.GoogleIdentityInclude<ExtArgs> | null
   where?: Prisma.GoogleIdentityWhereInput
+}
+
+/**
+ * User.githubIdentity
+ */
+export type User$githubIdentityArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the GithubIdentity
+   */
+  select?: Prisma.GithubIdentitySelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the GithubIdentity
+   */
+  omit?: Prisma.GithubIdentityOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.GithubIdentityInclude<ExtArgs> | null
+  where?: Prisma.GithubIdentityWhereInput
 }
 
 /**

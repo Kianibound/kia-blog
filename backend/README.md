@@ -182,6 +182,90 @@ live Google credentials. A live Google test additionally needs the future adapte
 the configured redirect URI/consent screen (and permitted test users if applicable),
 securely supplied credentials, and a migrated disposable development database.
 
+### GitHub OAuth server-adapter contract (Issue #41)
+
+GitHub follows the same cookie-free, server-to-server contract as Google. The
+future Next.js adapter owns **`GET /auth/github/callback`** on port **3001**;
+this issue does not implement that adapter. Configure the GitHub OAuth App's
+**Authorization callback URL**, and backend `GITHUB_REDIRECT_URI`, to exactly:
+
+```text
+http://localhost:3001/auth/github/callback
+```
+
+Required backend variables are `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and
+`GITHUB_REDIRECT_URI`, alongside existing database/JWT configuration. Empty or
+unsafe configuration returns 503 for GitHub endpoints without affecting Google
+or password authentication. Production requires an explicit HTTPS adapter URL
+with the same callback path; query strings, fragments, userinfo, and non-local
+HTTP are rejected. Keep real credentials in secret storage, outside Git.
+
+- `POST http://localhost:3000/auth/github` returns
+  `{ authorizationUrl, flowVerifier, expiresIn: 600 }`. The adapter must check
+  trusted Origin/CSRF, retain state and verifier in server storage bound to the
+  initiating browser session, and redirect only to `authorizationUrl`.
+- The future adapter validates exact state and browser-session binding and
+  consumes its pending login once. It posts only `{ code, state, flowVerifier }`
+  to `POST http://localhost:3000/auth/github/callback`, or
+  `{ error, state, flowVerifier }` for denial. Provider redirect parameters such
+  as `error_description` must not be forwarded. Callback extra fields, including
+  caller roles and redirect overrides, are rejected.
+- Success returns the existing `{ accessToken, refreshToken, user }` contract.
+  The adapter retains these credentials server-side and sends the browser only
+  its opaque session cookie. No JWT, GitHub token or private verifier belongs in
+  browser-readable storage, redirect URLs, cookies, props or logs. Redirect to a
+  fixed trusted page; use HTTPS between services outside localhost and no caching.
+
+Nest stores only state/verifier hashes in `GithubOAuthState`, expires state after
+ten minutes, and consumes matching state atomically before provider I/O. Invalid,
+expired, wrong-verifier or reused state cannot exchange a code. Denial and
+provider failures consume state too: retry by starting a new flow. GitHub and
+Google have separate state tables, so state cannot cross providers.
+
+The provider flow uses S256 PKCE and `user:email` scope. It exchanges the code
+server-side, then requests GitHub's authenticated `/user` endpoint on every login.
+Identity is its positive, safe-integer `id` converted to a string, never mutable
+login or email. Requests use fixed HTTPS provider endpoints, reject redirects,
+disable caching and have ten-second timeouts. The temporary GitHub token is not
+persisted or returned; only existing Kia Blog session credentials are issued.
+See [GitHub's authorization flow](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps).
+
+For an unlinked subject, Nest reads authenticated `/user/emails`, including private
+addresses, and requires a valid **verified primary email**. Public profile email
+is not used as proof. Email pages contain at most 100 entries; reads are bounded
+to ten pages and fail closed if no usable primary is found. Missing, unverified,
+ambiguous or malformed primary email, missing email permission, and provider
+failures return 401 without creating an account or session. See
+[GitHub's email API](https://docs.github.com/en/rest/users/emails).
+
+New accounts get `USER`, verified email, a stable `github_<sha256(id)>` username,
+no password, and an atomically created `GithubIdentity`. Matching existing email,
+including case variants or accounts using Google/password login, returns 409;
+it never links or modifies the existing account. Unique-constraint races also
+return a safe 409. Linking/account-management endpoints are out of scope.
+
+Already linked accounts use their stored identity and Role even if GitHub login
+or email changes or public email is absent; email retrieval is unnecessary for
+these logins. Disabled accounts and missing/invalid Roles return 401. An unlinked
+GitHub subject cannot gain AUTHOR by claiming an existing author's email.
+
+Swagger `/api-json` documents both endpoints and DTOs. Errors are 400 for invalid
+or extra callback fields, 401 for state/provider/identity/email/account rejection,
+409 for collisions, and 503 for invalid configuration. Provider errors are
+sanitized; auth responses remain `private, no-store` and set no cookies.
+
+Apply `20261107130000_add_github_oauth` and regenerate Prisma. This additive
+migration creates `GithubIdentity` (unique subject, unique User relation) and
+`GithubOAuthState`, preserving existing Users, Google mappings/state, passwords,
+Roles and sessions. Expired/used state is inert; no retention job is added.
+
+Validation uses the existing isolated HTTP/module seam, substituted persistence,
+and mocked GitHub HTTP responses. No live credentials or provider calls are
+needed. Live testing is deferred until the Next.js adapter exists and requires
+the registered callback, securely supplied OAuth App credentials, required user
+consent, and a migrated disposable development database. No production resources
+are needed for that verification.
+
 ### Authorization
 
 Three application roles are supported:
@@ -634,8 +718,9 @@ The backend MVP currently includes:
 - Production PostgreSQL database
 
 Google OAuth's backend exchange is implemented; its browser adapter is pending.
-GitHub OAuth, following authors, newsletters and advanced analytics are not
-implemented here.
+GitHub OAuth's backend exchange is also implemented; its browser adapter is
+pending. Following authors, newsletters and advanced analytics are not implemented
+here.
 
 ## Architecture
 

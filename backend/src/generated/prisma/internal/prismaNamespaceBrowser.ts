@@ -52,6 +52,8 @@ export const AnyNull = runtime.AnyNull
 
 export const ModelName = {
   User: 'User',
+  GithubIdentity: 'GithubIdentity',
+  GithubOAuthState: 'GithubOAuthState',
   GoogleIdentity: 'GoogleIdentity',
   GoogleOAuthState: 'GoogleOAuthState',
   Role: 'Role',
@@ -99,6 +101,24 @@ export const UserScalarFieldEnum = {
 } as const
 
 export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]
+
+
+export const GithubIdentityScalarFieldEnum = {
+  subject: 'subject',
+  userId: 'userId'
+} as const
+
+export type GithubIdentityScalarFieldEnum = (typeof GithubIdentityScalarFieldEnum)[keyof typeof GithubIdentityScalarFieldEnum]
+
+
+export const GithubOAuthStateScalarFieldEnum = {
+  stateHash: 'stateHash',
+  verifierHash: 'verifierHash',
+  expiresAt: 'expiresAt',
+  usedAt: 'usedAt'
+} as const
+
+export type GithubOAuthStateScalarFieldEnum = (typeof GithubOAuthStateScalarFieldEnum)[keyof typeof GithubOAuthStateScalarFieldEnum]
 
 
 export const GoogleIdentityScalarFieldEnum = {

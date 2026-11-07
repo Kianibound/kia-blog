@@ -20,6 +20,11 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { GoogleOAuthService } from './services/google-oauth.service';
+import { GithubOAuthService } from './services/github-oauth.service';
+import {
+  GithubAuthorizationResponseDto,
+  GithubCallbackDto,
+} from './dto/github-oauth.dto';
 import {
   GoogleAuthorizationResponseDto,
   GoogleCallbackDto,
@@ -48,7 +53,61 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly googleOAuth: GoogleOAuthService,
+    private readonly githubOAuth: GithubOAuthService,
   ) {}
+
+  @Post('github')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Begin GitHub login (server adapter only)',
+    description:
+      'Keep flowVerifier server-side bound to the initiating browser session. Redirect only to authorizationUrl. Nest sets no cookies.',
+  })
+  @ApiResponse({ status: 200, type: GithubAuthorizationResponseDto })
+  @ApiResponse({
+    status: 503,
+    type: ErrorResponseDto,
+    description: 'GitHub login configuration unavailable.',
+  })
+  github() {
+    return this.githubOAuth.initiate();
+  }
+
+  @Post('github/callback')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Exchange GitHub code (server adapter only)',
+    description:
+      'Post code/error and state plus the private server-side flowVerifier. State is consumed before provider exchange. Login credentials must stay in server storage, never URLs. Existing accounts are never linked by matching email.',
+  })
+  @ApiBody({ type: GithubCallbackDto })
+  @ApiResponse({ status: 200, type: LoginResponseDto })
+  @ApiResponse({
+    status: 400,
+    type: ErrorResponseDto,
+    description: 'Malformed or undeclared callback fields.',
+  })
+  @ApiResponse({
+    status: 401,
+    type: ErrorResponseDto,
+    description:
+      'Invalid state, provider denial/identity, unavailable verified primary email for registration, or unavailable account/role.',
+  })
+  @ApiResponse({
+    status: 409,
+    type: ErrorResponseDto,
+    description: 'Account collision; no automatic linking.',
+  })
+  @ApiResponse({
+    status: 503,
+    type: ErrorResponseDto,
+    description: 'GitHub login configuration unavailable.',
+  })
+  githubCallback(@Body() dto: GithubCallbackDto) {
+    return this.githubOAuth.callback(dto);
+  }
 
   @Post('google')
   @HttpCode(200)

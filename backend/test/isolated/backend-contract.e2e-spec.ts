@@ -16,6 +16,7 @@ import { ThrottlerStorage } from '@nestjs/throttler';
 import { Prisma } from '../../src/generated/prisma/client';
 import { setupSwagger } from '../../src/swagger';
 import { GOOGLE_OAUTH_CLIENT } from '../../src/auth/services/google-oauth.service';
+import { GITHUB_FETCH } from '../../src/auth/services/github-oauth.service';
 import type {
   OpenAPIObject,
   SchemaObject,
@@ -48,6 +49,8 @@ describe('Backend contracts with isolated I/O', () => {
     role: { name: 'USER' },
   };
   const persistence = {
+    githubOAuthState: { create: query(), updateMany: query() },
+    githubIdentity: { findUnique: query() },
     googleOAuthState: { create: query(), updateMany: query() },
     googleIdentity: { findUnique: query() },
     onModuleInit: jest.fn(),
@@ -89,6 +92,9 @@ describe('Backend contracts with isolated I/O', () => {
     verifyIdToken: jest.fn(),
   };
   const settings: Record<string, string> = {
+    GITHUB_CLIENT_ID: 'isolated-github-client',
+    GITHUB_CLIENT_SECRET: 'isolated-github-secret',
+    GITHUB_REDIRECT_URI: 'http://localhost:3001/auth/github/callback',
     GOOGLE_CLIENT_ID: 'isolated-test-client',
     GOOGLE_CLIENT_SECRET: 'isolated-test-secret',
     GOOGLE_REDIRECT_URI: 'http://localhost:3001/auth/google/callback',
@@ -108,10 +114,15 @@ describe('Backend contracts with isolated I/O', () => {
       usedAt: Date | null;
     }
   >();
+  const githubStates: typeof googleStates = new Map();
+  // GitHub network boundary; all provider responses below are test doubles.
+  const githubFetch = jest.fn<typeof fetch>();
 
   beforeAll(async () => {
     passwordHash = await argon2.hash('CorrectPassword123!');
     const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(GITHUB_FETCH)
+      .useValue(githubFetch)
       .overrideProvider(GOOGLE_OAUTH_CLIENT)
       .useValue(google)
       .overrideProvider(ConfigService)
@@ -154,6 +165,39 @@ describe('Backend contracts with isolated I/O', () => {
   });
   beforeEach(() => {
     jest.clearAllMocks();
+    githubFetch.mockReset();
+    persistence.githubOAuthState.create.mockReset();
+    persistence.githubOAuthState.updateMany.mockReset();
+    persistence.githubIdentity.findUnique.mockReset();
+    githubStates.clear();
+    persistence.githubOAuthState.create.mockImplementation(async (args) => {
+      const { data } = args as {
+        data: { stateHash: string; verifierHash: string; expiresAt: Date };
+      };
+      githubStates.set(data.stateHash, { ...data, usedAt: null });
+      return data;
+    });
+    persistence.githubOAuthState.updateMany.mockImplementation(async (args) => {
+      const { where, data } = args as {
+        where: {
+          stateHash: string;
+          verifierHash: string;
+          usedAt: null;
+          expiresAt: { gt: Date };
+        };
+        data: { usedAt: Date };
+      };
+      const row = githubStates.get(where.stateHash);
+      if (
+        !row ||
+        row.verifierHash !== where.verifierHash ||
+        row.usedAt !== where.usedAt ||
+        row.expiresAt <= where.expiresAt.gt
+      )
+        return { count: 0 };
+      row.usedAt = data.usedAt;
+      return { count: 1 };
+    });
     persistence.googleOAuthState.create.mockReset();
     persistence.googleOAuthState.updateMany.mockReset();
     persistence.googleIdentity.findUnique.mockReset();
@@ -249,6 +293,497 @@ describe('Backend contracts with isolated I/O', () => {
       sid: 'session-1',
     });
   };
+
+  it('initiates GitHub login with single-use state and S256 PKCE for the server adapter', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/auth/github')
+      .send({})
+      .expect(200);
+    const url = new URL(response.body.authorizationUrl);
+    expect(url.origin + url.pathname).toBe(
+      'https://github.com/login/oauth/authorize',
+    );
+    expect(url.searchParams.get('redirect_uri')).toBe(
+      'http://localhost:3001/auth/github/callback',
+    );
+    expect(url.searchParams.get('scope')).toBe('user:email');
+    expect(url.searchParams.get('state')).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(url.searchParams.get('code_challenge_method')).toBe('S256');
+    expect(url.searchParams.get('code_challenge')).toMatch(
+      /^[A-Za-z0-9_-]{43}$/,
+    );
+    expect(response.body.flowVerifier).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(response.body.expiresIn).toBe(600);
+    expect(url.searchParams.has('flowVerifier')).toBe(false);
+    expect(url.searchParams.has('client_secret')).toBe(false);
+    expect(response.headers['set-cookie']).toBeUndefined();
+    expect(response.headers['cache-control']).toBe('private, no-store');
+    expect(githubFetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects unmatched GitHub state before provider I/O or session issuance', async () => {
+    persistence.githubOAuthState.updateMany.mockResolvedValue({ count: 0 });
+    await request(app.getHttpServer())
+      .post('/auth/github/callback')
+      .send({
+        state: 's'.repeat(43),
+        flowVerifier: 'v'.repeat(43),
+        code: 'test-code',
+      })
+      .expect(401);
+    expect(githubFetch).not.toHaveBeenCalled();
+    expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+  });
+
+  it('logs in a linked GitHub AUTHOR by numeric ID even when public email is private', async () => {
+    persistence.githubOAuthState.updateMany.mockResolvedValue({ count: 1 });
+    persistence.githubIdentity.findUnique.mockResolvedValue({
+      subject: '12345',
+      user: { ...safeUser, disabledAt: null, role: { name: 'AUTHOR' } },
+    });
+    githubFetch
+      .mockResolvedValueOnce(
+        Response.json({
+          access_token: 'test-only-github-token',
+          token_type: 'bearer',
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ id: 12345, login: 'renamed-login', email: null }),
+      );
+    const response = await request(app.getHttpServer())
+      .post('/auth/github/callback')
+      .send({
+        state: 's'.repeat(43),
+        flowVerifier: 'v'.repeat(43),
+        code: 'test-code',
+      })
+      .expect(200);
+    expect(jwt.verify(response.body.accessToken)).toMatchObject({
+      sub: safeUser.id,
+      email: safeUser.email,
+      role: 'AUTHOR',
+      sid: 'session-1',
+    });
+    expect(response.body.refreshToken).toEqual(expect.any(String));
+    expect(response.body.user).not.toHaveProperty('passwordHash');
+    expect(JSON.stringify(response.body)).not.toContain(
+      'test-only-github-token',
+    );
+    expect(response.headers['set-cookie']).toBeUndefined();
+    expect(response.headers.location).toBeUndefined();
+    expect(response.headers['cache-control']).toBe('private, no-store');
+    expect(persistence.githubIdentity.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { subject: '12345' } }),
+    );
+    expect(githubFetch).toHaveBeenCalledTimes(2);
+    const [url, options] = githubFetch.mock.calls[0];
+    expect(url).toBe('https://github.com/login/oauth/access_token');
+    const body = new URLSearchParams(options!.body as URLSearchParams);
+    expect(body.get('code_verifier')).toBe('v'.repeat(43));
+    expect(body.get('redirect_uri')).toBe(
+      'http://localhost:3001/auth/github/callback',
+    );
+  });
+
+  const githubCallback = (overrides: object = {}) =>
+    request(app.getHttpServer())
+      .post('/auth/github/callback')
+      .send({
+        state: 's'.repeat(43),
+        flowVerifier: 'v'.repeat(43),
+        code: 'test-code',
+        ...overrides,
+      });
+  const githubIdentityResponses = () => {
+    persistence.githubOAuthState.updateMany.mockResolvedValue({ count: 1 });
+    persistence.githubIdentity.findUnique.mockResolvedValue(null);
+    persistence.user.findFirst.mockResolvedValue(null);
+    githubFetch
+      .mockResolvedValueOnce(
+        Response.json({
+          access_token: 'test-only-github-token',
+          token_type: 'bearer',
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ id: 12345, login: 'github-reader', email: null }),
+      );
+  };
+
+  it('registers a new GitHub identity as USER using its verified private primary email', async () => {
+    githubIdentityResponses();
+    githubFetch.mockResolvedValueOnce(
+      Response.json([
+        { email: 'unverified@example.com', primary: false, verified: false },
+        {
+          email: safeUser.email,
+          primary: true,
+          verified: true,
+          visibility: 'private',
+        },
+      ]),
+    );
+    const response = await githubCallback().expect(200);
+    expect(jwt.verify(response.body.accessToken)).toMatchObject({
+      role: 'USER',
+      sid: 'session-1',
+    });
+    expect(persistence.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          email: safeUser.email,
+          emailVerified: true,
+          roleId: 'role-id',
+          githubIdentity: { create: { subject: '12345' } },
+        }),
+      }),
+    );
+    expect(persistence.user.create.mock.calls[0][0]).not.toHaveProperty(
+      'data.passwordHash',
+    );
+    expect(persistence.role.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { name: 'USER' } }),
+    );
+    expect(githubFetch.mock.calls[2][0]).toBe(
+      'https://api.github.com/user/emails?per_page=100&page=1',
+    );
+  });
+
+  it('refuses GitHub email collisions without linking to a password or Google account', async () => {
+    githubIdentityResponses();
+    githubFetch.mockResolvedValueOnce(
+      Response.json([
+        { email: 'READER@example.com', primary: true, verified: true },
+      ]),
+    );
+    persistence.user.findFirst.mockResolvedValue({ id: safeUser.id });
+    await githubCallback().expect(409);
+    expect(persistence.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { email: { equals: 'READER@example.com', mode: 'insensitive' } },
+      }),
+    );
+    expect(persistence.user.create).not.toHaveBeenCalled();
+    expect(persistence.user.update).not.toHaveBeenCalled();
+    expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+  });
+
+  it('returns a safe conflict on concurrent GitHub identity or email registration', async () => {
+    githubIdentityResponses();
+    githubFetch.mockResolvedValueOnce(
+      Response.json([{ email: safeUser.email, primary: true, verified: true }]),
+    );
+    persistence.user.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('private-provider-collision', {
+        code: 'P2002',
+        clientVersion: 'test',
+      }),
+    );
+    const result = await githubCallback().expect(409);
+    expect(JSON.stringify(result.body)).not.toContain(
+      'private-provider-collision',
+    );
+    expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+  });
+
+  it('finds the verified primary GitHub email across provider email pages', async () => {
+    githubIdentityResponses();
+    githubFetch.mockResolvedValueOnce(
+      Response.json(
+        Array.from({ length: 100 }, () => ({
+          email: 'secondary@example.com',
+          primary: false,
+          verified: true,
+        })),
+      ),
+    );
+    githubFetch.mockResolvedValueOnce(
+      Response.json([{ email: safeUser.email, primary: true, verified: true }]),
+    );
+    await githubCallback().expect(200);
+    expect(githubFetch.mock.calls[3][0]).toBe(
+      'https://api.github.com/user/emails?per_page=100&page=2',
+    );
+  });
+
+  it.each([
+    { label: 'no email', emails: [] },
+    {
+      label: 'no primary email',
+      emails: [{ email: safeUser.email, primary: false, verified: true }],
+    },
+    {
+      label: 'unverified primary email',
+      emails: [{ email: safeUser.email, primary: true, verified: false }],
+    },
+    {
+      label: 'malformed email',
+      emails: [{ email: 'not-email', primary: true, verified: true }],
+    },
+    {
+      label: 'ambiguous primary emails',
+      emails: [
+        { email: safeUser.email, primary: true, verified: true },
+        { email: 'other@example.com', primary: true, verified: true },
+      ],
+    },
+    {
+      label: 'malformed email response',
+      emails: { message: 'test provider failure' },
+    },
+  ])('refuses new GitHub registration with $label', async ({ emails }) => {
+    githubIdentityResponses();
+    githubFetch.mockResolvedValueOnce(Response.json(emails));
+    await githubCallback().expect(401);
+    expect(persistence.user.create).not.toHaveBeenCalled();
+    expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { label: 'disabled', user: { ...safeUser, disabledAt: new Date() } },
+    {
+      label: 'missing role',
+      user: { ...safeUser, disabledAt: null, role: null },
+    },
+    {
+      label: 'unsupported role',
+      user: { ...safeUser, disabledAt: null, role: { name: 'OWNER' } },
+    },
+  ])('rejects a $label linked GitHub account', async ({ user }) => {
+    githubIdentityResponses();
+    persistence.githubIdentity.findUnique.mockResolvedValue({
+      subject: '12345',
+      user,
+    });
+    await githubCallback().expect(401);
+    expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+    expect(githubFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([null, '12345', -1, 0, 1.5, 9007199254740992])(
+    'rejects malformed GitHub subject %s',
+    async (id) => {
+      githubIdentityResponses();
+      githubFetch.mockReset();
+      githubFetch
+        .mockResolvedValueOnce(
+          Response.json({ access_token: 'test-token', token_type: 'bearer' }),
+        )
+        .mockResolvedValueOnce(
+          Response.json({ id, login: 'untrusted', email: safeUser.email }),
+        );
+      await githubCallback().expect(401);
+      expect(persistence.githubIdentity.findUnique).not.toHaveBeenCalled();
+      expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    'network',
+    'token-error',
+    'token-type',
+    'profile-status',
+    'emails-status',
+    'invalid-json',
+  ])('sanitizes GitHub %s failures and issues no session', async (failure) => {
+    persistence.githubOAuthState.updateMany.mockResolvedValue({ count: 1 });
+    if (failure === 'network')
+      githubFetch.mockRejectedValueOnce(
+        new Error('private-test-provider-detail'),
+      );
+    else if (failure === 'token-error')
+      githubFetch.mockResolvedValueOnce(
+        Response.json({ error: 'private-test-provider-detail' }),
+      );
+    else if (failure === 'token-type')
+      githubFetch.mockResolvedValueOnce(
+        Response.json({ access_token: 'test-token', token_type: 'wrong' }),
+      );
+    else if (failure === 'invalid-json')
+      githubFetch.mockResolvedValueOnce(new Response('invalid-json'));
+    else {
+      githubFetch.mockResolvedValueOnce(
+        Response.json({ access_token: 'test-token', token_type: 'bearer' }),
+      );
+      if (failure === 'profile-status')
+        githubFetch.mockResolvedValueOnce(
+          Response.json(
+            { message: 'private-test-provider-detail' },
+            { status: 403 },
+          ),
+        );
+      else {
+        persistence.githubIdentity.findUnique.mockResolvedValue(null);
+        githubFetch
+          .mockResolvedValueOnce(
+            Response.json({ id: 12345, email: safeUser.email }),
+          )
+          .mockResolvedValueOnce(
+            Response.json(
+              { message: 'private-test-provider-detail' },
+              { status: 403 },
+            ),
+          );
+      }
+    }
+    const response = await githubCallback().expect(401);
+    expect(JSON.stringify(response.body)).not.toContain(
+      'private-test-provider-detail',
+    );
+    expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+    expect(persistence.user.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed GitHub callback fields and caller role/redirect selection', async () => {
+    for (const extra of [
+      { code: 42 },
+      { state: 'short' },
+      { flowVerifier: [] },
+      { role: 'ADMIN' },
+      { redirectUri: 'https://attacker.invalid' },
+    ]) {
+      await githubCallback(extra).expect(400);
+    }
+    expect(githubFetch).not.toHaveBeenCalled();
+  });
+
+  it('consumes GitHub state on denial and rejects wrong verifiers, expiry and replay', async () => {
+    const start = await request(app.getHttpServer())
+      .post('/auth/github')
+      .send({})
+      .expect(200);
+    const state = new URL(start.body.authorizationUrl).searchParams.get(
+      'state',
+    )!;
+    const fields = {
+      state,
+      flowVerifier: start.body.flowVerifier,
+      code: undefined,
+      error: 'access_denied',
+    };
+    await githubCallback({ ...fields, flowVerifier: 'x'.repeat(43) }).expect(
+      401,
+    );
+    const denial = await githubCallback(fields).expect(401);
+    expect(denial.body.message).toBe('GitHub login failed.');
+    const replay = await githubCallback(fields).expect(401);
+    expect(replay.body.message).toBe('Invalid or expired GitHub login state.');
+    const expired = await request(app.getHttpServer())
+      .post('/auth/github')
+      .send({})
+      .expect(200);
+    const expiredState = new URL(
+      expired.body.authorizationUrl,
+    ).searchParams.get('state')!;
+    for (const row of githubStates.values()) row.expiresAt = new Date(0);
+    await githubCallback({
+      state: expiredState,
+      flowVerifier: expired.body.flowVerifier,
+    }).expect(401);
+    expect(githubFetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects Google state at the GitHub callback', async () => {
+    const googleStart = await request(app.getHttpServer())
+      .post('/auth/google')
+      .send({})
+      .expect(200);
+    const state = new URL(googleStart.body.authorizationUrl).searchParams.get(
+      'state',
+    )!;
+    await githubCallback({
+      state,
+      flowVerifier: googleStart.body.flowVerifier,
+    }).expect(401);
+    expect(githubFetch).not.toHaveBeenCalled();
+  });
+
+  it('accepts only one simultaneous GitHub callback for initiated state', async () => {
+    const start = await request(app.getHttpServer())
+      .post('/auth/github')
+      .send({})
+      .expect(200);
+    const state = new URL(start.body.authorizationUrl).searchParams.get(
+      'state',
+    )!;
+    persistence.githubIdentity.findUnique.mockResolvedValue({
+      subject: '12345',
+      user: { ...safeUser, disabledAt: null },
+    });
+    githubFetch
+      .mockResolvedValueOnce(
+        Response.json({
+          access_token: 'test-only-token',
+          token_type: 'bearer',
+        }),
+      )
+      .mockResolvedValueOnce(Response.json({ id: 12345, email: null }));
+    const replies = await Promise.all([
+      githubCallback({ state, flowVerifier: start.body.flowVerifier }),
+      githubCallback({ state, flowVerifier: start.body.flowVerifier }),
+    ]);
+    expect(replies.map((r) => r.status).sort()).toEqual([200, 401]);
+    expect(githubFetch).toHaveBeenCalledTimes(2);
+    for (const [, options] of githubFetch.mock.calls) {
+      expect(options).toMatchObject({
+        redirect: 'error',
+        cache: 'no-store',
+        signal: expect.any(AbortSignal),
+      });
+    }
+  });
+
+  it('keeps consumed GitHub state unusable after provider failure', async () => {
+    const start = await request(app.getHttpServer())
+      .post('/auth/github')
+      .send({})
+      .expect(200);
+    const state = new URL(start.body.authorizationUrl).searchParams.get(
+      'state',
+    )!;
+    githubFetch.mockRejectedValueOnce(new Error('test-only-provider-outage'));
+    await githubCallback({
+      state,
+      flowVerifier: start.body.flowVerifier,
+    }).expect(401);
+    await githubCallback({
+      state,
+      flowVerifier: start.body.flowVerifier,
+    }).expect(401);
+    expect(githubFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires safe GitHub configuration without affecting other auth', async () => {
+    const original = { ...settings };
+    try {
+      for (const uri of [
+        '',
+        'http://remote.example/auth/github/callback',
+        'https://example.com/auth/google/callback',
+        'https://example.com/auth/github/callback?next=bad',
+      ]) {
+        settings.GITHUB_REDIRECT_URI = uri;
+        await request(app.getHttpServer())
+          .post('/auth/github')
+          .send({})
+          .expect(503);
+      }
+      settings.GITHUB_REDIRECT_URI = original.GITHUB_REDIRECT_URI;
+      settings.GITHUB_CLIENT_SECRET = '';
+      await request(app.getHttpServer())
+        .post('/auth/github')
+        .send({})
+        .expect(503);
+      await request(app.getHttpServer())
+        .post('/auth/google')
+        .send({})
+        .expect(200);
+    } finally {
+      Object.assign(settings, original);
+    }
+    expect(githubFetch).not.toHaveBeenCalled();
+  });
 
   it('initiates Google login with state and S256 PKCE for the server adapter', async () => {
     const response = await request(app.getHttpServer())
