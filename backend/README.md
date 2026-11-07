@@ -372,6 +372,28 @@ Examples:
 - Filter by category
 - Filter by tag
 
+### Owned Post status filtering (Issue #45)
+
+`GET /posts/mine` remains restricted to authenticated AUTHOR/ADMIN accounts and
+returns only Posts owned by the current User, including for ADMIN callers.
+Optional `status=DRAFT` or `status=PUBLISHED` filters use the existing PostStatus
+values. Omit `status` to return all owned statuses, including DEPRECATED. An
+explicit DEPRECATED, empty, lowercase, repeated or unknown status returns 400.
+
+The owner/status predicate is applied to both the database page query and count,
+before pagination. Existing `createdAt` descending ordering and the response
+`{ data, meta: { page, limit, total, totalPages } }` are preserved. Defaults remain
+page 1 and limit 10; page must be a positive integer and limit an integer from
+1 to 50. No matches yields total/totalPages 0. A page beyond the filtered range
+returns empty data while retaining the requested page and filtered totals.
+
+For example: `/posts/mine?status=DRAFT&page=2&limit=10`. Caller-supplied author
+filters cannot change the authenticated ownership scope. The public feed's query
+contract is unchanged. Swagger documents the optional status enum and 400 error.
+No migration, new environment variable, frontend or CRUD subsystem is required.
+The page and count remain separate concurrent reads, as before; this does not add
+a snapshot guarantee against concurrent Post changes.
+
 ### Categories and Tags
 
 - Public listing

@@ -3,7 +3,7 @@ import { PrismaService } from '../database/prisma.service';
 import type { RoleName } from '../roles/constants/role.constants';
 import { PublishedPosts } from '../published-posts/published-posts';
 import { assertPostAccess } from './post-access.policy';
-import type { Prisma } from '../generated/prisma/client';
+import type { PostStatus, Prisma } from '../generated/prisma/client';
 
 const authorProjection = {
   select: { id: true, username: true, name: true, avatarUrl: true },
@@ -151,15 +151,19 @@ export class PostQueries {
     return post;
   }
 
-  async findMine(authorId: string, page: number, limit: number) {
+  async findMine(
+    authorId: string,
+    page: number,
+    limit: number,
+    status?: PostStatus,
+  ) {
     const skip = (page - 1) * limit;
+    const where = { authorId, ...(status ? { status } : {}) };
 
     // Get the author's posts and total count in parallel
     const [posts, total] = await Promise.all([
       this.prisma.post.findMany({
-        where: {
-          authorId,
-        },
+        where,
         orderBy: {
           createdAt: 'desc',
         },
@@ -168,9 +172,7 @@ export class PostQueries {
       }),
 
       this.prisma.post.count({
-        where: {
-          authorId,
-        },
+        where,
       }),
     ]);
 

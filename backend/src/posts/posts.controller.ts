@@ -20,6 +20,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { PaginationQueryDto } from './dto/pagination-query.dto';
+import { MyPostsQueryDto } from './dto/my-posts-query.dto';
 
 import { UpdatePostDto } from './dto/update-post.dto';
 import { JwtAuthGuard } from '../access-control/guards/jwt-auth.guard';
@@ -118,21 +119,36 @@ export class PostsController {
   }
 
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Get posts owned by the current author' })
+  @ApiOperation({
+    summary: 'Get posts owned by the current author',
+    description:
+      'Optionally filter DRAFT or PUBLISHED before pagination. Omitting status includes DEPRECATED. Results and totals remain scoped to the authenticated owner and ordered by createdAt descending.',
+  })
   @ApiResponse({
     type: MyPostsResponseDto,
     status: 200,
     description: 'Author posts returned successfully.',
   })
   @Get('mine')
+  @ApiResponse({
+    status: 400,
+    type: ErrorResponseDto,
+    description:
+      'Invalid status or pagination. Only DRAFT and PUBLISHED are valid explicit status filters.',
+  })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.AUTHOR, ROLE.ADMIN)
   findMine(
     @CurrentUser() user: AccessTokenPayload,
-    @Query() query: PaginationQueryDto,
+    @Query() query: MyPostsQueryDto,
   ) {
     // Return only posts owned by the authenticated author
-    return this.postsService.findMine(user.sub, query.page, query.limit);
+    return this.postsService.findMine(
+      user.sub,
+      query.page,
+      query.limit,
+      query.status,
+    );
   }
 
   @ApiBearerAuth('access-token')

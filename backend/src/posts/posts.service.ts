@@ -4,6 +4,7 @@ import type { CreatePostDto } from './dto/create-post.dto';
 import type { UpdatePostDto } from './dto/update-post.dto';
 import { PostCommands } from './post-commands';
 import { PostQueries } from './post-queries';
+import type { PostStatus } from '../generated/prisma/client';
 
 // Stable external Posts interface; read/write organization stays private to the module.
 @Injectable()
@@ -41,8 +42,8 @@ export class PostsService {
     return this.queries.findById(id);
   }
 
-  findMine(authorId: string, page: number, limit: number) {
-    return this.queries.findMine(authorId, page, limit);
+  findMine(authorId: string, page: number, limit: number, status?: PostStatus) {
+    return this.queries.findMine(authorId, page, limit, status);
   }
 
   findMineById(

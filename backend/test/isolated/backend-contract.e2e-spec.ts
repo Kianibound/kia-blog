@@ -83,7 +83,12 @@ describe('Backend contracts with isolated I/O', () => {
     emailVerificationToken: { create: query() },
     category: taxonomy(),
     tag: taxonomy(),
-    post: { findFirst: query(), findUnique: query() },
+    post: {
+      findFirst: query(),
+      findUnique: query(),
+      findMany: query(),
+      count: query(),
+    },
     comment: { create: query() },
     bookmark: { create: query() },
     postLike: { create: query() },
@@ -271,6 +276,8 @@ describe('Backend contracts with isolated I/O', () => {
     persistence.refreshToken.findMany.mockResolvedValue([]);
     persistence.post.findFirst.mockResolvedValue(null);
     persistence.post.findUnique.mockReset();
+    persistence.post.findMany.mockReset();
+    persistence.post.count.mockReset();
     persistence.media.findUnique.mockResolvedValue(null);
     for (const delegate of [persistence.category, persistence.tag]) {
       Object.values(delegate).forEach((fn) => fn.mockReset());
@@ -1473,6 +1480,279 @@ describe('Backend contracts with isolated I/O', () => {
       expect(delegate().delete).toHaveBeenCalledWith({
         where: { id: 'term-1' },
       });
+    });
+  });
+
+  describe('Own-post status filters', () => {
+    // Test-only posts behind the existing substituted persistence boundary.
+    const row = (
+      id: string,
+      status: string,
+      day: number,
+      authorId = 'user-1',
+    ) => ({
+      id,
+      status,
+      authorId,
+      title: id,
+      slug: id,
+      content: 'Test article',
+      publishedAt:
+        status === 'PUBLISHED'
+          ? new Date(`2020-01-${String(day).padStart(2, '0')}T00:00:00Z`)
+          : null,
+      createdAt: new Date(`2020-01-${String(day).padStart(2, '0')}T00:00:00Z`),
+      updatedAt: new Date('2020-02-01'),
+    });
+    const rows = [
+      row('draft-old', 'DRAFT', 1),
+      row('foreign-draft', 'DRAFT', 10, 'other-author'),
+      row('draft-new', 'DRAFT', 9),
+      row('published-old', 'PUBLISHED', 2),
+      row('deprecated', 'DEPRECATED', 6),
+      row('published-middle', 'PUBLISHED', 4),
+      row('draft-middle', 'DRAFT', 5),
+      row('published-new', 'PUBLISHED', 8),
+      row('foreign-published', 'PUBLISHED', 11, 'other-author'),
+    ];
+    beforeEach(() => {
+      const matches = (where: { authorId?: string; status?: string }) =>
+        rows.filter(
+          (row) =>
+            (!where.authorId || row.authorId === where.authorId) &&
+            (!where.status || row.status === where.status),
+        );
+      persistence.post.findMany.mockImplementation(async (args) => {
+        const { where, orderBy, skip, take } = args as {
+          where: { authorId?: string; status?: string };
+          orderBy: { createdAt?: string };
+          skip: number;
+          take: number;
+        };
+        const selected = matches(where);
+        if (orderBy.createdAt)
+          selected.sort(
+            (a, b) =>
+              (orderBy.createdAt === 'desc' ? -1 : 1) *
+              (a.createdAt.getTime() - b.createdAt.getTime()),
+          );
+        return selected.slice(skip, skip + take);
+      });
+      persistence.post.count.mockImplementation(
+        async (args) =>
+          matches(
+            (args as { where: { authorId?: string; status?: string } }).where,
+          ).length,
+      );
+    });
+
+    it('filters owned DRAFT posts before pagination and counts only matching posts', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/posts/mine?status=DRAFT&page=2&limit=2')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .expect(200);
+      expect(response.body.data.map((post: { id: string }) => post.id)).toEqual(
+        ['draft-old'],
+      );
+      expect(response.body.meta).toEqual({
+        page: 2,
+        limit: 2,
+        total: 3,
+        totalPages: 2,
+      });
+    });
+
+    it.each([
+      { status: 'DRAFT', ids: ['draft-new', 'draft-middle'] },
+      { status: 'PUBLISHED', ids: ['published-new', 'published-middle'] },
+    ])(
+      'returns owned $status posts in existing newest-created order',
+      async ({ status, ids }) => {
+        const response = await request(app.getHttpServer())
+          .get('/posts/mine')
+          .query({ status, limit: 2 })
+          .auth(auth('AUTHOR'), { type: 'bearer' })
+          .expect(200);
+        expect(
+          response.body.data.map((post: { id: string }) => post.id),
+        ).toEqual(ids);
+        expect(response.body.meta).toEqual({
+          page: 1,
+          limit: 2,
+          total: 3,
+          totalPages: 2,
+        });
+      },
+    );
+
+    it('includes owned DEPRECATED posts when status is omitted and retains default pagination', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/posts/mine')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .expect(200);
+      expect(response.body.data.map((post: { id: string }) => post.id)).toEqual(
+        [
+          'draft-new',
+          'published-new',
+          'deprecated',
+          'draft-middle',
+          'published-middle',
+          'published-old',
+          'draft-old',
+        ],
+      );
+      expect(response.body.meta).toEqual({
+        page: 1,
+        limit: 10,
+        total: 7,
+        totalPages: 1,
+      });
+    });
+
+    it.each([
+      { status: 'DRAFT', page: 3, limit: 1, ids: ['draft-old'], totalPages: 3 },
+      { status: 'DRAFT', page: 4, limit: 1, ids: [], totalPages: 3 },
+      {
+        status: 'PUBLISHED',
+        page: 2,
+        limit: 2,
+        ids: ['published-old'],
+        totalPages: 2,
+      },
+      { status: 'PUBLISHED', page: 3, limit: 2, ids: [], totalPages: 2 },
+    ])(
+      'preserves page $page boundaries for $status with limit $limit',
+      async ({ status, page, limit, ids, totalPages }) => {
+        const response = await request(app.getHttpServer())
+          .get('/posts/mine')
+          .query({ status, page, limit })
+          .auth(auth('AUTHOR'), { type: 'bearer' })
+          .expect(200);
+        expect(
+          response.body.data.map((post: { id: string }) => post.id),
+        ).toEqual(ids);
+        expect(response.body.meta).toEqual({
+          page,
+          limit,
+          total: 3,
+          totalPages,
+        });
+      },
+    );
+
+    it.each(['AUTHOR', 'ADMIN'])(
+      'keeps %s filtering scoped to the current owner despite an author query parameter',
+      async (role) => {
+        const response = await request(app.getHttpServer())
+          .get('/posts/mine?status=DRAFT&author=other-author')
+          .auth(auth(role), { type: 'bearer' })
+          .expect(200);
+        expect(
+          response.body.data.map((post: { id: string }) => post.id),
+        ).toEqual(['draft-new', 'draft-middle', 'draft-old']);
+        expect(response.body.meta.total).toBe(3);
+        expect(
+          response.body.data.every(
+            (post: { authorId: string }) => post.authorId === safeUser.id,
+          ),
+        ).toBe(true);
+      },
+    );
+
+    it('returns zero filtered pages for an owner with no matching posts', async () => {
+      const token = jwt.sign({
+        sub: 'empty-author',
+        sid: 'empty-session',
+        email: 'empty@example.com',
+        role: 'AUTHOR',
+      });
+      persistence.refreshToken.findUnique.mockResolvedValue({
+        userId: 'empty-author',
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60000),
+        user: { ...safeUser, id: 'empty-author', role: { name: 'AUTHOR' } },
+      });
+      const response = await request(app.getHttpServer())
+        .get('/posts/mine?status=DRAFT')
+        .auth(token, { type: 'bearer' })
+        .expect(200);
+      expect(response.body).toEqual({
+        data: [],
+        meta: { page: 1, limit: 10, total: 0, totalPages: 0 },
+      });
+    });
+
+    it.each(['DEPRECATED', 'draft', 'PUBLISHED ', 'UNKNOWN', ''])(
+      'rejects unsupported own-post status %j before querying posts',
+      async (status) => {
+        await request(app.getHttpServer())
+          .get('/posts/mine')
+          .query({ status })
+          .auth(auth('AUTHOR'), { type: 'bearer' })
+          .expect(400);
+        expect(persistence.post.findMany).not.toHaveBeenCalled();
+        expect(persistence.post.count).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects repeated status values and preserves existing pagination validation', async () => {
+      for (const query of [
+        'status=DRAFT&status=PUBLISHED',
+        'status=DRAFT&page=0',
+        'status=DRAFT&page=1.5',
+        'status=DRAFT&page=wrong',
+        'status=PUBLISHED&limit=0',
+        'status=PUBLISHED&limit=51',
+      ]) {
+        await request(app.getHttpServer())
+          .get(`/posts/mine?${query}`)
+          .auth(auth('AUTHOR'), { type: 'bearer' })
+          .expect(400);
+      }
+      expect(persistence.post.findMany).not.toHaveBeenCalled();
+      expect(persistence.post.count).not.toHaveBeenCalled();
+    });
+
+    it.each(['anonymous', 'USER'])(
+      'does not expose own-post filtering to %s',
+      async (role) => {
+        const operation = request(app.getHttpServer()).get(
+          '/posts/mine?status=DRAFT',
+        );
+        if (role !== 'anonymous')
+          operation.auth(auth(role), { type: 'bearer' });
+        await operation.expect(role === 'anonymous' ? 401 : 403);
+        expect(persistence.post.findMany).not.toHaveBeenCalled();
+        expect(persistence.post.count).not.toHaveBeenCalled();
+      },
+    );
+
+    it('documents the optional own-post status enum and keeps the public feed contract unchanged', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api-json')
+        .expect(200);
+      const document: OpenAPIObject = response.body;
+      const mine = document.paths['/posts/mine'].get!;
+      expect(mine.parameters).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'status',
+            required: false,
+            schema: { type: 'string', enum: ['DRAFT', 'PUBLISHED'] },
+          }),
+        ]),
+      );
+      expect(mine.responses['400']).toBeDefined();
+      expect(mine.responses['200']).toMatchObject({
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/MyPostsResponseDto' },
+          },
+        },
+      });
+      expect(document.paths['/posts'].get!.parameters).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: 'status' })]),
+      );
     });
   });
 
