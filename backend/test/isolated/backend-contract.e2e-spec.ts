@@ -1463,6 +1463,285 @@ describe('Backend contracts with isolated I/O', () => {
   });
 
   describe('Users and Roles', () => {
+    it.each(['anonymous', 'USER', 'AUTHOR'])(
+      'denies AUTHOR creation to %s',
+      async (role) => {
+        const operation = request(app.getHttpServer()).post('/admin/authors');
+        if (role !== 'anonymous')
+          operation.auth(auth(role), { type: 'bearer' });
+        await operation
+          .send({
+            name: 'New Author',
+            email: 'new-author@example.com',
+            password: 'AuthorInitial123!',
+          })
+          .expect(role === 'anonymous' ? 401 : 403);
+        expect(persistence.user.create).not.toHaveBeenCalled();
+        expect(persistence.role.findUnique).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects invalid AUTHOR fields and reuses the registration password policy', async () => {
+      const valid = {
+        name: 'New Author',
+        email: 'new-author@example.com',
+        password: 'AuthorInitial123!',
+      };
+      for (const input of [
+        {},
+        { email: valid.email, password: valid.password },
+        { ...valid, name: '' },
+        { ...valid, name: '   ' },
+        { ...valid, name: null },
+        { ...valid, name: 42 },
+        { ...valid, email: 'invalid' },
+        { ...valid, email: ' new-author@example.com ' },
+        { name: valid.name, email: valid.email },
+        ...[
+          'Ab1!',
+          'abcdefgh!',
+          '12345678!',
+          'Abcdefg1',
+          'Valid 123!',
+          'Valid123!\n',
+          'رمزValid123!',
+          'Valid123!é',
+        ].map((password) => ({ ...valid, password })),
+        { ...valid, password: null },
+        { ...valid, password: 42 },
+        { ...valid, role: 'ADMIN' },
+        { ...valid, roleId: 'admin-id' },
+        { ...valid, username: 'caller-choice' },
+        { ...valid, confirmPassword: valid.password },
+      ]) {
+        const rejected = await request(app.getHttpServer())
+          .post('/admin/authors')
+          .auth(auth(), { type: 'bearer' })
+          .send(input)
+          .expect(400);
+        expect(JSON.stringify(rejected.body)).not.toContain(valid.password);
+      }
+      expect(persistence.user.create).not.toHaveBeenCalled();
+      expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+      expect(persistence.emailVerificationToken.create).not.toHaveBeenCalled();
+    });
+
+    it('sanitizes AUTHOR persistence failures that could contain credential diagnostics', async () => {
+      persistence.user.create.mockRejectedValue(
+        new Error('test-only-passwordHash-diagnostic'),
+      );
+      const failure = await request(app.getHttpServer())
+        .post('/admin/authors')
+        .auth(auth(), { type: 'bearer' })
+        .send({
+          name: 'New Author',
+          email: 'new-author@example.com',
+          password: 'AuthorInitial123!',
+        })
+        .expect(500);
+      expect(failure.body.message).toBe('Author creation failed.');
+      expect(JSON.stringify(failure.body)).not.toContain(
+        'test-only-passwordHash-diagnostic',
+      );
+      expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it('enforces USER-to-AUTHOR rejection at persistence time after a concurrent role change', async () => {
+      persistence.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        role: { name: 'ADMIN' },
+      });
+      persistence.user.update.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError(
+          'test-only-missing-conditional-update',
+          { code: 'P2025', clientVersion: 'test' },
+        ),
+      );
+      await request(app.getHttpServer())
+        .patch('/admin/users/user-1/role')
+        .auth(auth(), { type: 'bearer' })
+        .send({ role: 'AUTHOR' })
+        .expect(409);
+      expect(persistence.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'user-1', NOT: { role: { is: { name: 'USER' } } } },
+        }),
+      );
+    });
+
+    it('documents the ADMIN author request, safe response and all requested errors without password examples', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api-json')
+        .expect(200);
+      const document: OpenAPIObject = response.body;
+      const operation = document.paths['/admin/authors'].post!;
+      expect(operation.security).toEqual([{ 'access-token': [] }]);
+      expect(Object.keys(operation.responses)).toEqual(
+        expect.arrayContaining(['201', '400', '401', '403', '409']),
+      );
+      const dto = document.components!.schemas!.CreateAuthorDto as SchemaObject;
+      expect(dto.required).toEqual(
+        expect.arrayContaining(['name', 'email', 'password']),
+      );
+      expect(Object.keys(dto.properties!).sort()).toEqual([
+        'email',
+        'name',
+        'password',
+      ]);
+      expect(dto.properties!.password).toMatchObject({
+        writeOnly: true,
+        minLength: 8,
+        pattern: expect.any(String),
+      });
+      expect(dto.properties!.password).not.toHaveProperty('example');
+      expect(operation.requestBody).not.toHaveProperty(
+        'content.application/json.example',
+      );
+      expect(operation.responses['201']).toMatchObject({
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/UserResponseDto' },
+          },
+        },
+      });
+      const user = document.components!.schemas!
+        .UserResponseDto as SchemaObject;
+      expect(user.properties).not.toHaveProperty('password');
+      expect(user.properties).not.toHaveProperty('passwordHash');
+    });
+
+    it('does not promote an existing USER to AUTHOR through role administration', async () => {
+      await request(app.getHttpServer())
+        .patch('/admin/users/user-1/role')
+        .auth(auth(), { type: 'bearer' })
+        .send({ role: 'AUTHOR' })
+        .expect(409);
+      expect(persistence.user.update).not.toHaveBeenCalled();
+    });
+    it('rejects a case-variant existing email before AUTHOR creation', async () => {
+      persistence.user.findFirst.mockResolvedValue({ id: safeUser.id });
+      await request(app.getHttpServer())
+        .post('/admin/authors')
+        .auth(auth(), { type: 'bearer' })
+        .send({
+          name: 'New Author',
+          email: 'READER@example.com',
+          password: 'AuthorInitial123!',
+        })
+        .expect(409);
+      expect(persistence.user.create).not.toHaveBeenCalled();
+      expect(persistence.user.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects duplicate AUTHOR email safely without promoting or overwriting the existing account', async () => {
+      persistence.user.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError(
+          'test-only-private-database-detail',
+          { code: 'P2002', clientVersion: 'test' },
+        ),
+      );
+      const response = await request(app.getHttpServer())
+        .post('/admin/authors')
+        .auth(auth(), { type: 'bearer' })
+        .send({
+          name: 'New Author',
+          email: safeUser.email,
+          password: 'AuthorInitial123!',
+        })
+        .expect(409);
+      expect(JSON.stringify(response.body)).not.toContain(
+        'test-only-private-database-detail',
+      );
+      expect(persistence.user.update).not.toHaveBeenCalled();
+      expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+      expect(persistence.emailVerificationToken.create).not.toHaveBeenCalled();
+    });
+
+    it('lets ADMIN create an AUTHOR who immediately signs in with the initial password', async () => {
+      const initialPassword = 'AuthorInitial123!'; // Test-only credential.
+      let stored: { passwordHash: string } | undefined;
+      const author = {
+        ...safeUser,
+        id: 'created-author',
+        email: 'author@example.com',
+        name: 'New Author',
+        role: { name: 'AUTHOR' },
+      };
+      persistence.user.create.mockImplementation(async (args) => {
+        stored = (args as { data: { passwordHash: string } }).data;
+        return author;
+      });
+      const created = await request(app.getHttpServer())
+        .post('/admin/authors')
+        .auth(auth(), { type: 'bearer' })
+        .send({
+          name: '  New Author  ',
+          email: author.email,
+          password: initialPassword,
+        })
+        .expect(201);
+      expect(created.body).toMatchObject({
+        id: author.id,
+        name: author.name,
+        email: author.email,
+        role: { name: 'AUTHOR' },
+      });
+      expect(created.body).not.toHaveProperty('password');
+      expect(created.body).not.toHaveProperty('passwordHash');
+      expect(created.body).not.toHaveProperty('accessToken');
+      expect(created.body).not.toHaveProperty('refreshToken');
+      expect(await argon2.verify(stored!.passwordHash, initialPassword)).toBe(
+        true,
+      );
+      expect(persistence.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: userPublicSelect,
+          data: expect.objectContaining({
+            name: author.name,
+            email: author.email,
+            roleId: 'role-id',
+            username: expect.stringMatching(/^user_[a-f0-9]{64}$/),
+          }),
+        }),
+      );
+      expect(persistence.role.findUnique).toHaveBeenCalledWith({
+        where: { name: 'AUTHOR' },
+      });
+      expect(persistence.emailVerificationToken.create).not.toHaveBeenCalled();
+      expect(mail.sendEmailVerification).not.toHaveBeenCalled();
+      expect(mail.sendPasswordReset).not.toHaveBeenCalled();
+      expect(persistence.refreshToken.create).not.toHaveBeenCalled();
+      persistence.user.findUnique.mockImplementation(async (args) =>
+        (args as { select?: unknown }).select
+          ? author
+          : { ...author, disabledAt: null, passwordHash: stored!.passwordHash },
+      );
+      const login = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: author.email, password: initialPassword })
+        .expect(200);
+      expect(jwt.verify(login.body.accessToken)).toMatchObject({
+        sub: author.id,
+        role: 'AUTHOR',
+        sid: 'session-1',
+      });
+      persistence.refreshToken.findUnique.mockResolvedValue({
+        userId: author.id,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60000),
+        user: author,
+      });
+      const me = await request(app.getHttpServer())
+        .get('/auth/me')
+        .auth(login.body.accessToken, { type: 'bearer' })
+        .expect(200);
+      expect(me.body).toMatchObject({
+        id: author.id,
+        role: { name: 'AUTHOR' },
+      });
+      expect(me.body).not.toHaveProperty('passwordHash');
+    });
+
     it('keeps user administration private', async () => {
       await request(app.getHttpServer()).get('/admin/users').expect(401);
       await request(app.getHttpServer())
@@ -1503,10 +1782,10 @@ describe('Backend contracts with isolated I/O', () => {
       await request(app.getHttpServer())
         .patch('/admin/users/user-1/role')
         .auth(auth(), { type: 'bearer' })
-        .send({ role: 'AUTHOR' })
+        .send({ role: 'ADMIN' })
         .expect(200);
       expect(persistence.role.findUnique).toHaveBeenCalledWith({
-        where: { name: 'AUTHOR' },
+        where: { name: 'ADMIN' },
       });
       expect(persistence.user.update).toHaveBeenCalledWith({
         where: { id: 'user-1' },
@@ -1537,7 +1816,7 @@ describe('Backend contracts with isolated I/O', () => {
       await request(app.getHttpServer())
         .patch('/admin/users/user-1/role')
         .auth(auth(), { type: 'bearer' })
-        .send({ role: 'AUTHOR' })
+        .send({ role: 'ADMIN' })
         .expect(500);
       expect(persistence.user.update).not.toHaveBeenCalled();
     });

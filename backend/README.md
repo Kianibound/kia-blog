@@ -55,6 +55,46 @@ login does not currently require email verification. Login's existing password
 validation is unchanged and does not acquire registration complexity rules.
 No database migration or new configuration is required for this contract.
 
+### ADMIN author creation (Issue #42)
+
+`POST /admin/authors` requires a valid Bearer session with the current database
+Role `ADMIN`. Its JSON body has exactly three required fields:
+`{ name, email, password }`. Name is trimmed and must be nonempty. Email and the
+initial password reuse registration validation, including the existing printable
+ASCII password complexity rules. Passwords are never trimmed. Caller-supplied
+username, role, roleId, confirmation or other fields are rejected.
+
+Success is HTTP **201** with `UserResponseDto` directly: safe account fields
+(`id`, `email`, generated `username`, `name`, `avatarUrl`, `emailVerified`,
+timestamps and `role: { name: 'AUTHOR' }`). It returns no password, hash or tokens.
+Username uses the existing `user_<sha256(exact email)>` convention. The account
+gets the seeded AUTHOR Role and an Argon2 password hash; email verification
+retains its default false value and does not block login.
+
+The AUTHOR can immediately call existing `POST /auth/login` with the same email
+and initial password. Creation does not create a session, send email, generate an
+invitation/activation/reset token or require a first-login password change.
+Password handoff is an operational responsibility outside the API. Password and
+hash are never included in responses, Swagger examples or application logs;
+request-body logging must remain disabled for credential endpoints. Unexpected
+creation persistence errors are sanitized before reaching exception handling.
+
+Errors: **400** invalid/extra fields; **401** invalid or missing session;
+**403** non-ADMIN; **409** existing email (including case variants) or a database
+uniqueness conflict; **500** missing seeded AUTHOR role or creation failure.
+Existing accounts are never updated or reused during creation. The existing
+`PATCH /admin/users/:id/role` also rejects USER-to-AUTHOR promotion with 409,
+including a write-time condition to cover concurrent changes to the stored Role.
+Other existing role-update behavior remains unchanged.
+
+Swagger documents the request, safe response, and validation/authentication/
+authorization/conflict errors; password is write-only and has no example value.
+No Prisma migration or new environment variable is required. Focused isolated
+HTTP tests cover creation, hashing/persistence, immediate AUTHOR login, access
+control, password policy, duplicate handling, safe errors, and promotion rejection.
+This updated direct-creation decision supersedes the older invitation language
+in local planning documents. No frontend integration is implemented here.
+
 ### Server-managed browser session contract
 
 Nest remains a bearer API and does not read or set browser cookies. A Next.js
