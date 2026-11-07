@@ -1,5 +1,4 @@
 import { ErrorResponseDto } from '../common/dto/response.dto';
-import { UserResponseDto } from '../users/dto/user-response.dto';
 import {
   Body,
   Controller,
@@ -12,6 +11,7 @@ import {
 
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { CreateAuthorDto } from './dto/create-author.dto';
+import { AdminUserResponseDto } from './dto/admin-user-response.dto';
 
 import { JwtAuthGuard } from '../access-control/guards/jwt-auth.guard';
 import { RolesGuard } from '../access-control/guards/roles.guard';
@@ -36,6 +36,42 @@ import {
 export class AdminController {
   constructor(private readonly usersService: UsersService) {}
 
+  @Patch('authors/:id/deactivate')
+  @ApiOperation({
+    summary: 'Deactivate an AUTHOR (admin only)',
+    description:
+      'Atomically disables the AUTHOR and revokes sessions. Repeats preserve the disabled timestamp. Does not delete the User, posts, comments, media or ownership. No reactivation is provided.',
+  })
+  @ApiResponse({
+    status: 200,
+    type: AdminUserResponseDto,
+    description:
+      'Disabled AUTHOR account with its current disabledAt timestamp.',
+  })
+  @ApiResponse({
+    status: 401,
+    type: ErrorResponseDto,
+    description: 'Valid authenticated session required.',
+  })
+  @ApiResponse({
+    status: 403,
+    type: ErrorResponseDto,
+    description: 'ADMIN required.',
+  })
+  @ApiResponse({
+    status: 404,
+    type: ErrorResponseDto,
+    description: 'User not found.',
+  })
+  @ApiResponse({
+    status: 409,
+    type: ErrorResponseDto,
+    description: 'Target is not AUTHOR or changed concurrently.',
+  })
+  deactivateAuthor(@Param('id') id: string) {
+    return this.usersService.deactivateAuthor(id);
+  }
+
   @Post('authors')
   @ApiOperation({
     summary: 'Create an AUTHOR (admin only)',
@@ -45,7 +81,7 @@ export class AdminController {
   @ApiBody({ type: CreateAuthorDto })
   @ApiResponse({
     status: 201,
-    type: UserResponseDto,
+    type: AdminUserResponseDto,
     description:
       'AUTHOR created; safe account fields only, no credentials or tokens.',
   })
@@ -76,7 +112,7 @@ export class AdminController {
 
   @ApiOperation({ summary: 'Get all users (admin only)' })
   @ApiResponse({
-    type: [UserResponseDto],
+    type: [AdminUserResponseDto],
     status: 200,
     description: 'Users returned successfully.',
   })
@@ -106,7 +142,7 @@ export class AdminController {
     },
   })
   @ApiResponse({
-    type: UserResponseDto,
+    type: AdminUserResponseDto,
     status: 200,
     description: 'User role updated successfully.',
   })
@@ -128,7 +164,7 @@ export class AdminController {
 
   @ApiOperation({ summary: 'Get a user by ID (admin only)' })
   @ApiResponse({
-    type: UserResponseDto,
+    type: AdminUserResponseDto,
     status: 200,
     description: 'User returned successfully.',
   })
@@ -139,6 +175,6 @@ export class AdminController {
   })
   @Get('users/:id')
   findUserById(@Param('id') id: string) {
-    return this.usersService.findById(id);
+    return this.usersService.findAdminById(id);
   }
 }

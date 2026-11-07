@@ -17,3 +17,8 @@ export const userPublicSelect = {
     },
   },
 } satisfies Prisma.UserSelect;
+
+export const userAdminSelect = {
+  ...userPublicSelect,
+  disabledAt: true,
+} satisfies Prisma.UserSelect;

@@ -64,9 +64,9 @@ initial password reuse registration validation, including the existing printable
 ASCII password complexity rules. Passwords are never trimmed. Caller-supplied
 username, role, roleId, confirmation or other fields are rejected.
 
-Success is HTTP **201** with `UserResponseDto` directly: safe account fields
+Success is HTTP **201** with `AdminUserResponseDto` directly: safe account fields
 (`id`, `email`, generated `username`, `name`, `avatarUrl`, `emailVerified`,
-timestamps and `role: { name: 'AUTHOR' }`). It returns no password, hash or tokens.
+timestamps, `disabledAt: null` and `role: { name: 'AUTHOR' }`). It returns no password, hash or tokens.
 Username uses the existing `user_<sha256(exact email)>` convention. The account
 gets the seeded AUTHOR Role and an Argon2 password hash; email verification
 retains its default false value and does not block login.
@@ -94,6 +94,45 @@ HTTP tests cover creation, hashing/persistence, immediate AUTHOR login, access
 control, password policy, duplicate handling, safe errors, and promotion rejection.
 This updated direct-creation decision supersedes the older invitation language
 in local planning documents. No frontend integration is implemented here.
+
+### ADMIN author deactivation (Issue #44)
+
+`PATCH /admin/authors/:id/deactivate` requires a valid Bearer session with the
+current database Role `ADMIN`; no request body is needed. Success is **200** with
+`AdminUserResponseDto`: safe user fields plus a non-null ISO `disabledAt`
+timestamp. It returns no credentials or tokens. Missing/invalid authentication
+returns **401**, non-ADMIN **403**, unknown User **404**, and a USER/ADMIN target
+or conflicting concurrent account change **409**.
+
+One Prisma transaction conditionally sets `User.disabledAt` only for an enabled
+AUTHOR, reads the current account, and revokes every unrevoked RefreshToken for
+that User using the existing logout-all revocation semantics. If revocation
+fails, deactivation rolls back. Repeating the request succeeds for an already
+disabled AUTHOR, preserves its original timestamp, and revokes any lingering
+unrevoked sessions without changing previous revocation timestamps.
+
+Existing password/OAuth login and refresh workflows reject disabled accounts.
+The existing access-token guard checks current account/session state on every
+protected request, so issued JWTs are denied after deactivation even before their
+JWT expiry. Requests already past an authorization check are not retroactively
+cancelled; authorization retains the existing point-in-time behavior.
+
+Deactivation never deletes the User or content, changes its Role, transfers
+ownership, or unpublishes Posts. Posts, Comments, Media and their ownership
+relations remain stored; published articles remain publicly readable. No
+reactivation, deletion or frontend workflow is introduced.
+
+Existing ADMIN list/detail/create/role-update responses now use
+`AdminUserResponseDto`, with `disabledAt: null` for enabled accounts and the stored
+timestamp for disabled accounts. The public/auth `UserResponseDto` is unchanged.
+Swagger `/api-json` documents the new endpoint, access rules, error responses and
+ADMIN disabled-state field. No new migration or environment variable is needed:
+the existing `User.disabledAt` column and RefreshToken records are reused.
+
+Focused tests run at the approved isolated HTTP/module seam with substituted
+persistence, including transaction rollback, repeated requests, session/login
+denial, invalid targets, safe ADMIN reads and content/ownership preservation.
+They do not establish live PostgreSQL concurrency or production behavior.
 
 ### Server-managed browser session contract
 

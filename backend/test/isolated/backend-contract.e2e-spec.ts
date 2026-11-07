@@ -1,5 +1,9 @@
 import { vi as jest } from 'vitest';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  INestApplication,
+  InternalServerErrorException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
@@ -11,7 +15,7 @@ import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/database/prisma.service';
 import { MailService } from '../../src/mail/mail.service';
 import { CloudinaryService } from '../../src/media/cloudinary.service';
-import { userPublicSelect } from '../../src/users/user.select';
+import { userAdminSelect, userPublicSelect } from '../../src/users/user.select';
 import { ThrottlerStorage } from '@nestjs/throttler';
 import { Prisma } from '../../src/generated/prisma/client';
 import { setupSwagger } from '../../src/swagger';
@@ -49,6 +53,10 @@ describe('Backend contracts with isolated I/O', () => {
     role: { name: 'USER' },
   };
   const persistence = {
+    $transaction:
+      jest.fn<
+        (run: (transaction: unknown) => Promise<unknown>) => Promise<unknown>
+      >(),
     githubOAuthState: { create: query(), updateMany: query() },
     githubIdentity: { findUnique: query() },
     googleOAuthState: { create: query(), updateMany: query() },
@@ -56,6 +64,8 @@ describe('Backend contracts with isolated I/O', () => {
     onModuleInit: jest.fn(),
     onModuleDestroy: jest.fn(),
     user: {
+      updateMany: query(),
+      delete: query(),
       findFirst: query(),
       findUnique: query(),
       findMany: query(),
@@ -165,6 +175,10 @@ describe('Backend contracts with isolated I/O', () => {
   });
   beforeEach(() => {
     jest.clearAllMocks();
+    persistence.$transaction.mockReset();
+    persistence.$transaction.mockImplementation(async (run) =>
+      run(persistence),
+    );
     githubFetch.mockReset();
     persistence.githubOAuthState.create.mockReset();
     persistence.githubOAuthState.updateMany.mockReset();
@@ -1462,6 +1476,405 @@ describe('Backend contracts with isolated I/O', () => {
     });
   });
 
+  describe('Author deactivation', () => {
+    // Stateful persistence test double at the existing I/O seam; no live resources.
+    const managedAuthor = () => {
+      const author = {
+        ...safeUser,
+        id: 'author-1',
+        email: 'author@example.com',
+        role: { name: 'AUTHOR' },
+        disabledAt: null as Date | null,
+      };
+      const sessions: Array<{
+        id: string;
+        userId: string;
+        tokenHash: string;
+        expiresAt: Date;
+        revokedAt: Date | null;
+      }> = [];
+      const projection = (select: unknown) => {
+        const { disabledAt, ...publicUser } = author;
+        return (select as { disabledAt?: boolean })?.disabledAt
+          ? { ...publicUser, disabledAt }
+          : publicUser;
+      };
+      persistence.user.findUnique.mockImplementation(async (args) => {
+        const query = args as {
+          where: { id?: string; email?: string };
+          select?: unknown;
+        };
+        if (query.where.id !== author.id && query.where.email !== author.email)
+          return null;
+        return query.select
+          ? projection(query.select)
+          : { ...author, passwordHash };
+      });
+      persistence.user.findMany.mockImplementation(async (args) => [
+        projection((args as { select?: unknown }).select),
+      ]);
+      persistence.user.updateMany.mockImplementation(async (args) => {
+        const { where, data } = args as {
+          where: {
+            id: string;
+            disabledAt: null;
+            role: { is: { name: string } };
+          };
+          data: { disabledAt: Date };
+        };
+        if (
+          author.id !== where.id ||
+          author.role.name !== where.role.is.name ||
+          author.disabledAt !== where.disabledAt
+        )
+          return { count: 0 };
+        author.disabledAt = data.disabledAt;
+        return { count: 1 };
+      });
+      persistence.refreshToken.create.mockImplementation(async (args) => {
+        const { data } = args as {
+          data: { userId: string; tokenHash: string; expiresAt: Date };
+        };
+        const session = {
+          ...data,
+          id: `author-session-${sessions.length + 1}`,
+          revokedAt: null,
+        };
+        sessions.push(session);
+        return session;
+      });
+      persistence.refreshToken.findUnique.mockImplementation(async (args) => {
+        const { where } = args as { where: { id: string } };
+        if (where.id === 'session-1')
+          return {
+            userId: safeUser.id,
+            revokedAt: null,
+            expiresAt: new Date(Date.now() + 60000),
+            user: { ...safeUser, role: { name: 'ADMIN' } },
+          };
+        const session = sessions.find((session) => session.id === where.id);
+        return session ? { ...session, user: { ...author } } : null;
+      });
+      persistence.refreshToken.findMany.mockImplementation(async () =>
+        sessions.filter((session) => !session.revokedAt),
+      );
+      persistence.refreshToken.updateMany.mockImplementation(async (args) => {
+        const { where, data } = args as {
+          where: { userId: string; revokedAt: null };
+          data: { revokedAt: Date };
+        };
+        const active = sessions.filter(
+          (session) =>
+            session.userId === where.userId &&
+            session.revokedAt === where.revokedAt,
+        );
+        for (const session of active) session.revokedAt = data.revokedAt;
+        return { count: active.length };
+      });
+      persistence.$transaction.mockImplementation(async (run) => {
+        const before = structuredClone(author);
+        const oldSessions = structuredClone(sessions);
+        try {
+          return await run(persistence);
+        } catch (error) {
+          Object.assign(author, before);
+          sessions.splice(0, sessions.length, ...oldSessions);
+          throw error;
+        }
+      });
+      return { author, sessions };
+    };
+
+    it('lets ADMIN deactivate an AUTHOR and invalidates issued sessions and future logins', async () => {
+      const admin = auth();
+      const { author } = managedAuthor();
+      const first = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: author.email, password: 'CorrectPassword123!' })
+        .expect(200);
+      const second = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: author.email, password: 'CorrectPassword123!' })
+        .expect(200);
+      await request(app.getHttpServer())
+        .get('/auth/me')
+        .auth(first.body.accessToken, { type: 'bearer' })
+        .expect(200);
+      const disabled = await request(app.getHttpServer())
+        .patch('/admin/authors/author-1/deactivate')
+        .auth(admin, { type: 'bearer' })
+        .expect(200);
+      expect(disabled.body).toMatchObject({
+        id: author.id,
+        role: { name: 'AUTHOR' },
+        disabledAt: expect.any(String),
+      });
+      expect(disabled.body).not.toHaveProperty('passwordHash');
+      for (const login of [first, second]) {
+        await request(app.getHttpServer())
+          .get('/auth/me')
+          .auth(login.body.accessToken, { type: 'bearer' })
+          .expect(401);
+        await request(app.getHttpServer())
+          .post('/auth/refresh')
+          .send({ refreshToken: login.body.refreshToken })
+          .expect(401);
+      }
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: author.email, password: 'CorrectPassword123!' })
+        .expect(401);
+      expect(persistence.user.delete).not.toHaveBeenCalled();
+      expect(persistence.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: author.id, revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+    });
+
+    it('shows enabled and disabled AUTHOR state truthfully in existing ADMIN list and detail responses', async () => {
+      const admin = auth();
+      managedAuthor();
+      const enabled = await request(app.getHttpServer())
+        .get('/admin/users/author-1')
+        .auth(admin, { type: 'bearer' })
+        .expect(200);
+      expect(enabled.body.disabledAt).toBeNull();
+      const disabled = await request(app.getHttpServer())
+        .patch('/admin/authors/author-1/deactivate')
+        .auth(admin, { type: 'bearer' })
+        .expect(200);
+      const detail = await request(app.getHttpServer())
+        .get('/admin/users/author-1')
+        .auth(admin, { type: 'bearer' })
+        .expect(200);
+      const list = await request(app.getHttpServer())
+        .get('/admin/users')
+        .auth(admin, { type: 'bearer' })
+        .expect(200);
+      expect(detail.body.disabledAt).toBe(disabled.body.disabledAt);
+      expect(list.body[0].disabledAt).toBe(disabled.body.disabledAt);
+      expect(detail.body).not.toHaveProperty('passwordHash');
+    });
+
+    it.each(['anonymous', 'USER', 'AUTHOR'])(
+      'denies AUTHOR deactivation to %s',
+      async (role) => {
+        const operation = request(app.getHttpServer()).patch(
+          '/admin/authors/author-1/deactivate',
+        );
+        if (role !== 'anonymous')
+          operation.auth(auth(role), { type: 'bearer' });
+        await operation.expect(role === 'anonymous' ? 401 : 403);
+        expect(persistence.$transaction).not.toHaveBeenCalled();
+        expect(persistence.user.updateMany).not.toHaveBeenCalled();
+        expect(persistence.refreshToken.updateMany).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['USER', 'ADMIN'])(
+      'rejects deactivation of a %s target without changing it or its sessions',
+      async (role) => {
+        const admin = auth();
+        const { author } = managedAuthor();
+        author.role.name = role;
+        await request(app.getHttpServer())
+          .patch('/admin/authors/author-1/deactivate')
+          .auth(admin, { type: 'bearer' })
+          .expect(409);
+        expect(author.disabledAt).toBeNull();
+        expect(persistence.refreshToken.updateMany).not.toHaveBeenCalled();
+        expect(persistence.user.delete).not.toHaveBeenCalled();
+      },
+    );
+
+    it('returns 404 for an unknown deactivation target', async () => {
+      const admin = auth();
+      const { author } = managedAuthor();
+      await request(app.getHttpServer())
+        .patch('/admin/authors/missing/deactivate')
+        .auth(admin, { type: 'bearer' })
+        .expect(404);
+      expect(author.disabledAt).toBeNull();
+      expect(persistence.refreshToken.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('preserves the original disabled timestamp and revoked sessions on repeated deactivation', async () => {
+      const admin = auth();
+      const { author, sessions } = managedAuthor();
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: author.email, password: 'CorrectPassword123!' })
+        .expect(200);
+      const first = await request(app.getHttpServer())
+        .patch('/admin/authors/author-1/deactivate')
+        .auth(admin, { type: 'bearer' })
+        .expect(200);
+      const revokedAt = sessions[0].revokedAt!.toISOString();
+      const second = await request(app.getHttpServer())
+        .patch('/admin/authors/author-1/deactivate')
+        .auth(admin, { type: 'bearer' })
+        .expect(200);
+      expect(second.body.disabledAt).toBe(first.body.disabledAt);
+      expect(sessions[0].revokedAt!.toISOString()).toBe(revokedAt);
+      expect(persistence.user.delete).not.toHaveBeenCalled();
+    });
+
+    it('revokes lingering sessions even when an AUTHOR was already disabled', async () => {
+      const admin = auth();
+      const { author, sessions } = managedAuthor();
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: author.email, password: 'CorrectPassword123!' })
+        .expect(200);
+      author.disabledAt = new Date('2026-01-01T00:00:00.000Z');
+      const response = await request(app.getHttpServer())
+        .patch('/admin/authors/author-1/deactivate')
+        .auth(admin, { type: 'bearer' })
+        .expect(200);
+      expect(response.body.disabledAt).toBe('2026-01-01T00:00:00.000Z');
+      expect(sessions[0].revokedAt).toEqual(expect.any(Date));
+    });
+
+    it('rolls back deactivation if session revocation cannot commit', async () => {
+      const admin = auth();
+      const { author } = managedAuthor();
+      const login = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: author.email, password: 'CorrectPassword123!' })
+        .expect(200);
+      persistence.refreshToken.updateMany.mockRejectedValueOnce(
+        new InternalServerErrorException('Test-only persistence failure'),
+      );
+      await request(app.getHttpServer())
+        .patch('/admin/authors/author-1/deactivate')
+        .auth(admin, { type: 'bearer' })
+        .expect(500);
+      const detail = await request(app.getHttpServer())
+        .get('/admin/users/author-1')
+        .auth(admin, { type: 'bearer' })
+        .expect(200);
+      expect(detail.body.disabledAt).toBeNull();
+      await request(app.getHttpServer())
+        .get('/auth/me')
+        .auth(login.body.accessToken, { type: 'bearer' })
+        .expect(200);
+      await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refreshToken: login.body.refreshToken })
+        .expect(200);
+    });
+
+    it('preserves the AUTHOR record, published post and ownership while writing only account status', async () => {
+      const admin = auth();
+      const { author } = managedAuthor();
+      const post = {
+        id: 'retained-post',
+        slug: 'retained-post',
+        title: 'Retained content',
+        content: 'Existing published article with media',
+        status: 'PUBLISHED',
+        authorId: author.id,
+        author: { id: author.id, name: author.name },
+        categories: [],
+        tags: [],
+      };
+      persistence.post.findFirst.mockResolvedValue(post);
+      const before = await request(app.getHttpServer())
+        .get('/posts/retained-post')
+        .expect(200);
+      await request(app.getHttpServer())
+        .patch('/admin/authors/author-1/deactivate')
+        .auth(admin, { type: 'bearer' })
+        .expect(200);
+      const after = await request(app.getHttpServer())
+        .get('/posts/retained-post')
+        .expect(200);
+      const retained = await request(app.getHttpServer())
+        .get('/admin/users/author-1')
+        .auth(admin, { type: 'bearer' })
+        .expect(200);
+      expect(after.body).toEqual(before.body);
+      expect(after.body.authorId).toBe(author.id);
+      expect(retained.body.id).toBe(author.id);
+      expect(persistence.user.delete).not.toHaveBeenCalled();
+      expect(persistence.user.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: author.id,
+          role: { is: { name: 'AUTHOR' } },
+          disabledAt: null,
+        },
+        data: { disabledAt: expect.any(Date) },
+      });
+      expect(persistence.user.update).not.toHaveBeenCalled();
+    });
+
+    it('keeps disabled state in role-change responses and enabled state in author-creation responses', async () => {
+      const admin = auth();
+      const { author } = managedAuthor();
+      author.disabledAt = new Date('2026-01-01T00:00:00.000Z');
+      persistence.user.update.mockResolvedValue({ ...author });
+      const changed = await request(app.getHttpServer())
+        .patch('/admin/users/author-1/role')
+        .auth(admin, { type: 'bearer' })
+        .send({ role: 'AUTHOR' })
+        .expect(200);
+      expect(changed.body.disabledAt).toBe(author.disabledAt.toISOString());
+      persistence.user.findFirst.mockResolvedValue(null);
+      persistence.user.create.mockResolvedValue({
+        ...author,
+        id: 'new-author',
+        disabledAt: null,
+      });
+      const created = await request(app.getHttpServer())
+        .post('/admin/authors')
+        .auth(admin, { type: 'bearer' })
+        .send({
+          name: 'New Author',
+          email: 'new-author@example.com',
+          password: 'AuthorInitial123!',
+        })
+        .expect(201);
+      expect(created.body.disabledAt).toBeNull();
+      expect(persistence.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({ select: userAdminSelect }),
+      );
+    });
+
+    it('documents deactivation and ADMIN disabled-state responses without expanding the public user schema', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api-json')
+        .expect(200);
+      const document: OpenAPIObject = response.body;
+      const operation = document.paths['/admin/authors/{id}/deactivate'].patch!;
+      expect(operation.security).toEqual([{ 'access-token': [] }]);
+      expect(Object.keys(operation.responses)).toEqual(
+        expect.arrayContaining(['200', '401', '403', '404', '409']),
+      );
+      const adminSchema = document.components!.schemas!
+        .AdminUserResponseDto as SchemaObject;
+      expect(adminSchema.required).toContain('disabledAt');
+      expect(adminSchema.properties!.disabledAt).toMatchObject({
+        type: 'string',
+        format: 'date-time',
+        nullable: true,
+      });
+      const publicSchema = document.components!.schemas!
+        .UserResponseDto as SchemaObject;
+      expect(publicSchema.properties).not.toHaveProperty('disabledAt');
+      for (const [path, verb, status] of [
+        ['/admin/users', 'get', '200'],
+        ['/admin/users/{id}', 'get', '200'],
+        ['/admin/users/{id}/role', 'patch', '200'],
+        ['/admin/authors', 'post', '201'],
+      ] as const) {
+        const schema = document.paths[path][verb]!.responses[status];
+        expect(JSON.stringify(schema)).toContain(
+          '#/components/schemas/AdminUserResponseDto',
+        );
+      }
+    });
+  });
+
   describe('Users and Roles', () => {
     it.each(['anonymous', 'USER', 'AUTHOR'])(
       'denies AUTHOR creation to %s',
@@ -1600,7 +2013,7 @@ describe('Backend contracts with isolated I/O', () => {
       expect(operation.responses['201']).toMatchObject({
         content: {
           'application/json': {
-            schema: { $ref: '#/components/schemas/UserResponseDto' },
+            schema: { $ref: '#/components/schemas/AdminUserResponseDto' },
           },
         },
       });
@@ -1695,7 +2108,7 @@ describe('Backend contracts with isolated I/O', () => {
       );
       expect(persistence.user.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          select: userPublicSelect,
+          select: userAdminSelect,
           data: expect.objectContaining({
             name: author.name,
             email: author.email,
@@ -1762,12 +2175,12 @@ describe('Backend contracts with isolated I/O', () => {
       expect(list.body[0].passwordHash).toBeUndefined();
       expect(detail.body.passwordHash).toBeUndefined();
       expect(persistence.user.findMany).toHaveBeenCalledWith({
-        select: userPublicSelect,
+        select: userAdminSelect,
         orderBy: { createdAt: 'desc' },
       });
       expect(persistence.user.findUnique).toHaveBeenCalledWith({
         where: { id: 'user-1' },
-        select: userPublicSelect,
+        select: userAdminSelect,
       });
       expect(userPublicSelect).not.toHaveProperty('passwordHash');
     });
@@ -1790,7 +2203,7 @@ describe('Backend contracts with isolated I/O', () => {
       expect(persistence.user.update).toHaveBeenCalledWith({
         where: { id: 'user-1' },
         data: { roleId: 'role-id' },
-        select: userPublicSelect,
+        select: userAdminSelect,
       });
     });
     it('does not resolve roles or write for a missing user', async () => {
