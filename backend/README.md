@@ -435,6 +435,25 @@ constraint; concurrent publication/category changes are not serialized, matching
 the existing point-in-time authorization model. Category deletion conflicts and
 taxonomy reference validation are handled separately.
 
+### Taxonomy validation and reference-conflict deletion (Issue #51)
+
+ADMIN category and tag names are trimmed before validation and persistence;
+blank or whitespace-only names are rejected with 400, and non-string names are
+rejected the same way. The generated slug is derived from the trimmed name. A
+duplicate name or generated slug — including two distinct names that slugify to
+the same value — is reported as 409 Conflict. The database unique index remains
+the final arbiter, so concurrent creates or renames fail safely instead of
+producing duplicates.
+
+Deleting a category or tag that is referenced by any article (draft, published
+or deprecated) returns 409 and never detaches the relation. The reference count
+and the delete run in one serializable transaction, so a concurrent article
+attach cannot slip between them and be silently cascade-detached by the implicit
+join table; an aborted serialization also returns 409 so the caller can retry.
+This protects published posts and the Issue #50 last-category invariant. Deleting
+posts and replacing a post's categories or tags are unaffected, and unreferenced
+taxonomy records still delete normally with the existing `{ message }` shape.
+
 ### Owned Post status filtering (Issue #45)
 
 `GET /posts/mine` remains restricted to authenticated AUTHOR/ADMIN accounts and

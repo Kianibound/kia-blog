@@ -66,8 +66,19 @@ export class CategoriesController {
   })
   @ApiResponse({
     type: ErrorResponseDto,
+    status: 400,
+    description:
+      'Invalid or blank name; whitespace-only names are rejected after trimming.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
     status: 403,
     description: 'Admin access required.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 409,
+    description: 'A category with this name or generated slug already exists.',
   })
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -95,8 +106,19 @@ export class CategoriesController {
   })
   @ApiResponse({
     type: ErrorResponseDto,
+    status: 400,
+    description:
+      'Invalid or blank name; whitespace-only names are rejected after trimming.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
     status: 403,
     description: 'Admin access required.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 409,
+    description: 'A category with this name or generated slug already exists.',
   })
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -116,6 +138,17 @@ export class CategoriesController {
     type: ErrorResponseDto,
     status: 403,
     description: 'Admin access required.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 404,
+    description: 'Category not found.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 409,
+    description:
+      'Category is referenced by one or more articles (draft or published) and cannot be deleted.',
   })
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)

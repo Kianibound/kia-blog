@@ -1429,6 +1429,11 @@ describe('Backend contracts with isolated I/O', () => {
   describe.each(['categories', 'tags'] as const)('%s', (route) => {
     const delegate = () =>
       route === 'categories' ? persistence.category : persistence.tag;
+    const relation = route === 'categories' ? 'categories' : 'tags';
+    beforeEach(() => {
+      // No article references by default; individual tests override this.
+      persistence.post.count.mockResolvedValue(0);
+    });
     it('allows public ordered listing', async () => {
       await request(app.getHttpServer())
         .get(`/${route}`)
@@ -1457,6 +1462,132 @@ describe('Backend contracts with isolated I/O', () => {
         .send({ name: 42 })
         .expect(400);
       expect(delegate().create).not.toHaveBeenCalled();
+    });
+    it.each(['   ', '\t\n ', ''])(
+      'rejects blank name %j before persistence',
+      async (name) => {
+        await request(app.getHttpServer())
+          .post(`/${route}`)
+          .auth(auth(), { type: 'bearer' })
+          .send({ name })
+          .expect(400);
+        await request(app.getHttpServer())
+          .patch(`/${route}/term-1`)
+          .auth(auth(), { type: 'bearer' })
+          .send({ name })
+          .expect(400);
+        expect(delegate().create).not.toHaveBeenCalled();
+        expect(delegate().update).not.toHaveBeenCalled();
+      },
+    );
+    it.each([null, 42])(
+      'rejects non-string name %j with 400 on create and rename',
+      async (name) => {
+        await request(app.getHttpServer())
+          .post(`/${route}`)
+          .auth(auth(), { type: 'bearer' })
+          .send({ name })
+          .expect(400);
+        await request(app.getHttpServer())
+          .patch(`/${route}/term-1`)
+          .auth(auth(), { type: 'bearer' })
+          .send({ name })
+          .expect(400);
+        expect(delegate().create).not.toHaveBeenCalled();
+        expect(delegate().update).not.toHaveBeenCalled();
+      },
+    );
+    it('trims surrounding whitespace before persisting and slugging', async () => {
+      await request(app.getHttpServer())
+        .post(`/${route}`)
+        .auth(auth(), { type: 'bearer' })
+        .send({ name: '  Spaced Name  ' })
+        .expect(201);
+      expect(delegate().create).toHaveBeenCalledWith({
+        data: { name: 'Spaced Name', slug: 'spaced-name' },
+      });
+      await request(app.getHttpServer())
+        .patch(`/${route}/term-1`)
+        .auth(auth(), { type: 'bearer' })
+        .send({ name: '  Renamed  ' })
+        .expect(200);
+      expect(delegate().update).toHaveBeenCalledWith({
+        where: { id: 'term-1' },
+        data: { name: 'Renamed', slug: 'renamed' },
+      });
+    });
+    it.each([
+      { label: 'create', method: 'post' as const, where: null },
+      { label: 'rename', method: 'patch' as const, where: { id: 'term-1' } },
+    ])(
+      'maps a concurrent name/slug collision on $label to 409',
+      async ({ method, where }) => {
+        if (where) delegate().findUnique.mockResolvedValue(where);
+        const target = method === 'post' ? `/${route}` : `/${route}/term-1`;
+        const call = request(app.getHttpServer())
+          [method](target)
+          .auth(auth(), { type: 'bearer' })
+          .send({ name: 'Duplicate' });
+        if (method === 'post')
+          delegate().create.mockRejectedValue(
+            new Prisma.PrismaClientKnownRequestError('duplicate', {
+              code: 'P2002',
+              clientVersion: 'test-double',
+            }),
+          );
+        else
+          delegate().update.mockRejectedValue(
+            new Prisma.PrismaClientKnownRequestError('duplicate', {
+              code: 'P2002',
+              clientVersion: 'test-double',
+            }),
+          );
+        await call.expect(409);
+      },
+    );
+    it('rejects deleting a term referenced by draft or published articles with 409', async () => {
+      persistence.post.count.mockResolvedValue(1);
+      await request(app.getHttpServer())
+        .delete(`/${route}/term-1`)
+        .auth(auth(), { type: 'bearer' })
+        .expect(409);
+      // The guard is status-agnostic: any referencing article, draft or
+      // published, blocks removal (and so protects the #50 invariant).
+      expect(persistence.post.count).toHaveBeenCalledWith({
+        where: { [relation]: { some: { id: 'term-1' } } },
+      });
+      expect(delegate().delete).not.toHaveBeenCalled();
+    });
+    it('maps a serialization conflict during deletion to 409', async () => {
+      persistence.$transaction.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('serialization failure', {
+          code: 'P2034',
+          clientVersion: 'test-double',
+        }),
+      );
+      await request(app.getHttpServer())
+        .delete(`/${route}/term-1`)
+        .auth(auth(), { type: 'bearer' })
+        .expect(409);
+    });
+    it('requires admin rights for deletion', async () => {
+      await request(app.getHttpServer())
+        .delete(`/${route}/term-1`)
+        .expect(401);
+      await request(app.getHttpServer())
+        .delete(`/${route}/term-1`)
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .expect(403);
+      expect(delegate().delete).not.toHaveBeenCalled();
+    });
+    it('documents validation and conflict responses', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api-json')
+        .expect(200);
+      const paths = response.body.paths;
+      expect(paths[`/${route}`].post.responses['400']).toBeDefined();
+      expect(paths[`/${route}`].post.responses['409']).toBeDefined();
+      expect(paths[`/${route}/{id}`].delete.responses['409']).toBeDefined();
     });
     it('creates a normalized slug and regenerates it on rename', async () => {
       await request(app.getHttpServer())
