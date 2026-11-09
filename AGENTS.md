@@ -23,3 +23,7 @@ Use the five default triage labels. See `docs/agents/triage-labels.md`.
 ### Domain docs
 
 Single context; existing backend glossary is authoritative. See `docs/agents/domain.md`.
+
+## Agent response style
+
+Keep final reports concise, ideally under 150 words. Report only the outcome, commit/push status, essential test or review results, and critical blockers or risks. Do not list every changed file, repeat implementation details, or provide long explanations unless the user explicitly requests them. Avoid verbose progress narration; surface only actionable updates.
