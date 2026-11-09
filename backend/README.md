@@ -474,6 +474,21 @@ list while their bookmark stays removable. Each entry keeps the existing
 `BookmarkDetailResponseDto` shape, including the resolved `post` projection with
 `contentMedia`, `coverImage`, safe author identity, categories and tags.
 
+### Comment moderation states and public visibility (Issue #54)
+
+Comments carry a `status` of `PENDING` or `APPROVED`. New top-level comments and
+replies are created `PENDING`. The public `GET /posts/:postId/comments` returns
+only `APPROVED` comments and `APPROVED` direct replies, so pending submissions and
+revised text never leak. Editing content atomically resets the comment to
+`PENDING` in the same update, hiding the revision until it is approved again.
+Blank or whitespace-only content is rejected with 400 on create, reply and edit,
+and the stored text is trimmed. Author and post associations remain
+server-controlled. Migration `20261110120000_add_comment_status` adds the enum and
+column with a `PENDING` default and grandfathers every pre-existing comment as
+`APPROVED`, preserving current visibility. Admin approval/rejection endpoints
+(Issue #55) and the user's own-comment list (Issue #56) are not part of this
+contract.
+
 ### Owned Post status filtering (Issue #45)
 
 `GET /posts/mine` remains restricted to authenticated AUTHOR/ADMIN accounts and

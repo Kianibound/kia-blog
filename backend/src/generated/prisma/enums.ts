@@ -16,3 +16,11 @@ export const PostStatus = {
 } as const
 
 export type PostStatus = (typeof PostStatus)[keyof typeof PostStatus]
+
+
+export const CommentStatus = {
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED'
+} as const
+
+export type CommentStatus = (typeof CommentStatus)[keyof typeof CommentStatus]

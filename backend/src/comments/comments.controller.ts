@@ -41,7 +41,11 @@ export class CommentsController {
   constructor(private readonly commentsService: CommentsService) {}
 
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Add a comment to a published post' })
+  @ApiOperation({
+    summary: 'Add a comment to a published post',
+    description:
+      'New comments are created with status PENDING and stay hidden from the public list until an ADMIN approves them.',
+  })
   @ApiBody({
     type: CreateCommentDto,
     examples: {
@@ -55,7 +59,12 @@ export class CommentsController {
   @ApiResponse({
     type: CommentAuthorResponseDto,
     status: 201,
-    description: 'Comment created successfully.',
+    description: 'Comment created with status PENDING.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 400,
+    description: 'Blank or whitespace-only content.',
   })
   @Post('posts/:postId/comments')
   @UseGuards(JwtAuthGuard)
@@ -68,11 +77,20 @@ export class CommentsController {
     return this.commentsService.create(postId, user.sub, dto);
   }
 
-  @ApiOperation({ summary: 'Get comments and replies for a post' })
+  @ApiOperation({
+    summary: 'Get approved comments and replies for a post',
+    description:
+      'Public reads expose only APPROVED top-level comments and APPROVED direct replies; PENDING or revised text is never returned.',
+  })
   @ApiResponse({
     type: [CommentThreadResponseDto],
     status: 200,
-    description: 'Comments returned successfully.',
+    description: 'Approved comments returned successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 404,
+    description: 'Post not found or not published.',
   })
   @Get('posts/:postId/comments')
   findByPost(@Param('postId') postId: string) {
@@ -81,7 +99,11 @@ export class CommentsController {
   }
 
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Reply to a comment' })
+  @ApiOperation({
+    summary: 'Reply to a comment',
+    description:
+      'Replies are created with status PENDING and stay hidden from the public list until approved.',
+  })
   @ApiBody({
     type: CreateCommentDto,
     examples: {
@@ -95,7 +117,12 @@ export class CommentsController {
   @ApiResponse({
     type: CommentAuthorResponseDto,
     status: 201,
-    description: 'Reply created successfully.',
+    description: 'Reply created with status PENDING.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 400,
+    description: 'Blank or whitespace-only content.',
   })
   @Post('comments/:commentId/replies')
   @UseGuards(JwtAuthGuard)
@@ -108,7 +135,11 @@ export class CommentsController {
   }
 
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Update a comment owned by the current user' })
+  @ApiOperation({
+    summary: 'Update a comment owned by the current user',
+    description:
+      'Editing content atomically returns the comment to PENDING, hiding the revised text from public reads until re-approval. A patch without content changes nothing and leaves the status untouched.',
+  })
   @ApiBody({
     type: UpdateCommentDto,
     examples: {
@@ -122,7 +153,13 @@ export class CommentsController {
   @ApiResponse({
     type: CommentResponseDto,
     status: 200,
-    description: 'Comment updated successfully.',
+    description:
+      'Comment updated. When content was edited the status is now PENDING; an empty patch leaves the status unchanged.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 400,
+    description: 'Blank or whitespace-only content.',
   })
   @ApiResponse({
     type: ErrorResponseDto,

@@ -117,6 +117,11 @@ enum PostStatus {
   DEPRECATED
 }
 
+enum CommentStatus {
+  PENDING
+  APPROVED
+}
+
 model Post {
   id              String      @id @default(uuid())
   title           String
@@ -165,6 +170,7 @@ model Tag {
 model Comment {
   id      String @id @default(uuid())
   content String
+  status  CommentStatus @default(PENDING)
 
   postId String
   post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
@@ -182,6 +188,7 @@ model Comment {
   @@index([postId])
   @@index([authorId])
   @@index([parentId])
+  @@index([status])
 }
 
 model Bookmark {

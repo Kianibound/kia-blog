@@ -92,7 +92,14 @@ describe('Backend contracts with isolated I/O', () => {
       findMany: query(),
       count: query(),
     },
-    comment: { create: query() },
+    comment: {
+      create: query(),
+      findFirst: query(),
+      findMany: query(),
+      findUnique: query(),
+      update: query(),
+      delete: query(),
+    },
     bookmark: {
       create: query(),
       findUnique: query(),
@@ -301,6 +308,7 @@ describe('Backend contracts with isolated I/O', () => {
     persistence.bookmark.findMany.mockReset();
     persistence.bookmark.findUnique.mockReset();
     persistence.bookmark.delete.mockReset();
+    for (const fn of Object.values(persistence.comment)) fn.mockReset();
     for (const delegate of [persistence.category, persistence.tag]) {
       Object.values(delegate).forEach((fn) => fn.mockReset());
       delegate.findUnique.mockResolvedValue({
@@ -3758,6 +3766,259 @@ describe('Backend contracts with isolated I/O', () => {
       expect(api.paths['/posts/{postId}/bookmark'].post.responses['404']).toBeDefined();
       expect(api.paths['/posts/{postId}/bookmark'].delete.responses['200']).toBeDefined();
       expect(api.paths['/bookmarks'].get.responses['200']).toBeDefined();
+    });
+  });
+
+  describe('Comment moderation states (Issue #54)', () => {
+    const author = {
+      id: 'user-1',
+      username: 'reader',
+      name: 'Reader',
+      avatarUrl: null,
+    };
+    const comment = (overrides: Record<string, unknown> = {}) => ({
+      id: 'c1',
+      content: 'Hello',
+      status: 'PENDING',
+      postId: 'post-1',
+      authorId: 'user-1',
+      parentId: null,
+      createdAt: new Date('2020-01-01'),
+      updatedAt: new Date('2020-01-01'),
+      author,
+      ...overrides,
+    });
+    const authAs = (id = 'user-1') => {
+      persistence.refreshToken.findUnique.mockResolvedValue({
+        userId: id,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+        user: { ...safeUser, id, role: { name: 'USER' } },
+      });
+      return jwt.sign({
+        sub: id,
+        email: safeUser.email,
+        role: 'USER',
+        sid: 'session-1',
+      });
+    };
+    const createComment = (token: string, content: unknown) =>
+      request(app.getHttpServer())
+        .post('/posts/post-1/comments')
+        .auth(token, { type: 'bearer' })
+        .send({ content });
+    const replyTo = (token: string, content: unknown) =>
+      request(app.getHttpServer())
+        .post('/comments/parent/replies')
+        .auth(token, { type: 'bearer' })
+        .send({ content });
+    const editComment = (token: string, content: unknown) =>
+      request(app.getHttpServer())
+        .patch('/comments/c1')
+        .auth(token, { type: 'bearer' })
+        .send({ content });
+
+    beforeEach(() => {
+      persistence.post.findFirst.mockResolvedValue({ id: 'post-1' });
+      persistence.comment.create.mockImplementation(async (args) => ({
+        id: 'c1',
+        createdAt: new Date('2020-01-01'),
+        updatedAt: new Date('2020-01-01'),
+        author,
+        ...(args as { data: Record<string, unknown> }).data,
+      }));
+    });
+
+    it('creates top-level comments as PENDING with trimmed content', async () => {
+      const response = await createComment(authAs(), '  Hello  ').expect(201);
+      expect(persistence.comment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            content: 'Hello',
+            postId: 'post-1',
+            authorId: 'user-1',
+            status: 'PENDING',
+          },
+        }),
+      );
+      expect(response.body.status).toBe('PENDING');
+    });
+
+    it('creates replies as PENDING with server-controlled post and parent', async () => {
+      persistence.comment.findFirst.mockResolvedValue({
+        id: 'parent',
+        postId: 'post-1',
+      });
+      await replyTo(authAs(), ' Reply ').expect(201);
+      expect(persistence.comment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            content: 'Reply',
+            authorId: 'user-1',
+            postId: 'post-1',
+            parentId: 'parent',
+            status: 'PENDING',
+          },
+        }),
+      );
+    });
+
+    it.each(['   ', '\t\n ', ''])(
+      'rejects blank content %j on create, reply and edit',
+      async (content) => {
+        persistence.comment.findFirst.mockResolvedValue({
+          id: 'parent',
+          postId: 'post-1',
+        });
+        persistence.comment.findUnique.mockResolvedValue(comment());
+        await createComment(authAs(), content).expect(400);
+        await replyTo(authAs(), content).expect(400);
+        await editComment(authAs(), content).expect(400);
+        expect(persistence.comment.create).not.toHaveBeenCalled();
+        expect(persistence.comment.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('returns only APPROVED comments and approved direct replies', async () => {
+      persistence.comment.findMany.mockResolvedValue([
+        comment({ status: 'APPROVED', replies: [] }),
+      ]);
+      const response = await request(app.getHttpServer())
+        .get('/posts/post-1/comments')
+        .expect(200);
+      expect(persistence.comment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { postId: 'post-1', parentId: null, status: 'APPROVED' },
+          include: expect.objectContaining({
+            replies: expect.objectContaining({
+              where: { status: 'APPROVED' },
+            }),
+          }),
+        }),
+      );
+      expect(response.body[0].status).toBe('APPROVED');
+    });
+
+    it('returns 404 for comments on a missing or unpublished post', async () => {
+      persistence.post.findFirst.mockResolvedValue(null);
+      await request(app.getHttpServer())
+        .get('/posts/missing/comments')
+        .expect(404);
+    });
+
+    it('atomically resets an APPROVED comment to PENDING on edit', async () => {
+      persistence.comment.findUnique.mockResolvedValue(
+        comment({ status: 'APPROVED' }),
+      );
+      persistence.comment.update.mockResolvedValue(
+        comment({ content: 'Revised', status: 'PENDING' }),
+      );
+      const response = await editComment(authAs(), '  Revised  ').expect(200);
+      expect(persistence.comment.update).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { content: 'Revised', status: 'PENDING' },
+      });
+      expect(response.body.status).toBe('PENDING');
+    });
+
+    it('preserves ownership checks on edit', async () => {
+      persistence.comment.findUnique.mockResolvedValue(
+        comment({ authorId: 'other' }),
+      );
+      await editComment(authAs('user-1'), 'Revised').expect(403);
+      expect(persistence.comment.update).not.toHaveBeenCalled();
+    });
+
+    it('does not expose edited content until re-approved', async () => {
+      interface Row {
+        id: string;
+        content: string;
+        status: string;
+        postId: string;
+        authorId: string;
+        parentId: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        author: typeof author;
+      }
+      const rows: Row[] = [
+        {
+          id: 'c1',
+          content: 'Original',
+          status: 'APPROVED',
+          postId: 'post-1',
+          authorId: 'user-1',
+          parentId: null,
+          createdAt: new Date('2020-01-01'),
+          updatedAt: new Date('2020-01-01'),
+          author,
+        },
+      ];
+      persistence.comment.findMany.mockImplementation(async (raw) => {
+        const args = raw as {
+          where: { postId: string; parentId: string | null; status: string };
+          include: { replies: { where: { status: string } } };
+        };
+        return rows
+          .filter(
+            (row) =>
+              row.postId === args.where.postId &&
+              row.parentId === args.where.parentId &&
+              row.status === args.where.status,
+          )
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+          .map((parent) => ({
+            ...parent,
+            replies: rows.filter(
+              (row) =>
+                row.parentId === parent.id &&
+                row.status === args.include.replies.where.status,
+            ),
+          }));
+      });
+      persistence.comment.findUnique.mockImplementation(
+        async (raw) =>
+          rows.find((row) => row.id === (raw as { where: { id: string } }).where.id) ??
+          null,
+      );
+      persistence.comment.update.mockImplementation(async (raw) => {
+        const args = raw as {
+          where: { id: string };
+          data: { content?: string; status?: string };
+        };
+        const row = rows.find((entry) => entry.id === args.where.id)!;
+        Object.assign(row, args.data, { updatedAt: new Date() });
+        return row;
+      });
+
+      const token = authAs();
+      const before = await request(app.getHttpServer())
+        .get('/posts/post-1/comments')
+        .expect(200);
+      expect(before.body[0].content).toBe('Original');
+
+      await editComment(token, '  Revised text  ').expect(200);
+      expect(rows[0].content).toBe('Revised text');
+      expect(rows[0].status).toBe('PENDING');
+
+      const after = await request(app.getHttpServer())
+        .get('/posts/post-1/comments')
+        .expect(200);
+      expect(after.body).toEqual([]);
+      expect(JSON.stringify(after.body)).not.toContain('Revised text');
+    });
+
+    it('documents the comment status contract', async () => {
+      const api = (
+        await request(app.getHttpServer()).get('/api-json').expect(200)
+      ).body;
+      const schema = api.components.schemas.CommentResponseDto;
+      expect(JSON.stringify(schema.properties.status)).toContain('PENDING');
+      expect(JSON.stringify(schema.properties.status)).toContain('APPROVED');
+      expect(
+        api.paths['/posts/{postId}/comments'].post.responses['400'],
+      ).toBeDefined();
+      expect(api.paths['/comments/{commentId}'].patch.responses['400']).toBeDefined();
     });
   });
 

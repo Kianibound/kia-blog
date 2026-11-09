@@ -229,6 +229,7 @@ export type TagScalarFieldEnum = (typeof TagScalarFieldEnum)[keyof typeof TagSca
 export const CommentScalarFieldEnum = {
   id: 'id',
   content: 'content',
+  status: 'status',
   postId: 'postId',
   authorId: 'authorId',
   parentId: 'parentId',

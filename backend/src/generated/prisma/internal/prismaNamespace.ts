@@ -1873,6 +1873,7 @@ export type TagScalarFieldEnum = (typeof TagScalarFieldEnum)[keyof typeof TagSca
 export const CommentScalarFieldEnum = {
   id: 'id',
   content: 'content',
+  status: 'status',
   postId: 'postId',
   authorId: 'authorId',
   parentId: 'parentId',
@@ -2035,6 +2036,20 @@ export type EnumPostStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$Prism
  * Reference to a field of type 'PostStatus[]'
  */
 export type ListEnumPostStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'PostStatus[]'>
+    
+
+
+/**
+ * Reference to a field of type 'CommentStatus'
+ */
+export type EnumCommentStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'CommentStatus'>
+    
+
+
+/**
+ * Reference to a field of type 'CommentStatus[]'
+ */
+export type ListEnumCommentStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'CommentStatus[]'>
     
 
 

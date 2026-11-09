@@ -1,11 +1,18 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { AuthorResponseDto } from '../../common/dto/response.dto';
+import { CommentStatus } from '../../generated/prisma/client';
 
 export class CommentResponseDto {
   @ApiProperty({ format: 'uuid' })
   id: string;
   @ApiProperty()
   content: string;
+  @ApiProperty({
+    enum: CommentStatus,
+    description:
+      'PENDING comments are hidden from public reads; APPROVED are publicly visible.',
+  })
+  status: CommentStatus;
   @ApiProperty({ format: 'uuid' })
   postId: string;
   @ApiProperty({ format: 'uuid' })

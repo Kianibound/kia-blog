@@ -1,6 +1,7 @@
 import { PrismaService } from '../database/prisma.service';
 import type { CreateCommentDto } from './dto/create-comment.dto';
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -10,6 +11,18 @@ import { ROLE } from '../roles/constants/role.constants';
 import type { RoleName } from '../roles/constants/role.constants';
 import type { UpdateCommentDto } from './dto/update-comment.dto';
 import { PublishedPosts } from '../published-posts/published-posts';
+import { CommentStatus } from '../generated/prisma/client';
+
+// Comment content is trimmed; blank or whitespace-only input is rejected before
+// any write, and the stored value is the trimmed text.
+function normalizeCommentContent(content: unknown): string {
+  if (typeof content !== 'string')
+    throw new BadRequestException('Comment content must be a string.');
+  const trimmed = content.trim();
+  if (!trimmed)
+    throw new BadRequestException('Comment content cannot be blank.');
+  return trimmed;
+}
 
 @Injectable()
 export class CommentsService {
@@ -20,14 +33,17 @@ export class CommentsService {
 
   async create(postId: string, authorId: string, dto: CreateCommentDto) {
     await this.publishedPosts.requireById(postId);
+    const content = normalizeCommentContent(dto.content);
 
     // Create a top-level comment.
     // parentId stays null because this is not a reply.
     return this.prisma.comment.create({
       data: {
-        content: dto.content,
+        content,
         postId,
         authorId,
+        // New comments stay hidden from public reads until approved.
+        status: CommentStatus.PENDING,
       },
       include: {
         author: {
@@ -45,11 +61,12 @@ export class CommentsService {
   async findByPost(postId: string) {
     await this.publishedPosts.requireById(postId);
 
-    // Return top-level comments with their direct replies
+    // Return only APPROVED top-level comments with their APPROVED direct replies
     return this.prisma.comment.findMany({
       where: {
         postId,
         parentId: null,
+        status: CommentStatus.APPROVED,
       },
       orderBy: {
         createdAt: 'asc',
@@ -64,8 +81,11 @@ export class CommentsService {
           },
         },
 
-        // Load direct replies for each parent comment
+        // Load approved direct replies for each parent comment
         replies: {
+          where: {
+            status: CommentStatus.APPROVED,
+          },
           orderBy: {
             createdAt: 'asc',
           },
@@ -105,15 +125,20 @@ export class CommentsService {
       throw new NotFoundException('Parent comment not found.');
     }
 
+    const content = normalizeCommentContent(dto.content);
+
     // Create a reply using the same Comment model
     return this.prisma.comment.create({
       data: {
-        content: dto.content,
+        content,
         authorId,
         postId: parentComment.postId,
 
         // This makes the comment a reply
         parentId: parentComment.id,
+
+        // Replies are moderated the same way as top-level comments.
+        status: CommentStatus.PENDING,
       },
       include: {
         author: {
@@ -156,12 +181,21 @@ export class CommentsService {
       );
     }
 
-    // Update only the provided comment fields
+    // Editing content atomically returns the comment to PENDING, so revised text
+    // stays hidden until it is reviewed again.
+    const data =
+      dto.content === undefined
+        ? {}
+        : {
+            content: normalizeCommentContent(dto.content),
+            status: CommentStatus.PENDING,
+          };
+
     return this.prisma.comment.update({
       where: {
         id: commentId,
       },
-      data: dto,
+      data,
     });
   }
 

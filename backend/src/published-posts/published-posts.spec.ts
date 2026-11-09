@@ -3,7 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../database/prisma.service';
-import { PostStatus } from '../generated/prisma/client';
+import { CommentStatus, PostStatus } from '../generated/prisma/client';
 import type { Prisma } from '../generated/prisma/client';
 import { PostsModule } from '../posts/posts.module';
 import { PostsService } from '../posts/posts.service';
@@ -257,6 +257,7 @@ describe('Published Post visibility across features', () => {
           authorId: 'reader',
           postId: 'published',
           parentId: 'parent-published',
+          status: CommentStatus.PENDING,
         },
       }),
     );
