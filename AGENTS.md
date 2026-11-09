@@ -23,3 +23,15 @@ Use the five default triage labels. See `docs/agents/triage-labels.md`.
 ### Domain docs
 
 Single context; existing backend glossary is authoritative. See `docs/agents/domain.md`.
+
+## Working Style
+
+- Keep tasks small and focused.
+- Complete only the explicitly requested task.
+- Do not automatically start the next phase.
+- Avoid unrelated refactoring.
+- Prefer targeted inspection over reading the entire codebase.
+- Ask before making architectural decisions.
+- Do not push, merge, or deploy without approval.
+- Keep final reports concise.
+- Communicate in English in the terminal.   
