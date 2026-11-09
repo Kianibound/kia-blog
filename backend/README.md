@@ -363,7 +363,7 @@ Examples:
 
 - Create posts
 - Draft and published states
-- Update and delete owned posts
+- Update owned posts, including publishing, unpublishing and republishing
 - Public published post listing
 - Pagination
 - Search
@@ -371,6 +371,7 @@ Examples:
 - Filter by author
 - Filter by category
 - Filter by tag
+- Permanent deletion is ADMIN-only (authors unpublish instead)
 
 ### Canonical rich article content (Issue #47)
 
@@ -406,6 +407,33 @@ return a null `coverImage`. Deleting Media still referenced as a cover returns
 409 without remote deletion, mirroring the body-image rule, via the restrictive
 foreign key added by migration `20261109120000_add_post_cover_media` (additive,
 preserves existing rows; regenerate Prisma first).
+
+### Publication category invariant and ADMIN-only deletion (Issue #50)
+
+A PUBLISHED article always carries at least one ADMIN-managed Category; Tags stay
+optional. Creating a post as `PUBLISHED` requires a non-empty `categoryIds` list.
+Every update is checked against its **resulting** state: publishing or
+republishing (`DRAFT`/`DEPRECATED` → `PUBLISHED`) without a category is rejected
+with 400, as is explicitly removing the last category while staying `PUBLISHED`.
+Unpublishing first (`status: DRAFT`) and then clearing categories is allowed, and
+replacing categories with another non-empty set is allowed. The error body is the
+standard Nest 400 shape with message
+`A published article requires at least one category.`; no write occurs.
+
+Existing data is preserved. A legacy post that was already `PUBLISHED` without
+categories before this rule existed remains editable: a metadata-only update, or
+sending its unchanged empty category list, is accepted so operators can repair it.
+Any real publication transition on such a post (for example republishing a
+categoryless `DEPRECATED` post) still requires a category. Nothing backfills or
+auto-assigns a category.
+
+Permanent `DELETE /posts/:id` is **ADMIN-only** (401 unauthenticated, 403 for
+USER/AUTHOR, 404 missing). AUTHORS keep publishing, editing and unpublishing their
+own posts but cannot permanently delete them. Public visibility remains
+PUBLISHED-only. This invariant is a check-then-write rule, not a database
+constraint; concurrent publication/category changes are not serialized, matching
+the existing point-in-time authorization model. Category deletion conflicts and
+taxonomy reference validation are handled separately.
 
 ### Owned Post status filtering (Issue #45)
 

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -19,6 +20,25 @@ import {
 } from '../media/body-image';
 import { ROLE } from '../roles/constants/role.constants';
 
+// A PUBLISHED article always carries at least one ADMIN-managed category: the
+// resulting state is checked on creation and every update, including removing
+// the last category while staying published. The sole exception is a legacy
+// post that was already PUBLISHED without categories before this rule existed:
+// it stays editable so existing data is preserved, but any real publication
+// transition still requires a category.
+export function assertPublishedCategories(
+  resultingStatus: PostStatus,
+  resultingCategoryIds: readonly string[],
+  legacyCategorylessPublished = false,
+): void {
+  if (resultingStatus !== PostStatus.PUBLISHED) return;
+  if (resultingCategoryIds.length) return;
+  if (legacyCategorylessPublished) return;
+  throw new BadRequestException(
+    'A published article requires at least one category.',
+  );
+}
+
 // Internal to PostsModule: writes own lifecycle, relation changes, and slug allocation.
 @Injectable()
 export class PostCommands {
@@ -37,6 +57,10 @@ export class PostCommands {
       role,
     });
     const cover = await this.prepareCover(dto, { authorId, role });
+    assertPublishedCategories(
+      dto.status ?? PostStatus.DRAFT,
+      dto.categoryIds ?? [],
+    );
     // Generate a unique public URL slug from the title
     const slug = await this.generateUniqueSlug(dto.title);
 
@@ -96,10 +120,13 @@ export class PostCommands {
     currentUserRole: RoleName,
     dto: UpdatePostDto,
   ) {
-    // Load the post first so we can verify ownership
+    // Load the post first so we can verify ownership and the resulting state
     const post = await this.prisma.post.findUnique({
       where: {
         id: postId,
+      },
+      include: {
+        categories: { select: { id: true } },
       },
     });
 
@@ -134,6 +161,11 @@ export class PostCommands {
       authorId: post.authorId,
       role: currentUserRole,
     });
+    assertPublishedCategories(
+      dto.status ?? post.status,
+      categoryIds ?? post.categories.map(({ id }) => id),
+      post.status === PostStatus.PUBLISHED && post.categories.length === 0,
+    );
 
     if (
       dto.status === PostStatus.PUBLISHED &&
@@ -271,9 +303,12 @@ export class PostCommands {
       throw new NotFoundException('Post not found.');
     }
 
-    // Authors can only delete their own posts.
-    // Admins can delete any post.
-    assertPostAccess(post.authorId, currentUserId, currentUserRole, 'delete');
+    // Permanent deletion is ADMIN-only; authors unpublish their own posts instead.
+    if (currentUserRole !== ROLE.ADMIN) {
+      throw new ForbiddenException(
+        'Only administrators can permanently delete posts.',
+      );
+    }
 
     // Delete the post after authorization checks pass
     await this.prisma.post.delete({

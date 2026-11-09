@@ -110,6 +110,7 @@ export class PostsController {
           title: 'My First Post',
           content: 'This is the post content.',
           status: 'PUBLISHED',
+          categoryIds: ['550e8400-e29b-41d4-a716-446655440000'],
         },
       },
     },
@@ -130,7 +131,7 @@ export class PostsController {
     status: 400,
     type: ErrorResponseDto,
     description:
-      'Invalid fields, ambiguous content sources, unsupported/unsafe rich document or media reference, or document limits exceeded.',
+      'Invalid fields, ambiguous content sources, unsupported/unsafe rich document or media reference, document limits exceeded, or publishing without a category.',
   })
   @ApiResponse({
     status: 413,
@@ -284,7 +285,7 @@ export class PostsController {
     status: 400,
     type: ErrorResponseDto,
     description:
-      'Invalid fields, ambiguous content sources, unsupported/unsafe rich document or media reference, or document limits exceeded.',
+      'Invalid fields, ambiguous content sources, unsupported/unsafe rich document or media reference, document limits exceeded, or a published article without a category.',
   })
   @ApiResponse({
     status: 413,
@@ -303,7 +304,11 @@ export class PostsController {
   }
 
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Delete a post owned by the current author' })
+  @ApiOperation({
+    summary: 'Permanently delete a post (admin only)',
+    description:
+      'ADMIN-only permanent removal. Authors unpublish their own posts through the existing status update instead.',
+  })
   @ApiResponse({
     type: MessageResponseDto,
     status: 200,
@@ -312,13 +317,23 @@ export class PostsController {
   @ApiResponse({
     type: ErrorResponseDto,
     status: 403,
-    description: 'User is not allowed to delete this post.',
+    description: 'ADMIN required; authors cannot permanently delete posts.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 401,
+    description: 'Valid authenticated session required.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 404,
+    description: 'Post not found.',
   })
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(ROLE.AUTHOR, ROLE.ADMIN)
+  @Roles(ROLE.ADMIN)
   remove(@Param('id') id: string, @CurrentUser() user: AccessTokenPayload) {
-    // Role controls access level; the service enforces ownership
+    // Role controls access level; the service enforces ADMIN-only deletion
     return this.postsService.remove(id, user.sub, user.role);
   }
 }

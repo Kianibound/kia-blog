@@ -86,6 +86,7 @@ describe('Backend contracts with isolated I/O', () => {
     post: {
       create: query(),
       update: query(),
+      delete: query(),
       findFirst: query(),
       findUnique: query(),
       findMany: query(),
@@ -285,6 +286,7 @@ describe('Backend contracts with isolated I/O', () => {
     persistence.post.findUnique.mockReset();
     persistence.post.create.mockReset();
     persistence.post.update.mockReset();
+    persistence.post.delete.mockReset();
     persistence.post.findMany.mockReset();
     persistence.post.count.mockReset();
     persistence.media.findUnique.mockResolvedValue(null);
@@ -1500,6 +1502,7 @@ describe('Backend contracts with isolated I/O', () => {
   });
 
   describe('Canonical rich article content', () => {
+    const categoryId = '33333333-3333-4333-8333-333333333333';
     const imageId = '7a3e0fe6-81f3-4f42-b61e-361beea3a217';
     const image = {
       id: imageId,
@@ -1557,8 +1560,6 @@ describe('Backend contracts with isolated I/O', () => {
                 name: 'Reader',
                 avatarUrl: null,
               },
-              categories: [],
-              tags: [],
             }
           : null;
       persistence.post.create.mockImplementation(async (args) => {
@@ -1573,6 +1574,9 @@ describe('Backend contracts with isolated I/O', () => {
                 : structuredClone(value),
             ]),
         );
+        const relation = (input: unknown) =>
+          ((input as { connect?: Array<{ id: string }> } | undefined)?.connect ??
+            []).map(({ id }) => ({ id }));
         saved = {
           id: 'rich-post',
           createdAt: new Date('2020-01-01'),
@@ -1581,19 +1585,25 @@ describe('Backend contracts with isolated I/O', () => {
           publishedAt: null,
           contentDocument: null,
           ...fields,
-          categories: [],
-          tags: [],
+          categories: relation(data.categories),
+          tags: relation(data.tags),
         };
         return detail();
       });
       persistence.post.update.mockImplementation(async (args) => {
         const { data } = args as { data: Record<string, unknown> };
-        for (const [key, value] of Object.entries(data))
-          if (value !== undefined && key !== 'categories' && key !== 'tags')
-            saved![key] =
-              key === 'contentDocument' && value === Prisma.DbNull
-                ? null
-                : structuredClone(value);
+        for (const [key, value] of Object.entries(data)) {
+          if (value === undefined) continue;
+          if (key === 'categories' || key === 'tags') {
+            const set = (value as { set?: Array<{ id: string }> }).set ?? [];
+            saved![key] = set.map(({ id }) => ({ id }));
+            continue;
+          }
+          saved![key] =
+            key === 'contentDocument' && value === Prisma.DbNull
+              ? null
+              : structuredClone(value);
+        }
         return detail();
       });
       persistence.post.findUnique.mockImplementation(async (args) =>
@@ -1648,6 +1658,7 @@ describe('Backend contracts with isolated I/O', () => {
           title: 'Rich article',
           contentDocument: imageDocument,
           status: 'PUBLISHED',
+          categoryIds: [categoryId],
         })
         .expect(201);
       expect(created.body.contentDocument).toEqual(imageDocument);
@@ -1982,6 +1993,7 @@ describe('Backend contracts with isolated I/O', () => {
           title: 'Rich article',
           contentDocument: document,
           status: 'PUBLISHED',
+          categoryIds: [categoryId],
         })
         .expect(201);
       expect(created.body.contentDocument).toEqual(document);
@@ -2402,7 +2414,12 @@ describe('Backend contracts with isolated I/O', () => {
       const old = await request(app.getHttpServer())
         .post('/posts')
         .auth(token, { type: 'bearer' })
-        .send({ title: 'Legacy', content: literal, status: 'PUBLISHED' })
+        .send({
+          title: 'Legacy',
+          content: literal,
+          status: 'PUBLISHED',
+          categoryIds: [categoryId],
+        })
         .expect(201);
       expect(old.body.content).toBe(literal);
       expect(old.body.contentDocument).toBeNull();
@@ -2503,6 +2520,7 @@ describe('Backend contracts with isolated I/O', () => {
         .send({
           title: 'Search article',
           status: 'PUBLISHED',
+          categoryIds: [categoryId],
           contentDocument: rich,
         })
         .expect(201);
@@ -2581,6 +2599,7 @@ describe('Backend contracts with isolated I/O', () => {
   });
 
   describe('Optional article cover images', () => {
+    const categoryId = '33333333-3333-4333-8333-333333333333';
     const coverId = '11111111-1111-4111-8111-111111111111';
     const coverMedia = {
       id: coverId,
@@ -2621,8 +2640,6 @@ describe('Backend contracts with isolated I/O', () => {
                 name: 'Reader',
                 avatarUrl: null,
               },
-              categories: [],
-              tags: [],
             }
           : null;
       persistence.post.create.mockImplementation(async (args) => {
@@ -2632,6 +2649,9 @@ describe('Backend contracts with isolated I/O', () => {
             .filter(([, value]) => value !== undefined)
             .map(([key, value]) => [key, structuredClone(value)]),
         );
+        const relation = (input: unknown) =>
+          ((input as { connect?: Array<{ id: string }> } | undefined)?.connect ??
+            []).map(({ id }) => ({ id }));
         saved = {
           id: 'cover-post',
           createdAt: new Date('2020-01-01'),
@@ -2639,16 +2659,22 @@ describe('Backend contracts with isolated I/O', () => {
           status: 'DRAFT',
           publishedAt: null,
           ...fields,
-          categories: [],
-          tags: [],
+          categories: relation(data.categories),
+          tags: relation(data.tags),
         };
         return detail();
       });
       persistence.post.update.mockImplementation(async (args) => {
         const { data } = args as { data: Record<string, unknown> };
-        for (const [key, value] of Object.entries(data))
-          if (value !== undefined && key !== 'categories' && key !== 'tags')
-            saved![key] = structuredClone(value);
+        for (const [key, value] of Object.entries(data)) {
+          if (value === undefined) continue;
+          if (key === 'categories' || key === 'tags') {
+            const set = (value as { set?: Array<{ id: string }> }).set ?? [];
+            saved![key] = set.map(({ id }) => ({ id }));
+            continue;
+          }
+          saved![key] = structuredClone(value);
+        }
         return detail();
       });
       persistence.post.findUnique.mockImplementation(async (args) =>
@@ -2683,6 +2709,7 @@ describe('Backend contracts with isolated I/O', () => {
         title: 'Cover article',
         contentDocument: bodyDocument,
         status: 'PUBLISHED',
+        categoryIds: [categoryId],
         coverMediaId: coverId,
         coverAlt: 'A cover',
       }).expect(201);
@@ -2714,6 +2741,7 @@ describe('Backend contracts with isolated I/O', () => {
         title: 'Plain article',
         contentDocument: bodyDocument,
         status: 'PUBLISHED',
+        categoryIds: [categoryId],
       }).expect(201);
       expect(created.body.coverImage).toBeNull();
       expect(created.body).not.toHaveProperty('coverMediaId');
@@ -2895,6 +2923,345 @@ describe('Backend contracts with isolated I/O', () => {
         'id',
         'url',
         'width',
+      ]);
+    });
+  });
+
+  describe('Publication category invariant and ADMIN-only deletion', () => {
+    const categoryId = '33333333-3333-4333-8333-333333333333';
+    const otherCategoryId = '44444444-4444-4444-8444-444444444444';
+    const body = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Body' }] },
+      ],
+    };
+    // Faithful store: relations model connect/set so invariants see real state.
+    // An optional initial record simulates pre-existing (legacy) rows.
+    const store = (initial?: Record<string, unknown>) => {
+      let saved: Record<string, unknown> | undefined = initial;
+      const detail = () =>
+        saved
+          ? {
+              ...structuredClone(saved),
+              author: {
+                id: 'user-1',
+                username: 'reader',
+                name: 'Reader',
+                avatarUrl: null,
+              },
+            }
+          : null;
+      persistence.post.create.mockImplementation(async (args) => {
+        const { data } = args as { data: Record<string, unknown> };
+        const connect = (input: unknown) =>
+          ((input as { connect?: Array<{ id: string }> } | undefined)
+            ?.connect ?? []).map(({ id }) => ({ id }));
+        saved = {
+          id: 'invariant-post',
+          createdAt: new Date('2020-01-01'),
+          updatedAt: new Date('2020-01-01'),
+          status: 'DRAFT',
+          publishedAt: null,
+          contentDocument: null,
+          ...Object.fromEntries(
+            Object.entries(data)
+              .filter(
+                ([key, value]) =>
+                  value !== undefined &&
+                  key !== 'categories' &&
+                  key !== 'tags',
+              )
+              .map(([key, value]) => [key, structuredClone(value)]),
+          ),
+          categories: connect(data.categories),
+          tags: connect(data.tags),
+        };
+        return detail();
+      });
+      persistence.post.update.mockImplementation(async (args) => {
+        const { data } = args as { data: Record<string, unknown> };
+        for (const [key, value] of Object.entries(data)) {
+          if (value === undefined) continue;
+          if (key === 'categories' || key === 'tags') {
+            const set = (value as { set?: Array<{ id: string }> }).set ?? [];
+            saved![key] = set.map(({ id }) => ({ id }));
+            continue;
+          }
+          saved![key] =
+            key === 'contentDocument' && value === Prisma.DbNull
+              ? null
+              : structuredClone(value);
+        }
+        return detail();
+      });
+      persistence.post.findUnique.mockImplementation(async (args) =>
+        (args as { where: { slug?: string } }).where.slug ? null : detail(),
+      );
+      persistence.post.findFirst.mockImplementation(async () =>
+        saved?.status === 'PUBLISHED' ? detail() : null,
+      );
+      const matches = (args: unknown) => {
+        const { where } = (args ?? {}) as { where?: { status?: string } };
+        return !!saved && (!where?.status || saved.status === where.status);
+      };
+      persistence.post.findMany.mockImplementation(async (args) =>
+        matches(args) ? [detail()] : [],
+      );
+      persistence.post.count.mockImplementation(async (args) =>
+        matches(args) ? 1 : 0,
+      );
+      return {
+        read: () => structuredClone(saved) as Record<string, unknown>,
+      };
+    };
+    const createPost = (token: string, extra: Record<string, unknown> = {}) =>
+      request(app.getHttpServer())
+        .post('/posts')
+        .auth(token, { type: 'bearer' })
+        .send({ title: 'Invariant article', contentDocument: body, ...extra });
+
+    it('publishes a draft only with at least one connected category', async () => {
+      store();
+      const token = auth('AUTHOR');
+      await createPost(token, { categoryIds: [categoryId] }).expect(201);
+      const published = await request(app.getHttpServer())
+        .patch('/posts/invariant-post')
+        .auth(token, { type: 'bearer' })
+        .send({ status: 'PUBLISHED' })
+        .expect(200);
+      expect(published.body.status).toBe('PUBLISHED');
+      expect(published.body.publishedAt).toEqual(expect.any(String));
+    });
+
+    it.each([
+      { label: 'no categories supplied', categoryIds: undefined },
+      { label: 'an empty category list', categoryIds: [] },
+    ])(
+      'rejects DRAFT to PUBLISHED without $label',
+      async ({ categoryIds }) => {
+        store();
+        const token = auth('AUTHOR');
+        await createPost(token).expect(201);
+        await request(app.getHttpServer())
+          .patch('/posts/invariant-post')
+          .auth(token, { type: 'bearer' })
+          .send({
+            status: 'PUBLISHED',
+            ...(categoryIds === undefined ? {} : { categoryIds }),
+          })
+          .expect(400);
+        expect(persistence.post.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects creating a published post without a category', async () => {
+      store();
+      await createPost(auth('AUTHOR'), { status: 'PUBLISHED' }).expect(400);
+      expect(persistence.post.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects removing the last category from a published article', async () => {
+      store();
+      const token = auth('AUTHOR');
+      await createPost(token, {
+        status: 'PUBLISHED',
+        categoryIds: [categoryId],
+      }).expect(201);
+      await request(app.getHttpServer())
+        .patch('/posts/invariant-post')
+        .auth(token, { type: 'bearer' })
+        .send({ categoryIds: [] })
+        .expect(400);
+      expect(persistence.post.update).not.toHaveBeenCalled();
+      const read = await request(app.getHttpServer())
+        .get('/posts/invariant-article')
+        .expect(200);
+      expect(read.body.status).toBe('PUBLISHED');
+    });
+
+    it('allows replacing categories and metadata edits while published', async () => {
+      store();
+      const token = auth('AUTHOR');
+      await createPost(token, {
+        status: 'PUBLISHED',
+        categoryIds: [categoryId],
+      }).expect(201);
+      const replaced = await request(app.getHttpServer())
+        .patch('/posts/invariant-post')
+        .auth(token, { type: 'bearer' })
+        .send({ categoryIds: [otherCategoryId] })
+        .expect(200);
+      expect(replaced.body.categories).toEqual([{ id: otherCategoryId }]);
+      const renamed = await request(app.getHttpServer())
+        .patch('/posts/invariant-post')
+        .auth(token, { type: 'bearer' })
+        .send({ title: 'Renamed' })
+        .expect(200);
+      expect(renamed.body.categories).toEqual([{ id: otherCategoryId }]);
+    });
+
+    it('keeps legacy published posts without categories editable', async () => {
+      const legacy = (status: string) => {
+        store({
+          id: 'legacy-post',
+          title: 'Legacy',
+          slug: 'legacy-article',
+          content: 'Body',
+          contentDocument: null,
+          status,
+          publishedAt: status === 'PUBLISHED' ? new Date('2020-01-01') : null,
+          authorId: 'user-1',
+          categories: [],
+          tags: [],
+        });
+      };
+      legacy('PUBLISHED');
+      const token = auth('AUTHOR');
+      const renamed = await request(app.getHttpServer())
+        .patch('/posts/legacy-post')
+        .auth(token, { type: 'bearer' })
+        .send({ title: 'Renamed legacy' })
+        .expect(200);
+      expect(renamed.body.title).toBe('Renamed legacy');
+      expect(renamed.body.status).toBe('PUBLISHED');
+      expect(renamed.body.categories).toEqual([]);
+      // Sending the unchanged empty category list is not a removal attempt.
+      await request(app.getHttpServer())
+        .patch('/posts/legacy-post')
+        .auth(token, { type: 'bearer' })
+        .send({ categoryIds: [] })
+        .expect(200);
+      // Adding a category still works and restores the invariant.
+      const assigned = await request(app.getHttpServer())
+        .patch('/posts/legacy-post')
+        .auth(token, { type: 'bearer' })
+        .send({ categoryIds: [categoryId] })
+        .expect(200);
+      expect(assigned.body.categories).toEqual([{ id: categoryId }]);
+    });
+
+    it('requires a category before republishing a legacy categoryless post', async () => {
+      store({
+        id: 'legacy-post',
+        title: 'Legacy deprecated',
+        slug: 'legacy-article',
+        content: 'Body',
+        contentDocument: null,
+        status: 'DEPRECATED',
+        publishedAt: new Date('2020-01-01'),
+        authorId: 'user-1',
+        categories: [],
+        tags: [],
+      });
+      await request(app.getHttpServer())
+        .patch('/posts/legacy-post')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .send({ status: 'PUBLISHED' })
+        .expect(400);
+      expect(persistence.post.update).not.toHaveBeenCalled();
+    });
+
+    it('allows an author to unpublish and then remove every category', async () => {
+      store();
+      const token = auth('AUTHOR');
+      await createPost(token, {
+        status: 'PUBLISHED',
+        categoryIds: [categoryId],
+      }).expect(201);
+      const unpublished = await request(app.getHttpServer())
+        .patch('/posts/invariant-post')
+        .auth(token, { type: 'bearer' })
+        .send({ status: 'DRAFT' })
+        .expect(200);
+      expect(unpublished.body.status).toBe('DRAFT');
+      expect(unpublished.body.publishedAt).toBeNull();
+      await request(app.getHttpServer())
+        .patch('/posts/invariant-post')
+        .auth(token, { type: 'bearer' })
+        .send({ categoryIds: [] })
+        .expect(200);
+    });
+
+    it('keeps public visibility PUBLISHED-only while a draft lacks categories', async () => {
+      store();
+      const token = auth('AUTHOR');
+      await createPost(token).expect(201);
+      await request(app.getHttpServer())
+        .get('/posts/invariant-article')
+        .expect(404);
+      const mine = await request(app.getHttpServer())
+        .get('/posts/mine')
+        .auth(token, { type: 'bearer' })
+        .expect(200);
+      expect(mine.body.data[0].status).toBe('DRAFT');
+    });
+
+    it('restricts permanent deletion to ADMIN and preserves author unpublishing', async () => {
+      store();
+      const token = auth('AUTHOR');
+      await createPost(token, { categoryIds: [categoryId] }).expect(201);
+      await request(app.getHttpServer())
+        .delete('/posts/invariant-post')
+        .auth(token, { type: 'bearer' })
+        .expect(403);
+      expect(persistence.post.delete).not.toHaveBeenCalled();
+      await request(app.getHttpServer())
+        .patch('/posts/invariant-post')
+        .auth(token, { type: 'bearer' })
+        .send({ status: 'DRAFT' })
+        .expect(200);
+      await request(app.getHttpServer())
+        .delete('/posts/invariant-post')
+        .auth(auth('ADMIN'), { type: 'bearer' })
+        .expect(200);
+      expect(persistence.post.delete).toHaveBeenCalledWith({
+        where: { id: 'invariant-post' },
+      });
+    });
+
+    it.each(['anonymous', 'USER'])(
+      'denies permanent deletion for %s callers',
+      async (role) => {
+        store();
+        const operation = request(app.getHttpServer()).delete(
+          '/posts/invariant-post',
+        );
+        if (role !== 'anonymous')
+          operation.auth(auth(role), { type: 'bearer' });
+        await operation.expect(role === 'anonymous' ? 401 : 403);
+        expect(persistence.post.delete).not.toHaveBeenCalled();
+      },
+    );
+
+    it('returns 404 for a missing post before deletion or category checks', async () => {
+      store();
+      await request(app.getHttpServer())
+        .delete('/posts/missing-post')
+        .auth(auth('ADMIN'), { type: 'bearer' })
+        .expect(404);
+      await request(app.getHttpServer())
+        .patch('/posts/missing-post')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .send({ status: 'PUBLISHED' })
+        .expect(404);
+    });
+
+    it('documents the publication invariant and ADMIN-only deletion in OpenAPI', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api-json')
+        .expect(200);
+      const api: OpenAPIObject = response.body;
+      expect(
+        api.paths['/posts/{id}'].delete!.responses['403'],
+      ).toBeDefined();
+      expect(
+        (api.paths['/posts/{id}'].delete!.responses['403'] as {
+          description: string;
+        }).description,
+      ).toContain('ADMIN');
+      expect(api.paths['/posts/{id}'].delete!.security).toEqual([
+        { 'access-token': [] },
       ]);
     });
   });

@@ -1,5 +1,9 @@
 import { jest } from '@jest/globals';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../database/prisma.service';
 import { PostStatus } from '../generated/prisma/client';
@@ -15,6 +19,7 @@ describe('Posts behavior', () => {
     authorId: 'owner',
     status: PostStatus.DRAFT,
     publishedAt: null as Date | null,
+    categories: [{ id: 'c' }],
   };
   const repository = {
     findUnique: jest.fn<(args: unknown) => Promise<unknown>>(),
@@ -73,6 +78,7 @@ describe('Posts behavior', () => {
       title: 'Hello',
       content: 'Content',
       status: PostStatus.PUBLISHED,
+      categoryIds: ['c'],
     });
     expect(repository.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -198,7 +204,7 @@ describe('Posts behavior', () => {
       },
     });
   });
-  describe.each(['read', 'update', 'delete'] as const)(
+  describe.each(['read', 'update'] as const)(
     '%s ownership',
     (action) => {
       const invoke = (
@@ -207,9 +213,7 @@ describe('Posts behavior', () => {
         role: typeof ROLE.AUTHOR | typeof ROLE.ADMIN,
       ) => {
         if (action === 'read') return target.findMineById('p', user, role);
-        if (action === 'update')
-          return target.update('p', user, role, { title: 'Changed' });
-        return target.remove('p', user, role);
+        return target.update('p', user, role, { title: 'Changed' });
       };
       it('rejects another author before writing', async () => {
         await expect(invoke(service, 'other', ROLE.AUTHOR)).rejects.toThrow(
@@ -236,6 +240,36 @@ describe('Posts behavior', () => {
       });
     },
   );
+  describe('delete authorization (ADMIN only)', () => {
+    it('rejects the owning author before writing', async () => {
+      await expect(
+        service.remove('p', 'owner', ROLE.AUTHOR),
+      ).rejects.toThrow(ForbiddenException);
+      expect(repository.delete).not.toHaveBeenCalled();
+    });
+    it('rejects another author and ordinary users', async () => {
+      await expect(
+        service.remove('p', 'other', ROLE.AUTHOR),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.remove('p', 'reader', ROLE.USER),
+      ).rejects.toThrow(ForbiddenException);
+      expect(repository.delete).not.toHaveBeenCalled();
+    });
+    it('allows an admin to delete another author post', async () => {
+      await expect(
+        service.remove('p', 'admin', ROLE.ADMIN),
+      ).resolves.toEqual({ message: 'Post deleted successfully.' });
+      expect(repository.delete).toHaveBeenCalledWith({ where: { id: 'p' } });
+    });
+    it('returns 404 for a missing post before the role check', async () => {
+      repository.findUnique.mockResolvedValue(null);
+      await expect(service.remove('p', 'owner', ROLE.AUTHOR)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(repository.delete).not.toHaveBeenCalled();
+    });
+  });
   it.each([
     [PostStatus.DRAFT, PostStatus.PUBLISHED, 'new'],
     [PostStatus.PUBLISHED, PostStatus.PUBLISHED, 'keep'],
@@ -292,10 +326,98 @@ describe('Posts behavior', () => {
       }),
     );
   });
-  it('deletes an authorized post and preserves the response', async () => {
-    expect(await service.remove('p', 'owner', ROLE.AUTHOR)).toEqual({
+  it('deletes an authorized ADMIN post and preserves the response', async () => {
+    expect(await service.remove('p', 'admin', ROLE.ADMIN)).toEqual({
       message: 'Post deleted successfully.',
     });
     expect(repository.delete).toHaveBeenCalledWith({ where: { id: 'p' } });
+  });
+  describe('publication category invariant', () => {
+    const published = { ...post, status: PostStatus.PUBLISHED };
+    it('rejects publishing a draft without categories before writing', async () => {
+      repository.findUnique.mockResolvedValue({
+        ...post,
+        status: PostStatus.DRAFT,
+        categories: [],
+      });
+      await expect(
+        service.update('p', 'owner', ROLE.AUTHOR, {
+          status: PostStatus.PUBLISHED,
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+    it('rejects creating a published post without categories', async () => {
+      repository.findUnique.mockResolvedValue(null);
+      await expect(
+        service.create('owner', {
+          title: 'Hello',
+          content: 'Content',
+          status: PostStatus.PUBLISHED,
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(repository.create).not.toHaveBeenCalled();
+    });
+    it('rejects removing the last category while staying published', async () => {
+      repository.findUnique.mockResolvedValue(published);
+      await expect(
+        service.update('p', 'owner', ROLE.ADMIN, { categoryIds: [] }),
+      ).rejects.toThrow(BadRequestException);
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+    it('allows unpublishing before removing every category', async () => {
+      repository.findUnique.mockResolvedValue(published);
+      await expect(
+        service.update('p', 'owner', ROLE.AUTHOR, {
+          status: PostStatus.DRAFT,
+          categoryIds: [],
+        }),
+      ).resolves.toBeDefined();
+      expect(repository.update).toHaveBeenCalled();
+    });
+    it('allows replacing the categories of a published post', async () => {
+      repository.findUnique.mockResolvedValue(published);
+      await expect(
+        service.update('p', 'owner', ROLE.AUTHOR, {
+          categoryIds: ['c2'],
+        }),
+      ).resolves.toBeDefined();
+    });
+    it('keeps legacy published posts without categories editable', async () => {
+      repository.findUnique.mockResolvedValue({
+        ...published,
+        categories: [],
+      });
+      await expect(
+        service.update('p', 'owner', ROLE.AUTHOR, { title: 'Renamed' }),
+      ).resolves.toBeDefined();
+      expect(repository.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ title: 'Renamed' }),
+        }),
+      );
+    });
+    it('tolerates an unchanged empty category list on a legacy published post', async () => {
+      repository.findUnique.mockResolvedValue({
+        ...published,
+        categories: [],
+      });
+      await expect(
+        service.update('p', 'owner', ROLE.AUTHOR, { categoryIds: [] }),
+      ).resolves.toBeDefined();
+    });
+    it('still requires a category to republish a legacy categoryless post', async () => {
+      repository.findUnique.mockResolvedValue({
+        ...published,
+        status: PostStatus.DEPRECATED,
+        categories: [],
+      });
+      await expect(
+        service.update('p', 'owner', ROLE.AUTHOR, {
+          status: PostStatus.PUBLISHED,
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(repository.update).not.toHaveBeenCalled();
+    });
   });
 });

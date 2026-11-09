@@ -13,7 +13,7 @@ A registered account that can authenticate and interact with the blog. A User ma
 The authorization level assigned to a User. The supported Roles are:
 
 - `USER`: can read published content and create interactions.
-- `AUTHOR`: has the `USER` capabilities and can manage their own Posts.
+- `AUTHOR`: has the `USER` capabilities and can create, edit, publish, unpublish and republish their own Posts. Permanent Post deletion is ADMIN-only.
 - `ADMIN`: can manage application content and Users beyond ownership restrictions.
 
 ### Session
@@ -82,5 +82,7 @@ The Media currently selected as a User's profile image. Replacing an Avatar must
 - A one-time token cannot successfully complete its workflow more than once.
 - Password Reset revokes every active Session belonging to the User.
 - Only Published Posts accept public interactions.
+- A Published Post carries at least one Category; publishing, republishing or removing the last category must preserve that state.
+- Only Admins may permanently delete a Post; Authors unpublish their own Posts instead.
 - Ownership checks apply to mutations unless the current Role explicitly grants administrative access.
 - Database records and Cloudinary assets should be compensated or remain safely retryable when a cross-system operation fails.
