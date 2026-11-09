@@ -454,6 +454,26 @@ This protects published posts and the Issue #50 last-category invariant. Deletin
 posts and replacing a post's categories or tags are unaffected, and unreferenced
 taxonomy records still delete normally with the existing `{ message }` shape.
 
+### Bookmark mutation consistency (Issue #53)
+
+Bookmark mutations are idempotent and scoped to the authenticated user. Creating
+a bookmark for an already-bookmarked published post returns the existing row
+(with the usual 201 response); a concurrent duplicate is resolved by the
+`(userId, postId)` unique index, and the request returns the winning row instead
+of failing. Creating a bookmark for a missing or non-published post still returns
+404 and requires a PUBLISHED Post.
+
+Removing a bookmark always returns 200 with
+`{ message: 'Bookmark removed successfully.' }`, including when the bookmark was
+already removed or removed concurrently. This intentionally differs from
+`PostLikes`, whose removal still returns 404 for a missing like; the idempotent
+bookmark contract lets the frontend treat the toggle as fire-and-forget. The
+saved list (`GET /bookmarks`) remains user-scoped, newest first, and includes only
+bookmarks whose post is currently PUBLISHED; unpublished posts disappear from the
+list while their bookmark stays removable. Each entry keeps the existing
+`BookmarkDetailResponseDto` shape, including the resolved `post` projection with
+`contentMedia`, `coverImage`, safe author identity, categories and tags.
+
 ### Owned Post status filtering (Issue #45)
 
 `GET /posts/mine` remains restricted to authenticated AUTHOR/ADMIN accounts and

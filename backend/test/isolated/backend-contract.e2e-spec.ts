@@ -93,7 +93,12 @@ describe('Backend contracts with isolated I/O', () => {
       count: query(),
     },
     comment: { create: query() },
-    bookmark: { create: query(), findMany: query() },
+    bookmark: {
+      create: query(),
+      findUnique: query(),
+      findMany: query(),
+      delete: query(),
+    },
     postLike: { create: query() },
     media: {
       findUnique: query(),
@@ -294,6 +299,8 @@ describe('Backend contracts with isolated I/O', () => {
     persistence.media.delete.mockReset();
     persistence.media.create.mockReset();
     persistence.bookmark.findMany.mockReset();
+    persistence.bookmark.findUnique.mockReset();
+    persistence.bookmark.delete.mockReset();
     for (const delegate of [persistence.category, persistence.tag]) {
       Object.values(delegate).forEach((fn) => fn.mockReset());
       delegate.findUnique.mockResolvedValue({
@@ -3565,6 +3572,192 @@ describe('Backend contracts with isolated I/O', () => {
       expect(api.paths['/posts/{id}'].delete!.security).toEqual([
         { 'access-token': [] },
       ]);
+    });
+  });
+
+  describe('Bookmarks (Issue #53)', () => {
+    const bookmark = {
+      id: 'bm-1',
+      userId: 'user-1',
+      postId: 'post-1',
+      createdAt: new Date('2020-01-01'),
+    };
+    const postRow = {
+      id: 'post-1',
+      title: 'Bookmarked',
+      slug: 'bookmarked',
+      content: 'Body',
+      contentDocument: null,
+      status: 'PUBLISHED',
+      publishedAt: new Date('2020-01-01'),
+      authorId: 'user-1',
+      createdAt: new Date('2020-01-01'),
+      updatedAt: new Date('2020-01-01'),
+      author: {
+        id: 'user-1',
+        username: 'reader',
+        name: 'Reader',
+        avatarUrl: null,
+      },
+      categories: [],
+      tags: [],
+    };
+    const authAs = (id: string) => {
+      persistence.refreshToken.findUnique.mockResolvedValue({
+        userId: id,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+        user: { ...safeUser, id, role: { name: 'USER' } },
+      });
+      return jwt.sign({
+        sub: id,
+        email: safeUser.email,
+        role: 'USER',
+        sid: 'session-1',
+      });
+    };
+    const bookmarkPost = (token: string) =>
+      request(app.getHttpServer())
+        .post('/posts/post-1/bookmark')
+        .auth(token, { type: 'bearer' });
+    const unbookmarkPost = (token: string) =>
+      request(app.getHttpServer())
+        .delete('/posts/post-1/bookmark')
+        .auth(token, { type: 'bearer' });
+
+    beforeEach(() => {
+      persistence.post.findFirst.mockResolvedValue({ id: 'post-1' });
+    });
+
+    it('creates a bookmark for a published post', async () => {
+      persistence.bookmark.findUnique.mockResolvedValue(null);
+      persistence.bookmark.create.mockResolvedValue(bookmark);
+      const response = await bookmarkPost(authAs('user-1')).expect(201);
+      expect(response.body).toEqual({
+        ...bookmark,
+        createdAt: bookmark.createdAt.toISOString(),
+      });
+      expect(persistence.bookmark.create).toHaveBeenCalledWith({
+        data: { userId: 'user-1', postId: 'post-1' },
+      });
+    });
+
+    it('returns the existing bookmark without a second create', async () => {
+      persistence.bookmark.findUnique.mockResolvedValue(bookmark);
+      await bookmarkPost(authAs('user-1')).expect(201);
+      expect(persistence.bookmark.create).not.toHaveBeenCalled();
+    });
+
+    it('returns the concurrent winner when the unique constraint conflicts', async () => {
+      persistence.bookmark.findUnique
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(bookmark);
+      persistence.bookmark.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('duplicate', {
+          code: 'P2002',
+          clientVersion: 'test-double',
+        }),
+      );
+      const response = await bookmarkPost(authAs('user-1')).expect(201);
+      expect(response.body.id).toBe('bm-1');
+      expect(persistence.bookmark.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects a missing or non-published post before writing', async () => {
+      persistence.post.findFirst.mockResolvedValue(null);
+      await bookmarkPost(authAs('user-1')).expect(404);
+      expect(persistence.bookmark.create).not.toHaveBeenCalled();
+      expect(persistence.bookmark.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('removes an existing bookmark', async () => {
+      persistence.bookmark.findUnique.mockResolvedValue(bookmark);
+      persistence.bookmark.delete.mockResolvedValue(bookmark);
+      const response = await unbookmarkPost(authAs('user-1')).expect(200);
+      expect(response.body).toEqual({
+        message: 'Bookmark removed successfully.',
+      });
+      expect(persistence.bookmark.delete).toHaveBeenCalledWith({
+        where: { id: 'bm-1' },
+      });
+    });
+
+    it('treats an already-removed bookmark as a successful no-op', async () => {
+      persistence.bookmark.findUnique.mockResolvedValue(null);
+      const response = await unbookmarkPost(authAs('user-1')).expect(200);
+      expect(response.body).toEqual({
+        message: 'Bookmark removed successfully.',
+      });
+      expect(persistence.bookmark.delete).not.toHaveBeenCalled();
+    });
+
+    it('treats a concurrent removal race as a successful no-op', async () => {
+      persistence.bookmark.findUnique.mockResolvedValue(bookmark);
+      persistence.bookmark.delete.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('gone', {
+          code: 'P2025',
+          clientVersion: 'test-double',
+        }),
+      );
+      await unbookmarkPost(authAs('user-1')).expect(200);
+    });
+
+    it('lists only PUBLISHED bookmarks with stable projections', async () => {
+      persistence.bookmark.findMany.mockResolvedValue([
+        { ...bookmark, post: postRow },
+      ]);
+      const response = await request(app.getHttpServer())
+        .get('/bookmarks')
+        .auth(authAs('user-1'), { type: 'bearer' })
+        .expect(200);
+      expect(persistence.bookmark.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: 'user-1', post: { status: 'PUBLISHED' } },
+          orderBy: { createdAt: 'desc' },
+        }),
+      );
+      expect(response.body[0].post).toMatchObject({
+        id: 'post-1',
+        title: 'Bookmarked',
+        contentMedia: [],
+        coverImage: null,
+        author: { id: 'user-1', username: 'reader' },
+        categories: [],
+        tags: [],
+      });
+    });
+
+    it('scopes bookmark access to the authenticated user', async () => {
+      persistence.bookmark.findUnique.mockResolvedValue(null);
+      await unbookmarkPost(authAs('user-2')).expect(200);
+      expect(persistence.bookmark.findUnique).toHaveBeenCalledWith({
+        where: { userId_postId: { userId: 'user-2', postId: 'post-1' } },
+      });
+      persistence.bookmark.findMany.mockResolvedValue([]);
+      await request(app.getHttpServer())
+        .get('/bookmarks')
+        .auth(authAs('user-2'), { type: 'bearer' })
+        .expect(200);
+      expect(persistence.bookmark.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ userId: 'user-2' }) }),
+      );
+    });
+
+    it('requires authentication and documents the contracts', async () => {
+      await request(app.getHttpServer())
+        .post('/posts/post-1/bookmark')
+        .expect(401);
+      await request(app.getHttpServer())
+        .delete('/posts/post-1/bookmark')
+        .expect(401);
+      await request(app.getHttpServer()).get('/bookmarks').expect(401);
+      const api = (
+        await request(app.getHttpServer()).get('/api-json').expect(200)
+      ).body;
+      expect(api.paths['/posts/{postId}/bookmark'].post.responses['201']).toBeDefined();
+      expect(api.paths['/posts/{postId}/bookmark'].post.responses['404']).toBeDefined();
+      expect(api.paths['/posts/{postId}/bookmark'].delete.responses['200']).toBeDefined();
+      expect(api.paths['/bookmarks'].get.responses['200']).toBeDefined();
     });
   });
 

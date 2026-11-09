@@ -2,7 +2,7 @@ import {
   BookmarkResponseDto,
   BookmarkDetailResponseDto,
 } from './dto/bookmark-response.dto';
-import { MessageResponseDto } from '../common/dto/response.dto';
+import { ErrorResponseDto, MessageResponseDto } from '../common/dto/response.dto';
 import {
   Controller,
   Delete,
@@ -31,11 +31,25 @@ import {
 export class BookmarksController {
   constructor(private readonly bookmarksService: BookmarksService) {}
 
-  @ApiOperation({ summary: 'Bookmark a published post' })
+  @ApiOperation({
+    summary: 'Bookmark a published post',
+    description:
+      'Idempotent: repeating the request, or a concurrent duplicate, returns the existing bookmark row instead of creating a second one.',
+  })
   @ApiResponse({
     type: BookmarkResponseDto,
     status: 201,
-    description: 'Post bookmarked successfully.',
+    description: 'Post bookmarked successfully (or already bookmarked).',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 401,
+    description: 'Valid authenticated session required.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 404,
+    description: 'Post not found or not published.',
   })
   @Post('posts/:postId/bookmark')
   create(
@@ -45,11 +59,20 @@ export class BookmarksController {
     return this.bookmarksService.create(user.sub, postId);
   }
 
-  @ApiOperation({ summary: 'Remove a bookmark from a post' })
+  @ApiOperation({
+    summary: 'Remove a bookmark from a post',
+    description:
+      'Idempotent: removing an already-removed bookmark (including a concurrent repeat) still succeeds with 200.',
+  })
   @ApiResponse({
     type: MessageResponseDto,
     status: 200,
     description: 'Bookmark removed successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 401,
+    description: 'Valid authenticated session required.',
   })
   @Delete('posts/:postId/bookmark')
   remove(
@@ -59,11 +82,21 @@ export class BookmarksController {
     return this.bookmarksService.remove(user.sub, postId);
   }
 
-  @ApiOperation({ summary: 'Get bookmarks for the current user' })
+  @ApiOperation({
+    summary: 'Get bookmarks for the current user',
+    description:
+      'Returns only bookmarks whose post is still PUBLISHED, newest first, scoped to the authenticated user.',
+  })
   @ApiResponse({
     type: [BookmarkDetailResponseDto],
     status: 200,
-    description: 'Bookmarks returned successfully.',
+    description:
+      'Bookmarks returned successfully, each with a resolved post projection.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 401,
+    description: 'Valid authenticated session required.',
   })
   @Get('bookmarks')
   findMine(@CurrentUser() user: AccessTokenPayload) {
