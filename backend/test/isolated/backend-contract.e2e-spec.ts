@@ -2114,6 +2114,177 @@ describe('Backend contracts with isolated I/O', () => {
       expect(cloudinary.deleteImage).not.toHaveBeenCalled();
     });
 
+    describe('Avatar removal (Issue #52)', () => {
+      const avatarUser = {
+        id: 'user-1',
+        email: 'reader@example.com',
+        username: 'reader',
+        name: 'Reader',
+        avatarUrl: null as string | null,
+        createdAt: new Date('2020-01-01'),
+        updatedAt: new Date('2020-01-01'),
+        role: { name: 'USER' },
+      };
+      it('clears both avatar fields in one update and deletes unshared media', async () => {
+        persistence.user.findUnique.mockResolvedValue({
+          id: 'user-1',
+          avatarMedia: { id: imageId, publicId: image.publicId },
+        });
+        persistence.user.update.mockResolvedValue(avatarUser);
+        persistence.media.findUnique.mockResolvedValue(image);
+        persistence.media.delete.mockResolvedValue(image);
+        cloudinary.deleteImage.mockResolvedValue({ result: 'ok' });
+        const response = await request(app.getHttpServer())
+          .delete('/media/avatar')
+          .auth(auth('AUTHOR'), { type: 'bearer' })
+          .expect(200);
+        expect(response.body).toMatchObject({
+          id: 'user-1',
+          email: 'reader@example.com',
+          username: 'reader',
+          name: 'Reader',
+          avatarUrl: null,
+          role: { name: 'USER' },
+        });
+        expect(response.body).not.toHaveProperty('emailVerified');
+        expect(persistence.user.update).toHaveBeenCalledWith({
+          where: { id: 'user-1', avatarMediaId: imageId },
+          data: { avatarMediaId: null, avatarUrl: null },
+          select: expect.objectContaining({
+            id: true,
+            email: true,
+            username: true,
+            name: true,
+            avatarUrl: true,
+          }),
+        });
+        expect(cloudinary.deleteImage).toHaveBeenCalledWith(image.publicId);
+      });
+      it('is idempotent when no avatar is set and preserves other fields', async () => {
+        persistence.user.findUnique
+          .mockResolvedValueOnce({ id: 'user-1', avatarMedia: null })
+          .mockResolvedValueOnce(avatarUser);
+        const response = await request(app.getHttpServer())
+          .delete('/media/avatar')
+          .auth(auth('USER'), { type: 'bearer' })
+          .expect(200);
+        expect(response.body.name).toBe('Reader');
+        expect(response.body.avatarUrl).toBeNull();
+        // A no-avatar removal must not write, so a concurrent upload survives.
+        expect(persistence.user.update).not.toHaveBeenCalled();
+        expect(persistence.media.delete).not.toHaveBeenCalled();
+        expect(cloudinary.deleteImage).not.toHaveBeenCalled();
+      });
+      it('does not clear a concurrently replaced avatar', async () => {
+        persistence.user.findUnique
+          .mockResolvedValueOnce({
+            id: 'user-1',
+            avatarMedia: { id: imageId, publicId: image.publicId },
+          })
+          // The user still exists, so the failed condition is a real conflict.
+          .mockResolvedValueOnce({ id: 'user-1' });
+        persistence.user.update.mockRejectedValue(
+          new Prisma.PrismaClientKnownRequestError('no matching avatar', {
+            code: 'P2025',
+            clientVersion: 'test-double',
+          }),
+        );
+        await request(app.getHttpServer())
+          .delete('/media/avatar')
+          .auth(auth('AUTHOR'), { type: 'bearer' })
+          .expect(409);
+        expect(persistence.user.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: 'user-1', avatarMediaId: imageId },
+          }),
+        );
+        // The replacement's new media must be neither cleared nor deleted.
+        expect(persistence.media.delete).not.toHaveBeenCalled();
+        expect(cloudinary.deleteImage).not.toHaveBeenCalled();
+      });
+      it('returns 404 when the user disappears during removal', async () => {
+        persistence.user.findUnique
+          .mockResolvedValueOnce({
+            id: 'user-1',
+            avatarMedia: { id: imageId, publicId: image.publicId },
+          })
+          .mockResolvedValueOnce(null);
+        persistence.user.update.mockRejectedValue(
+          new Prisma.PrismaClientKnownRequestError('no user', {
+            code: 'P2025',
+            clientVersion: 'test-double',
+          }),
+        );
+        await request(app.getHttpServer())
+          .delete('/media/avatar')
+          .auth(auth('AUTHOR'), { type: 'bearer' })
+          .expect(404);
+        expect(persistence.media.delete).not.toHaveBeenCalled();
+      });
+      it('requires authentication and allows any authenticated role', async () => {
+        await request(app.getHttpServer()).delete('/media/avatar').expect(401);
+        expect(persistence.user.findUnique).not.toHaveBeenCalled();
+        persistence.user.findUnique.mockResolvedValue({
+          id: 'user-1',
+          avatarMedia: { id: imageId, publicId: image.publicId },
+        });
+        persistence.user.update.mockResolvedValue(avatarUser);
+        persistence.media.findUnique.mockResolvedValue(image);
+        persistence.media.delete.mockResolvedValue(image);
+        await request(app.getHttpServer())
+          .delete('/media/avatar')
+          .auth(auth('USER'), { type: 'bearer' })
+          .expect(200);
+      });
+      it('retains avatar media referenced by an article body or cover', async () => {
+        persistence.user.findUnique.mockResolvedValue({
+          id: 'user-1',
+          avatarMedia: { id: imageId, publicId: image.publicId },
+        });
+        persistence.user.update.mockResolvedValue(avatarUser);
+        persistence.media.findUnique.mockResolvedValue(image);
+        persistence.media.delete.mockRejectedValue(
+          new Prisma.PrismaClientKnownRequestError('referenced', {
+            code: 'P2003',
+            clientVersion: 'test-double',
+          }),
+        );
+        const response = await request(app.getHttpServer())
+          .delete('/media/avatar')
+          .auth(auth('AUTHOR'), { type: 'bearer' })
+          .expect(200);
+        expect(response.body.avatarUrl).toBeNull();
+        expect(cloudinary.deleteImage).not.toHaveBeenCalled();
+      });
+      it('keeps the avatar removed when remote cleanup fails', async () => {
+        persistence.user.findUnique.mockResolvedValue({
+          id: 'user-1',
+          avatarMedia: { id: imageId, publicId: image.publicId },
+        });
+        persistence.user.update.mockResolvedValue(avatarUser);
+        persistence.media.findUnique.mockResolvedValue(image);
+        persistence.media.delete.mockResolvedValue(image);
+        cloudinary.deleteImage.mockRejectedValue(new Error('Cloudinary timeout'));
+        const response = await request(app.getHttpServer())
+          .delete('/media/avatar')
+          .auth(auth('AUTHOR'), { type: 'bearer' })
+          .expect(200);
+        expect(response.body.avatarUrl).toBeNull();
+        expect(cloudinary.deleteImage).toHaveBeenCalledWith(image.publicId);
+      });
+      it('documents the removal contract', async () => {
+        const response = await request(app.getHttpServer())
+          .get('/api-json')
+          .expect(200);
+        const operation = response.body.paths['/media/avatar'].delete;
+        expect(operation.responses['200']).toBeDefined();
+        expect(operation.responses['401']).toBeDefined();
+        expect(operation.responses['404']).toBeDefined();
+        expect(operation.responses['409']).toBeDefined();
+        expect(operation.security).toEqual([{ 'access-token': [] }]);
+      });
+    });
+
     it('round-trips canonical JSON through creation, private detail, public detail and edit while deriving search text', async () => {
       articleStore();
       const token = auth('AUTHOR');

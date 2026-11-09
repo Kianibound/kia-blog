@@ -95,6 +95,39 @@ export class MediaController {
   }
 
   @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Remove the current user avatar',
+    description:
+      'Clears avatarMediaId and avatarUrl atomically and returns the safe user projection. Idempotent when no avatar is set; article-shared media is never deleted.',
+  })
+  @ApiResponse({
+    type: AvatarResponseDto,
+    status: 200,
+    description: 'Avatar removed successfully (idempotent when absent).',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 401,
+    description: 'Valid authenticated session required.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 404,
+    description: 'User not found.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 409,
+    description:
+      'The avatar changed concurrently; reload and retry the removal.',
+  })
+  @Delete('avatar')
+  @UseGuards(JwtAuthGuard)
+  removeAvatar(@CurrentUser() user: AccessTokenPayload) {
+    return this.mediaService.removeAvatar(user.sub);
+  }
+
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Delete an uploaded media item' })
   @ApiResponse({
     type: MessageResponseDto,
