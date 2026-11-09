@@ -29,6 +29,8 @@ export type PostMinAggregateOutputType = {
   title: string | null
   slug: string | null
   content: string | null
+  coverMediaId: string | null
+  coverAlt: string | null
   status: $Enums.PostStatus | null
   publishedAt: Date | null
   authorId: string | null
@@ -41,6 +43,8 @@ export type PostMaxAggregateOutputType = {
   title: string | null
   slug: string | null
   content: string | null
+  coverMediaId: string | null
+  coverAlt: string | null
   status: $Enums.PostStatus | null
   publishedAt: Date | null
   authorId: string | null
@@ -54,6 +58,8 @@ export type PostCountAggregateOutputType = {
   slug: number
   content: number
   contentDocument: number
+  coverMediaId: number
+  coverAlt: number
   status: number
   publishedAt: number
   authorId: number
@@ -68,6 +74,8 @@ export type PostMinAggregateInputType = {
   title?: true
   slug?: true
   content?: true
+  coverMediaId?: true
+  coverAlt?: true
   status?: true
   publishedAt?: true
   authorId?: true
@@ -80,6 +88,8 @@ export type PostMaxAggregateInputType = {
   title?: true
   slug?: true
   content?: true
+  coverMediaId?: true
+  coverAlt?: true
   status?: true
   publishedAt?: true
   authorId?: true
@@ -93,6 +103,8 @@ export type PostCountAggregateInputType = {
   slug?: true
   content?: true
   contentDocument?: true
+  coverMediaId?: true
+  coverAlt?: true
   status?: true
   publishedAt?: true
   authorId?: true
@@ -179,6 +191,8 @@ export type PostGroupByOutputType = {
   slug: string
   content: string
   contentDocument: runtime.JsonValue | null
+  coverMediaId: string | null
+  coverAlt: string | null
   status: $Enums.PostStatus
   publishedAt: Date | null
   authorId: string
@@ -213,12 +227,15 @@ export type PostWhereInput = {
   slug?: Prisma.StringFilter<"Post"> | string
   content?: Prisma.StringFilter<"Post"> | string
   contentDocument?: Prisma.JsonNullableFilter<"Post">
+  coverMediaId?: Prisma.StringNullableFilter<"Post"> | string | null
+  coverAlt?: Prisma.StringNullableFilter<"Post"> | string | null
   status?: Prisma.EnumPostStatusFilter<"Post"> | $Enums.PostStatus
   publishedAt?: Prisma.DateTimeNullableFilter<"Post"> | Date | string | null
   authorId?: Prisma.StringFilter<"Post"> | string
   createdAt?: Prisma.DateTimeFilter<"Post"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Post"> | Date | string
   bodyMedia?: Prisma.PostMediaListRelationFilter
+  coverMedia?: Prisma.XOR<Prisma.MediaNullableScalarRelationFilter, Prisma.MediaWhereInput> | null
   author?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.UserWhereInput>
   categories?: Prisma.CategoryListRelationFilter
   tags?: Prisma.TagListRelationFilter
@@ -233,12 +250,15 @@ export type PostOrderByWithRelationInput = {
   slug?: Prisma.SortOrder
   content?: Prisma.SortOrder
   contentDocument?: Prisma.SortOrderInput | Prisma.SortOrder
+  coverMediaId?: Prisma.SortOrderInput | Prisma.SortOrder
+  coverAlt?: Prisma.SortOrderInput | Prisma.SortOrder
   status?: Prisma.SortOrder
   publishedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   authorId?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   bodyMedia?: Prisma.PostMediaOrderByRelationAggregateInput
+  coverMedia?: Prisma.MediaOrderByWithRelationInput
   author?: Prisma.UserOrderByWithRelationInput
   categories?: Prisma.CategoryOrderByRelationAggregateInput
   tags?: Prisma.TagOrderByRelationAggregateInput
@@ -256,12 +276,15 @@ export type PostWhereUniqueInput = Prisma.AtLeast<{
   title?: Prisma.StringFilter<"Post"> | string
   content?: Prisma.StringFilter<"Post"> | string
   contentDocument?: Prisma.JsonNullableFilter<"Post">
+  coverMediaId?: Prisma.StringNullableFilter<"Post"> | string | null
+  coverAlt?: Prisma.StringNullableFilter<"Post"> | string | null
   status?: Prisma.EnumPostStatusFilter<"Post"> | $Enums.PostStatus
   publishedAt?: Prisma.DateTimeNullableFilter<"Post"> | Date | string | null
   authorId?: Prisma.StringFilter<"Post"> | string
   createdAt?: Prisma.DateTimeFilter<"Post"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Post"> | Date | string
   bodyMedia?: Prisma.PostMediaListRelationFilter
+  coverMedia?: Prisma.XOR<Prisma.MediaNullableScalarRelationFilter, Prisma.MediaWhereInput> | null
   author?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.UserWhereInput>
   categories?: Prisma.CategoryListRelationFilter
   tags?: Prisma.TagListRelationFilter
@@ -276,6 +299,8 @@ export type PostOrderByWithAggregationInput = {
   slug?: Prisma.SortOrder
   content?: Prisma.SortOrder
   contentDocument?: Prisma.SortOrderInput | Prisma.SortOrder
+  coverMediaId?: Prisma.SortOrderInput | Prisma.SortOrder
+  coverAlt?: Prisma.SortOrderInput | Prisma.SortOrder
   status?: Prisma.SortOrder
   publishedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   authorId?: Prisma.SortOrder
@@ -295,6 +320,8 @@ export type PostScalarWhereWithAggregatesInput = {
   slug?: Prisma.StringWithAggregatesFilter<"Post"> | string
   content?: Prisma.StringWithAggregatesFilter<"Post"> | string
   contentDocument?: Prisma.JsonNullableWithAggregatesFilter<"Post">
+  coverMediaId?: Prisma.StringNullableWithAggregatesFilter<"Post"> | string | null
+  coverAlt?: Prisma.StringNullableWithAggregatesFilter<"Post"> | string | null
   status?: Prisma.EnumPostStatusWithAggregatesFilter<"Post"> | $Enums.PostStatus
   publishedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Post"> | Date | string | null
   authorId?: Prisma.StringWithAggregatesFilter<"Post"> | string
@@ -308,11 +335,13 @@ export type PostCreateInput = {
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   bodyMedia?: Prisma.PostMediaCreateNestedManyWithoutPostInput
+  coverMedia?: Prisma.MediaCreateNestedOneWithoutCoverOfInput
   author: Prisma.UserCreateNestedOneWithoutPostsInput
   categories?: Prisma.CategoryCreateNestedManyWithoutPostsInput
   tags?: Prisma.TagCreateNestedManyWithoutPostsInput
@@ -327,6 +356,8 @@ export type PostUncheckedCreateInput = {
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: string | null
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   authorId: string
@@ -346,11 +377,13 @@ export type PostUpdateInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   bodyMedia?: Prisma.PostMediaUpdateManyWithoutPostNestedInput
+  coverMedia?: Prisma.MediaUpdateOneWithoutCoverOfNestedInput
   author?: Prisma.UserUpdateOneRequiredWithoutPostsNestedInput
   categories?: Prisma.CategoryUpdateManyWithoutPostsNestedInput
   tags?: Prisma.TagUpdateManyWithoutPostsNestedInput
@@ -365,6 +398,8 @@ export type PostUncheckedUpdateInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   authorId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -384,6 +419,8 @@ export type PostCreateManyInput = {
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: string | null
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   authorId: string
@@ -397,6 +434,7 @@ export type PostUpdateManyMutationInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -409,6 +447,8 @@ export type PostUncheckedUpdateManyInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   authorId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -432,6 +472,8 @@ export type PostCountOrderByAggregateInput = {
   slug?: Prisma.SortOrder
   content?: Prisma.SortOrder
   contentDocument?: Prisma.SortOrder
+  coverMediaId?: Prisma.SortOrder
+  coverAlt?: Prisma.SortOrder
   status?: Prisma.SortOrder
   publishedAt?: Prisma.SortOrder
   authorId?: Prisma.SortOrder
@@ -444,6 +486,8 @@ export type PostMaxOrderByAggregateInput = {
   title?: Prisma.SortOrder
   slug?: Prisma.SortOrder
   content?: Prisma.SortOrder
+  coverMediaId?: Prisma.SortOrder
+  coverAlt?: Prisma.SortOrder
   status?: Prisma.SortOrder
   publishedAt?: Prisma.SortOrder
   authorId?: Prisma.SortOrder
@@ -456,6 +500,8 @@ export type PostMinOrderByAggregateInput = {
   title?: Prisma.SortOrder
   slug?: Prisma.SortOrder
   content?: Prisma.SortOrder
+  coverMediaId?: Prisma.SortOrder
+  coverAlt?: Prisma.SortOrder
   status?: Prisma.SortOrder
   publishedAt?: Prisma.SortOrder
   authorId?: Prisma.SortOrder
@@ -632,6 +678,48 @@ export type PostUpdateOneRequiredWithoutPostLikesNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.PostUpdateToOneWithWhereWithoutPostLikesInput, Prisma.PostUpdateWithoutPostLikesInput>, Prisma.PostUncheckedUpdateWithoutPostLikesInput>
 }
 
+export type PostCreateNestedManyWithoutCoverMediaInput = {
+  create?: Prisma.XOR<Prisma.PostCreateWithoutCoverMediaInput, Prisma.PostUncheckedCreateWithoutCoverMediaInput> | Prisma.PostCreateWithoutCoverMediaInput[] | Prisma.PostUncheckedCreateWithoutCoverMediaInput[]
+  connectOrCreate?: Prisma.PostCreateOrConnectWithoutCoverMediaInput | Prisma.PostCreateOrConnectWithoutCoverMediaInput[]
+  createMany?: Prisma.PostCreateManyCoverMediaInputEnvelope
+  connect?: Prisma.PostWhereUniqueInput | Prisma.PostWhereUniqueInput[]
+}
+
+export type PostUncheckedCreateNestedManyWithoutCoverMediaInput = {
+  create?: Prisma.XOR<Prisma.PostCreateWithoutCoverMediaInput, Prisma.PostUncheckedCreateWithoutCoverMediaInput> | Prisma.PostCreateWithoutCoverMediaInput[] | Prisma.PostUncheckedCreateWithoutCoverMediaInput[]
+  connectOrCreate?: Prisma.PostCreateOrConnectWithoutCoverMediaInput | Prisma.PostCreateOrConnectWithoutCoverMediaInput[]
+  createMany?: Prisma.PostCreateManyCoverMediaInputEnvelope
+  connect?: Prisma.PostWhereUniqueInput | Prisma.PostWhereUniqueInput[]
+}
+
+export type PostUpdateManyWithoutCoverMediaNestedInput = {
+  create?: Prisma.XOR<Prisma.PostCreateWithoutCoverMediaInput, Prisma.PostUncheckedCreateWithoutCoverMediaInput> | Prisma.PostCreateWithoutCoverMediaInput[] | Prisma.PostUncheckedCreateWithoutCoverMediaInput[]
+  connectOrCreate?: Prisma.PostCreateOrConnectWithoutCoverMediaInput | Prisma.PostCreateOrConnectWithoutCoverMediaInput[]
+  upsert?: Prisma.PostUpsertWithWhereUniqueWithoutCoverMediaInput | Prisma.PostUpsertWithWhereUniqueWithoutCoverMediaInput[]
+  createMany?: Prisma.PostCreateManyCoverMediaInputEnvelope
+  set?: Prisma.PostWhereUniqueInput | Prisma.PostWhereUniqueInput[]
+  disconnect?: Prisma.PostWhereUniqueInput | Prisma.PostWhereUniqueInput[]
+  delete?: Prisma.PostWhereUniqueInput | Prisma.PostWhereUniqueInput[]
+  connect?: Prisma.PostWhereUniqueInput | Prisma.PostWhereUniqueInput[]
+  update?: Prisma.PostUpdateWithWhereUniqueWithoutCoverMediaInput | Prisma.PostUpdateWithWhereUniqueWithoutCoverMediaInput[]
+  updateMany?: Prisma.PostUpdateManyWithWhereWithoutCoverMediaInput | Prisma.PostUpdateManyWithWhereWithoutCoverMediaInput[]
+  deleteMany?: Prisma.PostScalarWhereInput | Prisma.PostScalarWhereInput[]
+}
+
+export type PostUncheckedUpdateManyWithoutCoverMediaNestedInput = {
+  create?: Prisma.XOR<Prisma.PostCreateWithoutCoverMediaInput, Prisma.PostUncheckedCreateWithoutCoverMediaInput> | Prisma.PostCreateWithoutCoverMediaInput[] | Prisma.PostUncheckedCreateWithoutCoverMediaInput[]
+  connectOrCreate?: Prisma.PostCreateOrConnectWithoutCoverMediaInput | Prisma.PostCreateOrConnectWithoutCoverMediaInput[]
+  upsert?: Prisma.PostUpsertWithWhereUniqueWithoutCoverMediaInput | Prisma.PostUpsertWithWhereUniqueWithoutCoverMediaInput[]
+  createMany?: Prisma.PostCreateManyCoverMediaInputEnvelope
+  set?: Prisma.PostWhereUniqueInput | Prisma.PostWhereUniqueInput[]
+  disconnect?: Prisma.PostWhereUniqueInput | Prisma.PostWhereUniqueInput[]
+  delete?: Prisma.PostWhereUniqueInput | Prisma.PostWhereUniqueInput[]
+  connect?: Prisma.PostWhereUniqueInput | Prisma.PostWhereUniqueInput[]
+  update?: Prisma.PostUpdateWithWhereUniqueWithoutCoverMediaInput | Prisma.PostUpdateWithWhereUniqueWithoutCoverMediaInput[]
+  updateMany?: Prisma.PostUpdateManyWithWhereWithoutCoverMediaInput | Prisma.PostUpdateManyWithWhereWithoutCoverMediaInput[]
+  deleteMany?: Prisma.PostScalarWhereInput | Prisma.PostScalarWhereInput[]
+}
+
 export type PostCreateNestedOneWithoutBodyMediaInput = {
   create?: Prisma.XOR<Prisma.PostCreateWithoutBodyMediaInput, Prisma.PostUncheckedCreateWithoutBodyMediaInput>
   connectOrCreate?: Prisma.PostCreateOrConnectWithoutBodyMediaInput
@@ -652,11 +740,13 @@ export type PostCreateWithoutAuthorInput = {
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   bodyMedia?: Prisma.PostMediaCreateNestedManyWithoutPostInput
+  coverMedia?: Prisma.MediaCreateNestedOneWithoutCoverOfInput
   categories?: Prisma.CategoryCreateNestedManyWithoutPostsInput
   tags?: Prisma.TagCreateNestedManyWithoutPostsInput
   comments?: Prisma.CommentCreateNestedManyWithoutPostInput
@@ -670,6 +760,8 @@ export type PostUncheckedCreateWithoutAuthorInput = {
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: string | null
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   createdAt?: Date | string
@@ -717,6 +809,8 @@ export type PostScalarWhereInput = {
   slug?: Prisma.StringFilter<"Post"> | string
   content?: Prisma.StringFilter<"Post"> | string
   contentDocument?: Prisma.JsonNullableFilter<"Post">
+  coverMediaId?: Prisma.StringNullableFilter<"Post"> | string | null
+  coverAlt?: Prisma.StringNullableFilter<"Post"> | string | null
   status?: Prisma.EnumPostStatusFilter<"Post"> | $Enums.PostStatus
   publishedAt?: Prisma.DateTimeNullableFilter<"Post"> | Date | string | null
   authorId?: Prisma.StringFilter<"Post"> | string
@@ -730,11 +824,13 @@ export type PostCreateWithoutCategoriesInput = {
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   bodyMedia?: Prisma.PostMediaCreateNestedManyWithoutPostInput
+  coverMedia?: Prisma.MediaCreateNestedOneWithoutCoverOfInput
   author: Prisma.UserCreateNestedOneWithoutPostsInput
   tags?: Prisma.TagCreateNestedManyWithoutPostsInput
   comments?: Prisma.CommentCreateNestedManyWithoutPostInput
@@ -748,6 +844,8 @@ export type PostUncheckedCreateWithoutCategoriesInput = {
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: string | null
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   authorId: string
@@ -787,11 +885,13 @@ export type PostCreateWithoutTagsInput = {
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   bodyMedia?: Prisma.PostMediaCreateNestedManyWithoutPostInput
+  coverMedia?: Prisma.MediaCreateNestedOneWithoutCoverOfInput
   author: Prisma.UserCreateNestedOneWithoutPostsInput
   categories?: Prisma.CategoryCreateNestedManyWithoutPostsInput
   comments?: Prisma.CommentCreateNestedManyWithoutPostInput
@@ -805,6 +905,8 @@ export type PostUncheckedCreateWithoutTagsInput = {
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: string | null
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   authorId: string
@@ -844,11 +946,13 @@ export type PostCreateWithoutCommentsInput = {
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   bodyMedia?: Prisma.PostMediaCreateNestedManyWithoutPostInput
+  coverMedia?: Prisma.MediaCreateNestedOneWithoutCoverOfInput
   author: Prisma.UserCreateNestedOneWithoutPostsInput
   categories?: Prisma.CategoryCreateNestedManyWithoutPostsInput
   tags?: Prisma.TagCreateNestedManyWithoutPostsInput
@@ -862,6 +966,8 @@ export type PostUncheckedCreateWithoutCommentsInput = {
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: string | null
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   authorId: string
@@ -896,11 +1002,13 @@ export type PostUpdateWithoutCommentsInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   bodyMedia?: Prisma.PostMediaUpdateManyWithoutPostNestedInput
+  coverMedia?: Prisma.MediaUpdateOneWithoutCoverOfNestedInput
   author?: Prisma.UserUpdateOneRequiredWithoutPostsNestedInput
   categories?: Prisma.CategoryUpdateManyWithoutPostsNestedInput
   tags?: Prisma.TagUpdateManyWithoutPostsNestedInput
@@ -914,6 +1022,8 @@ export type PostUncheckedUpdateWithoutCommentsInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   authorId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -932,11 +1042,13 @@ export type PostCreateWithoutBookmarksInput = {
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   bodyMedia?: Prisma.PostMediaCreateNestedManyWithoutPostInput
+  coverMedia?: Prisma.MediaCreateNestedOneWithoutCoverOfInput
   author: Prisma.UserCreateNestedOneWithoutPostsInput
   categories?: Prisma.CategoryCreateNestedManyWithoutPostsInput
   tags?: Prisma.TagCreateNestedManyWithoutPostsInput
@@ -950,6 +1062,8 @@ export type PostUncheckedCreateWithoutBookmarksInput = {
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: string | null
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   authorId: string
@@ -984,11 +1098,13 @@ export type PostUpdateWithoutBookmarksInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   bodyMedia?: Prisma.PostMediaUpdateManyWithoutPostNestedInput
+  coverMedia?: Prisma.MediaUpdateOneWithoutCoverOfNestedInput
   author?: Prisma.UserUpdateOneRequiredWithoutPostsNestedInput
   categories?: Prisma.CategoryUpdateManyWithoutPostsNestedInput
   tags?: Prisma.TagUpdateManyWithoutPostsNestedInput
@@ -1002,6 +1118,8 @@ export type PostUncheckedUpdateWithoutBookmarksInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   authorId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -1020,11 +1138,13 @@ export type PostCreateWithoutPostLikesInput = {
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   bodyMedia?: Prisma.PostMediaCreateNestedManyWithoutPostInput
+  coverMedia?: Prisma.MediaCreateNestedOneWithoutCoverOfInput
   author: Prisma.UserCreateNestedOneWithoutPostsInput
   categories?: Prisma.CategoryCreateNestedManyWithoutPostsInput
   tags?: Prisma.TagCreateNestedManyWithoutPostsInput
@@ -1038,6 +1158,8 @@ export type PostUncheckedCreateWithoutPostLikesInput = {
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: string | null
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   authorId: string
@@ -1072,11 +1194,13 @@ export type PostUpdateWithoutPostLikesInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   bodyMedia?: Prisma.PostMediaUpdateManyWithoutPostNestedInput
+  coverMedia?: Prisma.MediaUpdateOneWithoutCoverOfNestedInput
   author?: Prisma.UserUpdateOneRequiredWithoutPostsNestedInput
   categories?: Prisma.CategoryUpdateManyWithoutPostsNestedInput
   tags?: Prisma.TagUpdateManyWithoutPostsNestedInput
@@ -1090,6 +1214,8 @@ export type PostUncheckedUpdateWithoutPostLikesInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   authorId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -1102,16 +1228,84 @@ export type PostUncheckedUpdateWithoutPostLikesInput = {
   bookmarks?: Prisma.BookmarkUncheckedUpdateManyWithoutPostNestedInput
 }
 
+export type PostCreateWithoutCoverMediaInput = {
+  id?: string
+  title: string
+  slug: string
+  content: string
+  contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: string | null
+  status?: $Enums.PostStatus
+  publishedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  bodyMedia?: Prisma.PostMediaCreateNestedManyWithoutPostInput
+  author: Prisma.UserCreateNestedOneWithoutPostsInput
+  categories?: Prisma.CategoryCreateNestedManyWithoutPostsInput
+  tags?: Prisma.TagCreateNestedManyWithoutPostsInput
+  comments?: Prisma.CommentCreateNestedManyWithoutPostInput
+  bookmarks?: Prisma.BookmarkCreateNestedManyWithoutPostInput
+  postLikes?: Prisma.PostLikeCreateNestedManyWithoutPostInput
+}
+
+export type PostUncheckedCreateWithoutCoverMediaInput = {
+  id?: string
+  title: string
+  slug: string
+  content: string
+  contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: string | null
+  status?: $Enums.PostStatus
+  publishedAt?: Date | string | null
+  authorId: string
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  bodyMedia?: Prisma.PostMediaUncheckedCreateNestedManyWithoutPostInput
+  categories?: Prisma.CategoryUncheckedCreateNestedManyWithoutPostsInput
+  tags?: Prisma.TagUncheckedCreateNestedManyWithoutPostsInput
+  comments?: Prisma.CommentUncheckedCreateNestedManyWithoutPostInput
+  bookmarks?: Prisma.BookmarkUncheckedCreateNestedManyWithoutPostInput
+  postLikes?: Prisma.PostLikeUncheckedCreateNestedManyWithoutPostInput
+}
+
+export type PostCreateOrConnectWithoutCoverMediaInput = {
+  where: Prisma.PostWhereUniqueInput
+  create: Prisma.XOR<Prisma.PostCreateWithoutCoverMediaInput, Prisma.PostUncheckedCreateWithoutCoverMediaInput>
+}
+
+export type PostCreateManyCoverMediaInputEnvelope = {
+  data: Prisma.PostCreateManyCoverMediaInput | Prisma.PostCreateManyCoverMediaInput[]
+  skipDuplicates?: boolean
+}
+
+export type PostUpsertWithWhereUniqueWithoutCoverMediaInput = {
+  where: Prisma.PostWhereUniqueInput
+  update: Prisma.XOR<Prisma.PostUpdateWithoutCoverMediaInput, Prisma.PostUncheckedUpdateWithoutCoverMediaInput>
+  create: Prisma.XOR<Prisma.PostCreateWithoutCoverMediaInput, Prisma.PostUncheckedCreateWithoutCoverMediaInput>
+}
+
+export type PostUpdateWithWhereUniqueWithoutCoverMediaInput = {
+  where: Prisma.PostWhereUniqueInput
+  data: Prisma.XOR<Prisma.PostUpdateWithoutCoverMediaInput, Prisma.PostUncheckedUpdateWithoutCoverMediaInput>
+}
+
+export type PostUpdateManyWithWhereWithoutCoverMediaInput = {
+  where: Prisma.PostScalarWhereInput
+  data: Prisma.XOR<Prisma.PostUpdateManyMutationInput, Prisma.PostUncheckedUpdateManyWithoutCoverMediaInput>
+}
+
 export type PostCreateWithoutBodyMediaInput = {
   id?: string
   title: string
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  coverMedia?: Prisma.MediaCreateNestedOneWithoutCoverOfInput
   author: Prisma.UserCreateNestedOneWithoutPostsInput
   categories?: Prisma.CategoryCreateNestedManyWithoutPostsInput
   tags?: Prisma.TagCreateNestedManyWithoutPostsInput
@@ -1126,6 +1320,8 @@ export type PostUncheckedCreateWithoutBodyMediaInput = {
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: string | null
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   authorId: string
@@ -1160,10 +1356,12 @@ export type PostUpdateWithoutBodyMediaInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  coverMedia?: Prisma.MediaUpdateOneWithoutCoverOfNestedInput
   author?: Prisma.UserUpdateOneRequiredWithoutPostsNestedInput
   categories?: Prisma.CategoryUpdateManyWithoutPostsNestedInput
   tags?: Prisma.TagUpdateManyWithoutPostsNestedInput
@@ -1178,6 +1376,8 @@ export type PostUncheckedUpdateWithoutBodyMediaInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   authorId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -1196,6 +1396,8 @@ export type PostCreateManyAuthorInput = {
   slug: string
   content: string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: string | null
+  coverAlt?: string | null
   status?: $Enums.PostStatus
   publishedAt?: Date | string | null
   createdAt?: Date | string
@@ -1208,11 +1410,13 @@ export type PostUpdateWithoutAuthorInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   bodyMedia?: Prisma.PostMediaUpdateManyWithoutPostNestedInput
+  coverMedia?: Prisma.MediaUpdateOneWithoutCoverOfNestedInput
   categories?: Prisma.CategoryUpdateManyWithoutPostsNestedInput
   tags?: Prisma.TagUpdateManyWithoutPostsNestedInput
   comments?: Prisma.CommentUpdateManyWithoutPostNestedInput
@@ -1226,6 +1430,8 @@ export type PostUncheckedUpdateWithoutAuthorInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -1244,6 +1450,8 @@ export type PostUncheckedUpdateManyWithoutAuthorInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -1256,11 +1464,13 @@ export type PostUpdateWithoutCategoriesInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   bodyMedia?: Prisma.PostMediaUpdateManyWithoutPostNestedInput
+  coverMedia?: Prisma.MediaUpdateOneWithoutCoverOfNestedInput
   author?: Prisma.UserUpdateOneRequiredWithoutPostsNestedInput
   tags?: Prisma.TagUpdateManyWithoutPostsNestedInput
   comments?: Prisma.CommentUpdateManyWithoutPostNestedInput
@@ -1274,6 +1484,8 @@ export type PostUncheckedUpdateWithoutCategoriesInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   authorId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -1292,6 +1504,8 @@ export type PostUncheckedUpdateManyWithoutCategoriesInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   authorId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -1305,11 +1519,13 @@ export type PostUpdateWithoutTagsInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   bodyMedia?: Prisma.PostMediaUpdateManyWithoutPostNestedInput
+  coverMedia?: Prisma.MediaUpdateOneWithoutCoverOfNestedInput
   author?: Prisma.UserUpdateOneRequiredWithoutPostsNestedInput
   categories?: Prisma.CategoryUpdateManyWithoutPostsNestedInput
   comments?: Prisma.CommentUpdateManyWithoutPostNestedInput
@@ -1323,6 +1539,8 @@ export type PostUncheckedUpdateWithoutTagsInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   authorId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -1341,6 +1559,76 @@ export type PostUncheckedUpdateManyWithoutTagsInput = {
   slug?: Prisma.StringFieldUpdateOperationsInput | string
   content?: Prisma.StringFieldUpdateOperationsInput | string
   contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverMediaId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
+  publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  authorId?: Prisma.StringFieldUpdateOperationsInput | string
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+}
+
+export type PostCreateManyCoverMediaInput = {
+  id?: string
+  title: string
+  slug: string
+  content: string
+  contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: string | null
+  status?: $Enums.PostStatus
+  publishedAt?: Date | string | null
+  authorId: string
+  createdAt?: Date | string
+  updatedAt?: Date | string
+}
+
+export type PostUpdateWithoutCoverMediaInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  title?: Prisma.StringFieldUpdateOperationsInput | string
+  slug?: Prisma.StringFieldUpdateOperationsInput | string
+  content?: Prisma.StringFieldUpdateOperationsInput | string
+  contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
+  publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  bodyMedia?: Prisma.PostMediaUpdateManyWithoutPostNestedInput
+  author?: Prisma.UserUpdateOneRequiredWithoutPostsNestedInput
+  categories?: Prisma.CategoryUpdateManyWithoutPostsNestedInput
+  tags?: Prisma.TagUpdateManyWithoutPostsNestedInput
+  comments?: Prisma.CommentUpdateManyWithoutPostNestedInput
+  bookmarks?: Prisma.BookmarkUpdateManyWithoutPostNestedInput
+  postLikes?: Prisma.PostLikeUpdateManyWithoutPostNestedInput
+}
+
+export type PostUncheckedUpdateWithoutCoverMediaInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  title?: Prisma.StringFieldUpdateOperationsInput | string
+  slug?: Prisma.StringFieldUpdateOperationsInput | string
+  content?: Prisma.StringFieldUpdateOperationsInput | string
+  contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
+  publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  authorId?: Prisma.StringFieldUpdateOperationsInput | string
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  bodyMedia?: Prisma.PostMediaUncheckedUpdateManyWithoutPostNestedInput
+  categories?: Prisma.CategoryUncheckedUpdateManyWithoutPostsNestedInput
+  tags?: Prisma.TagUncheckedUpdateManyWithoutPostsNestedInput
+  comments?: Prisma.CommentUncheckedUpdateManyWithoutPostNestedInput
+  bookmarks?: Prisma.BookmarkUncheckedUpdateManyWithoutPostNestedInput
+  postLikes?: Prisma.PostLikeUncheckedUpdateManyWithoutPostNestedInput
+}
+
+export type PostUncheckedUpdateManyWithoutCoverMediaInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  title?: Prisma.StringFieldUpdateOperationsInput | string
+  slug?: Prisma.StringFieldUpdateOperationsInput | string
+  content?: Prisma.StringFieldUpdateOperationsInput | string
+  contentDocument?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  coverAlt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.EnumPostStatusFieldUpdateOperationsInput | $Enums.PostStatus
   publishedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   authorId?: Prisma.StringFieldUpdateOperationsInput | string
@@ -1430,12 +1718,15 @@ export type PostSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   slug?: boolean
   content?: boolean
   contentDocument?: boolean
+  coverMediaId?: boolean
+  coverAlt?: boolean
   status?: boolean
   publishedAt?: boolean
   authorId?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   bodyMedia?: boolean | Prisma.Post$bodyMediaArgs<ExtArgs>
+  coverMedia?: boolean | Prisma.Post$coverMediaArgs<ExtArgs>
   author?: boolean | Prisma.UserDefaultArgs<ExtArgs>
   categories?: boolean | Prisma.Post$categoriesArgs<ExtArgs>
   tags?: boolean | Prisma.Post$tagsArgs<ExtArgs>
@@ -1451,11 +1742,14 @@ export type PostSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensio
   slug?: boolean
   content?: boolean
   contentDocument?: boolean
+  coverMediaId?: boolean
+  coverAlt?: boolean
   status?: boolean
   publishedAt?: boolean
   authorId?: boolean
   createdAt?: boolean
   updatedAt?: boolean
+  coverMedia?: boolean | Prisma.Post$coverMediaArgs<ExtArgs>
   author?: boolean | Prisma.UserDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["post"]>
 
@@ -1465,11 +1759,14 @@ export type PostSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensio
   slug?: boolean
   content?: boolean
   contentDocument?: boolean
+  coverMediaId?: boolean
+  coverAlt?: boolean
   status?: boolean
   publishedAt?: boolean
   authorId?: boolean
   createdAt?: boolean
   updatedAt?: boolean
+  coverMedia?: boolean | Prisma.Post$coverMediaArgs<ExtArgs>
   author?: boolean | Prisma.UserDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["post"]>
 
@@ -1479,6 +1776,8 @@ export type PostSelectScalar = {
   slug?: boolean
   content?: boolean
   contentDocument?: boolean
+  coverMediaId?: boolean
+  coverAlt?: boolean
   status?: boolean
   publishedAt?: boolean
   authorId?: boolean
@@ -1486,9 +1785,10 @@ export type PostSelectScalar = {
   updatedAt?: boolean
 }
 
-export type PostOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "title" | "slug" | "content" | "contentDocument" | "status" | "publishedAt" | "authorId" | "createdAt" | "updatedAt", ExtArgs["result"]["post"]>
+export type PostOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "title" | "slug" | "content" | "contentDocument" | "coverMediaId" | "coverAlt" | "status" | "publishedAt" | "authorId" | "createdAt" | "updatedAt", ExtArgs["result"]["post"]>
 export type PostInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   bodyMedia?: boolean | Prisma.Post$bodyMediaArgs<ExtArgs>
+  coverMedia?: boolean | Prisma.Post$coverMediaArgs<ExtArgs>
   author?: boolean | Prisma.UserDefaultArgs<ExtArgs>
   categories?: boolean | Prisma.Post$categoriesArgs<ExtArgs>
   tags?: boolean | Prisma.Post$tagsArgs<ExtArgs>
@@ -1498,9 +1798,11 @@ export type PostInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   _count?: boolean | Prisma.PostCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type PostIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  coverMedia?: boolean | Prisma.Post$coverMediaArgs<ExtArgs>
   author?: boolean | Prisma.UserDefaultArgs<ExtArgs>
 }
 export type PostIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  coverMedia?: boolean | Prisma.Post$coverMediaArgs<ExtArgs>
   author?: boolean | Prisma.UserDefaultArgs<ExtArgs>
 }
 
@@ -1508,6 +1810,7 @@ export type $PostPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
   name: "Post"
   objects: {
     bodyMedia: Prisma.$PostMediaPayload<ExtArgs>[]
+    coverMedia: Prisma.$MediaPayload<ExtArgs> | null
     author: Prisma.$UserPayload<ExtArgs>
     categories: Prisma.$CategoryPayload<ExtArgs>[]
     tags: Prisma.$TagPayload<ExtArgs>[]
@@ -1521,6 +1824,8 @@ export type $PostPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     slug: string
     content: string
     contentDocument: runtime.JsonValue | null
+    coverMediaId: string | null
+    coverAlt: string | null
     status: $Enums.PostStatus
     publishedAt: Date | null
     authorId: string
@@ -1921,6 +2226,7 @@ readonly fields: PostFieldRefs;
 export interface Prisma__PostClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
   bodyMedia<T extends Prisma.Post$bodyMediaArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Post$bodyMediaArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PostMediaPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  coverMedia<T extends Prisma.Post$coverMediaArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Post$coverMediaArgs<ExtArgs>>): Prisma.Prisma__MediaClient<runtime.Types.Result.GetResult<Prisma.$MediaPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   author<T extends Prisma.UserDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.UserDefaultArgs<ExtArgs>>): Prisma.Prisma__UserClient<runtime.Types.Result.GetResult<Prisma.$UserPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   categories<T extends Prisma.Post$categoriesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Post$categoriesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$CategoryPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   tags<T extends Prisma.Post$tagsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Post$tagsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TagPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
@@ -1961,6 +2267,8 @@ export interface PostFieldRefs {
   readonly slug: Prisma.FieldRef<"Post", 'String'>
   readonly content: Prisma.FieldRef<"Post", 'String'>
   readonly contentDocument: Prisma.FieldRef<"Post", 'Json'>
+  readonly coverMediaId: Prisma.FieldRef<"Post", 'String'>
+  readonly coverAlt: Prisma.FieldRef<"Post", 'String'>
   readonly status: Prisma.FieldRef<"Post", 'PostStatus'>
   readonly publishedAt: Prisma.FieldRef<"Post", 'DateTime'>
   readonly authorId: Prisma.FieldRef<"Post", 'String'>
@@ -2388,6 +2696,25 @@ export type Post$bodyMediaArgs<ExtArgs extends runtime.Types.Extensions.Internal
   take?: number
   skip?: number
   distinct?: Prisma.PostMediaScalarFieldEnum | Prisma.PostMediaScalarFieldEnum[]
+}
+
+/**
+ * Post.coverMedia
+ */
+export type Post$coverMediaArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Media
+   */
+  select?: Prisma.MediaSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Media
+   */
+  omit?: Prisma.MediaOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.MediaInclude<ExtArgs> | null
+  where?: Prisma.MediaWhereInput
 }
 
 /**

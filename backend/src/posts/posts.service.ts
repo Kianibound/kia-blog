@@ -8,6 +8,7 @@ import type { PostStatus } from '../generated/prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import {
   resolveDocumentMedia,
+  resolvePostCover,
   presentPostsWithMedia,
 } from '../media/body-image';
 import { ROLE } from '../roles/constants/role.constants';
@@ -103,12 +104,24 @@ export class PostsService {
     return this.commands.remove(postId, currentUserId, currentUserRole);
   }
 
-  private async present<T extends { contentDocument?: unknown }>(post: T) {
+  private async present<
+    T extends {
+      contentDocument?: unknown;
+      coverMediaId?: string | null;
+      coverAlt?: string | null;
+    },
+  >(post: T) {
+    const { coverMediaId, coverAlt, ...responsePost } = post;
     return {
-      ...post,
+      ...responsePost,
       contentMedia: await resolveDocumentMedia(
         this.prisma,
         post.contentDocument,
+      ),
+      coverImage: await resolvePostCover(
+        this.prisma,
+        coverMediaId,
+        coverAlt,
       ),
     };
   }

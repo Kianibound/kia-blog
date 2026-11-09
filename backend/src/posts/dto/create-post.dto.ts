@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  MaxLength,
   Validate,
   ValidateIf,
 } from 'class-validator';
@@ -45,6 +46,26 @@ export class CreatePostDto {
   @IsOptional()
   @IsEnum(PostStatus)
   status?: PostStatus;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Optional cover image Media id; requires coverAlt. Existing Media id, never a URL.',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  coverMediaId?: string;
+
+  @ApiPropertyOptional({
+    maxLength: 500,
+    description:
+      'Required nonblank alt text when coverMediaId is supplied; ignored otherwise.',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  coverAlt?: string;
 
   @ApiPropertyOptional({ type: [String], format: 'uuid' })
   @IsOptional()

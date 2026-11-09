@@ -55,7 +55,7 @@ describe('Posts behavior', () => {
         categoryIds: ['c'],
         tagIds: ['t'],
       }),
-    ).toEqual({ ...post, contentMedia: [] });
+    ).toEqual({ ...post, contentMedia: [], coverImage: null });
     expect(repository.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         authorId: 'owner',
@@ -84,7 +84,7 @@ describe('Posts behavior', () => {
     expect(
       await service.findAll(2, 2, 'nest', 'oldest', 'alice', 'tech', 'node'),
     ).toEqual({
-      data: [{ ...post, contentMedia: [] }],
+      data: [{ ...post, contentMedia: [], coverImage: null }],
       meta: { page: 2, limit: 2, total: 5, totalPages: 3 },
     });
     const query = repository.findMany.mock.calls[0][0] as {
@@ -132,7 +132,7 @@ describe('Posts behavior', () => {
   });
   it('lists only current author posts including drafts', async () => {
     expect((await service.findMine('owner', 2, 2)).data).toEqual([
-      { ...post, contentMedia: [] },
+      { ...post, contentMedia: [], coverImage: null },
     ]);
     expect(repository.findMany).toHaveBeenCalledWith({
       where: { authorId: 'owner' },
@@ -159,8 +159,13 @@ describe('Posts behavior', () => {
     expect(await service.findBySlug('slug')).toEqual({
       ...post,
       contentMedia: [],
+      coverImage: null,
     });
-    expect(await service.findById('p')).toEqual({ ...post, contentMedia: [] });
+    expect(await service.findById('p')).toEqual({
+      ...post,
+      contentMedia: [],
+      coverImage: null,
+    });
     const query = repository.findFirst.mock.calls[0][0] as { include: unknown };
     expect(query.include).toEqual({
       author: {

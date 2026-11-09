@@ -2580,6 +2580,325 @@ describe('Backend contracts with isolated I/O', () => {
     );
   });
 
+  describe('Optional article cover images', () => {
+    const coverId = '11111111-1111-4111-8111-111111111111';
+    const coverMedia = {
+      id: coverId,
+      ownerId: 'user-1',
+      resourceType: 'image',
+      format: 'png',
+      bytes: 128,
+      width: 320,
+      height: 180,
+      publicId: 'kia-blog/cover',
+      url: 'https://res.cloudinary.com/test/image/upload/v1/kia-blog/cover.png',
+    };
+    const coverId2 = '22222222-2222-4222-8222-222222222222';
+    const coverMedia2 = {
+      id: coverId2,
+      ownerId: 'user-1',
+      resourceType: 'image',
+      format: 'jpg',
+      bytes: 200,
+      width: 640,
+      height: 360,
+      publicId: 'kia-blog/cover2',
+      url: 'https://res.cloudinary.com/test/image/upload/v1/kia-blog/cover2.jpg',
+    };
+    const bodyDocument = {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Body' }] }],
+    };
+    const coverStore = () => {
+      let saved: Record<string, unknown> | undefined;
+      const detail = () =>
+        saved
+          ? {
+              ...structuredClone(saved),
+              author: {
+                id: 'user-1',
+                username: 'reader',
+                name: 'Reader',
+                avatarUrl: null,
+              },
+              categories: [],
+              tags: [],
+            }
+          : null;
+      persistence.post.create.mockImplementation(async (args) => {
+        const { data } = args as { data: Record<string, unknown> };
+        const fields = Object.fromEntries(
+          Object.entries(data)
+            .filter(([, value]) => value !== undefined)
+            .map(([key, value]) => [key, structuredClone(value)]),
+        );
+        saved = {
+          id: 'cover-post',
+          createdAt: new Date('2020-01-01'),
+          updatedAt: new Date('2020-01-01'),
+          status: 'DRAFT',
+          publishedAt: null,
+          ...fields,
+          categories: [],
+          tags: [],
+        };
+        return detail();
+      });
+      persistence.post.update.mockImplementation(async (args) => {
+        const { data } = args as { data: Record<string, unknown> };
+        for (const [key, value] of Object.entries(data))
+          if (value !== undefined && key !== 'categories' && key !== 'tags')
+            saved![key] = structuredClone(value);
+        return detail();
+      });
+      persistence.post.findUnique.mockImplementation(async (args) =>
+        (args as { where: { slug?: string } }).where.slug ? null : detail(),
+      );
+      persistence.post.findFirst.mockImplementation(async () =>
+        saved?.status === 'PUBLISHED' ? detail() : null,
+      );
+      const matches = (args: unknown) => {
+        const { where } = (args ?? {}) as { where?: { status?: string } };
+        return !!saved && (!where?.status || saved.status === where.status);
+      };
+      persistence.post.findMany.mockImplementation(async (args) =>
+        matches(args) ? [detail()] : [],
+      );
+      persistence.post.count.mockImplementation(async (args) =>
+        matches(args) ? 1 : 0,
+      );
+      return { detail };
+    };
+    const createWithCover = (token: string, body: Record<string, unknown>) =>
+      request(app.getHttpServer())
+        .post('/posts')
+        .auth(token, { type: 'bearer' })
+        .send(body);
+
+    it('creates a post with a validated cover and resolves its safe card image', async () => {
+      coverStore();
+      persistence.media.findUnique.mockResolvedValue(coverMedia);
+      persistence.media.findMany.mockResolvedValue([coverMedia]);
+      const created = await createWithCover(auth('AUTHOR'), {
+        title: 'Cover article',
+        contentDocument: bodyDocument,
+        status: 'PUBLISHED',
+        coverMediaId: coverId,
+        coverAlt: 'A cover',
+      }).expect(201);
+      expect(created.body.coverImage).toEqual({
+        id: coverId,
+        url: coverMedia.url,
+        width: 320,
+        height: 180,
+        alt: 'A cover',
+      });
+      expect(created.body.contentMedia).toEqual([]);
+      expect(created.body).not.toHaveProperty('coverAlt');
+      expect(created.body).not.toHaveProperty('coverMediaId');
+      const read = await request(app.getHttpServer())
+        .get('/posts/cover-article')
+        .expect(200);
+      expect(read.body.coverImage).toEqual(created.body.coverImage);
+      expect(read.body).not.toHaveProperty('coverAlt');
+      expect(read.body).not.toHaveProperty('coverMediaId');
+      const feed = await request(app.getHttpServer()).get('/posts').expect(200);
+      expect(feed.body.data[0].coverImage).toEqual(created.body.coverImage);
+      expect(feed.body.data[0]).not.toHaveProperty('coverAlt');
+      expect(feed.body.data[0]).not.toHaveProperty('coverMediaId');
+    });
+
+    it('returns a null cover for posts without one, including legacy content', async () => {
+      coverStore();
+      const created = await createWithCover(auth('AUTHOR'), {
+        title: 'Plain article',
+        contentDocument: bodyDocument,
+        status: 'PUBLISHED',
+      }).expect(201);
+      expect(created.body.coverImage).toBeNull();
+      expect(created.body).not.toHaveProperty('coverMediaId');
+      expect(created.body).not.toHaveProperty('coverAlt');
+      const read = await request(app.getHttpServer())
+        .get('/posts/plain-article')
+        .expect(200);
+      expect(read.body.coverImage).toBeNull();
+    });
+
+    it.each([
+      { label: 'alt without media id', body: { coverAlt: 'A cover' } },
+      { label: 'media id without alt', body: { coverMediaId: coverId } },
+      { label: 'blank alt', body: { coverMediaId: coverId, coverAlt: '   ' } },
+      {
+        label: 'oversized alt',
+        body: { coverMediaId: coverId, coverAlt: 'a'.repeat(501) },
+      },
+      { label: 'invalid media id', body: { coverMediaId: 'not-a-uuid', coverAlt: 'Alt' } },
+    ])('rejects $label before writing a post', async ({ body }) => {
+      coverStore();
+      persistence.media.findUnique.mockResolvedValue(coverMedia);
+      await createWithCover(auth('AUTHOR'), {
+        title: 'Cover article',
+        contentDocument: bodyDocument,
+        ...body,
+      }).expect(400);
+      expect(persistence.post.create).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { label: 'missing', media: null },
+      { label: 'SVG', media: { ...coverMedia, format: 'svg' } },
+      { label: 'video', media: { ...coverMedia, resourceType: 'video' } },
+      {
+        label: 'insecure URL',
+        media: { ...coverMedia, url: 'http://res.cloudinary.com/test/image/upload/a.png' },
+      },
+      {
+        label: 'foreign URL',
+        media: { ...coverMedia, url: 'https://attacker.test/image.png' },
+      },
+    ])('rejects $label cover media without writing', async ({ media }) => {
+      coverStore();
+      persistence.media.findUnique.mockResolvedValue(media);
+      await createWithCover(auth('AUTHOR'), {
+        title: 'Cover article',
+        contentDocument: bodyDocument,
+        coverMediaId: coverId,
+        coverAlt: 'A cover',
+      }).expect(400);
+      expect(persistence.post.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a foreign-owned cover for AUTHOR but permits ADMIN', async () => {
+      coverStore();
+      persistence.media.findUnique.mockResolvedValue({
+        ...coverMedia,
+        ownerId: 'another-user',
+      });
+      await createWithCover(auth('AUTHOR'), {
+        title: 'Cover article',
+        contentDocument: bodyDocument,
+        coverMediaId: coverId,
+        coverAlt: 'A cover',
+      }).expect(403);
+      await createWithCover(auth('ADMIN'), {
+        title: 'Cover article',
+        contentDocument: bodyDocument,
+        coverMediaId: coverId,
+        coverAlt: 'A cover',
+      }).expect(201);
+    });
+
+    it('replaces, removes and preserves the cover across updates', async () => {
+      coverStore();
+      persistence.media.findUnique.mockResolvedValue(coverMedia);
+      const token = auth('AUTHOR');
+      await createWithCover(token, {
+        title: 'Cover article',
+        contentDocument: bodyDocument,
+        coverMediaId: coverId,
+        coverAlt: 'A cover',
+      }).expect(201);
+      persistence.media.findUnique.mockResolvedValue(coverMedia2);
+      const replaced = await request(app.getHttpServer())
+        .patch('/posts/cover-post')
+        .auth(token, { type: 'bearer' })
+        .send({ coverMediaId: coverId2, coverAlt: 'New cover' })
+        .expect(200);
+      expect(replaced.body.coverImage).toEqual({
+        id: coverId2,
+        url: coverMedia2.url,
+        width: 640,
+        height: 360,
+        alt: 'New cover',
+      });
+      const preserved = await request(app.getHttpServer())
+        .patch('/posts/cover-post')
+        .auth(token, { type: 'bearer' })
+        .send({ title: 'Renamed' })
+        .expect(200);
+      expect(preserved.body.coverImage).toEqual(replaced.body.coverImage);
+      expect(replaced.body).not.toHaveProperty('coverMediaId');
+      expect(replaced.body).not.toHaveProperty('coverAlt');
+      expect(preserved.body).not.toHaveProperty('coverMediaId');
+      expect(preserved.body).not.toHaveProperty('coverAlt');
+      const removed = await request(app.getHttpServer())
+        .patch('/posts/cover-post')
+        .auth(token, { type: 'bearer' })
+        .send({ coverMediaId: null })
+        .expect(200);
+      expect(removed.body.coverImage).toBeNull();
+      expect(removed.body).not.toHaveProperty('coverMediaId');
+      expect(removed.body).not.toHaveProperty('coverAlt');
+    });
+
+    it('rejects a replacement cover without alt before writing', async () => {
+      coverStore();
+      persistence.media.findUnique.mockResolvedValue(coverMedia);
+      const token = auth('AUTHOR');
+      await createWithCover(token, {
+        title: 'Cover article',
+        contentDocument: bodyDocument,
+        coverMediaId: coverId,
+        coverAlt: 'A cover',
+      }).expect(201);
+      await request(app.getHttpServer())
+        .patch('/posts/cover-post')
+        .auth(token, { type: 'bearer' })
+        .send({ coverMediaId: coverId2 })
+        .expect(400);
+    });
+
+    it('blocks deletion of a cover-referenced media with 409 before remote I/O', async () => {
+      persistence.media.findUnique.mockResolvedValue(coverMedia);
+      persistence.media.delete.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('referenced', {
+          code: 'P2003',
+          clientVersion: 'test-double',
+        }),
+      );
+      await request(app.getHttpServer())
+        .delete(`/media/${coverId}`)
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .expect(409);
+      expect(cloudinary.deleteImage).not.toHaveBeenCalled();
+    });
+
+    it('documents the optional cover contract in the OpenAPI schema', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api-json')
+        .expect(200);
+      const api: OpenAPIObject = response.body;
+      const create = api.components!.schemas!.CreatePostDto as SchemaObject;
+      expect(create.properties!.coverMediaId).toMatchObject({
+        type: 'string',
+        format: 'uuid',
+      });
+      expect(create.properties!.coverAlt).toMatchObject({ type: 'string' });
+      const update = api.components!.schemas!.UpdatePostDto as SchemaObject;
+      expect(update.properties!.coverMediaId).toMatchObject({
+        type: 'string',
+        format: 'uuid',
+        nullable: true,
+      });
+      const post = api.components!.schemas!.PostResponseDto as SchemaObject;
+      expect(post.properties).not.toHaveProperty('coverMediaId');
+      expect(post.properties).not.toHaveProperty('coverAlt');
+      expect(post.properties!.coverImage).toMatchObject({ nullable: true });
+      expect(JSON.stringify(post.properties!.coverImage)).toContain(
+        '#/components/schemas/CoverImageResponseDto',
+      );
+      const cover = api.components!.schemas!
+        .CoverImageResponseDto as SchemaObject;
+      expect(Object.keys(cover.properties!).sort()).toEqual([
+        'alt',
+        'height',
+        'id',
+        'url',
+        'width',
+      ]);
+    });
+  });
+
   describe('ADMIN post inventory', () => {
     // Test-only rows behind the existing persistence seam, including private
     // author data so response projection is exercised rather than assumed.

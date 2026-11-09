@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  MaxLength,
   Validate,
   ValidateIf,
 } from 'class-validator';
@@ -40,6 +41,28 @@ export class UpdatePostDto {
   @IsOptional()
   @IsEnum(PostStatus)
   status?: PostStatus;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Optional cover image Media id; requires coverAlt. Null removes the cover. Omission preserves it.',
+  })
+  @ValidateIf((_object, value) => value !== undefined && value !== null)
+  @IsUUID('4')
+  coverMediaId?: string | null;
+
+  @ApiPropertyOptional({
+    maxLength: 500,
+    description:
+      'Required nonblank alt text when coverMediaId is set; rejected when coverMediaId is null.',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  coverAlt?: string;
 
   @ApiPropertyOptional({ type: [String], format: 'uuid' })
   @IsOptional()

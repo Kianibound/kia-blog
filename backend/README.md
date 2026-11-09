@@ -386,6 +386,27 @@ Issue #48 adds body-image references using existing upload/Cloudinary infrastruc
 See [body image contracts and deletion safety](src/media/BODY_IMAGES.md).
 Cover images and frontend integration remain excluded.
 
+### Optional article cover (Issue #49)
+
+Article create/update accepts an optional cover image reference plus alt text.
+Supply `coverMediaId` (an existing Media id, never a URL) together with a
+required nonblank `coverAlt` (at most 500 UTF-16 units). Omit both fields to
+create or keep a coverless post; on PATCH, sending `coverMediaId: null` removes
+the cover, and omitting the field preserves it. The chosen Media must exist, be
+an eligible `jpg`/`jpeg`/`png`/`webp` image below 5 MiB with a credential-free
+Cloudinary delivery URL, and be owned by the Post author unless the caller is an
+ADMIN. A coverMediaId without alt, alt without a coverMediaId, or an invalid
+combination is rejected with 400; foreign-owned Media yields 403.
+
+Responses resolve the cover server-side into `coverImage`
+(`{ id, url, width, height, alt }`, `null` when absent) on create, update,
+detail, feed, own-list and embedded bookmark article responses. The resolved URL
+is returned instead of the Cloudinary public id. Legacy posts without a cover
+return a null `coverImage`. Deleting Media still referenced as a cover returns
+409 without remote deletion, mirroring the body-image rule, via the restrictive
+foreign key added by migration `20261109120000_add_post_cover_media` (additive,
+preserves existing rows; regenerate Prisma first).
+
 ### Owned Post status filtering (Issue #45)
 
 `GET /posts/mine` remains restricted to authenticated AUTHOR/ADMIN accounts and

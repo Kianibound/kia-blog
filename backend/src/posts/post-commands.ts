@@ -14,6 +14,7 @@ import { preparePostContent } from './rich-document';
 import {
   documentMediaIds,
   resolveDocumentMedia,
+  resolveCoverImage,
   rethrowMediaReferenceError,
 } from '../media/body-image';
 import { ROLE } from '../roles/constants/role.constants';
@@ -35,6 +36,7 @@ export class PostCommands {
       authorId,
       role,
     });
+    const cover = await this.prepareCover(dto, { authorId, role });
     // Generate a unique public URL slug from the title
     const slug = await this.generateUniqueSlug(dto.title);
 
@@ -50,6 +52,7 @@ export class PostCommands {
           status: dto.status,
           publishedAt,
           authorId,
+          ...cover,
           ...(media.length
             ? {
                 bodyMedia: { create: media.map(({ id }) => ({ mediaId: id })) },
@@ -82,7 +85,7 @@ export class PostCommands {
         },
       })
       .catch((error: unknown) => {
-        if (media.length) rethrowMediaReferenceError(error);
+        if (media.length || cover.coverMediaId) rethrowMediaReferenceError(error);
         throw error;
       });
   }
@@ -117,6 +120,8 @@ export class PostCommands {
       tagIds,
       content: _content,
       contentDocument: _document,
+      coverMediaId: _coverMediaId,
+      coverAlt: _coverAlt,
       ...postData
     } = dto;
     const contentFields = preparePostContent(dto);
@@ -125,6 +130,10 @@ export class PostCommands {
         authorId: post.authorId,
         role: currentUserRole,
       });
+    const cover = await this.prepareCover(dto, {
+      authorId: post.authorId,
+      role: currentUserRole,
+    });
 
     if (
       dto.status === PostStatus.PUBLISHED &&
@@ -148,6 +157,7 @@ export class PostCommands {
         data: {
           ...postData,
           ...contentFields,
+          ...cover,
           ...(contentFields
             ? {
                 bodyMedia: {
@@ -188,7 +198,10 @@ export class PostCommands {
         },
       })
       .catch((error: unknown) => {
-        if (documentMediaIds(dto.contentDocument).length)
+        if (
+          documentMediaIds(dto.contentDocument).length ||
+          cover.coverMediaId
+        )
           rethrowMediaReferenceError(error);
         throw error;
       });
@@ -217,6 +230,29 @@ export class PostCommands {
     }
 
     return slug;
+  }
+
+  private async prepareCover(
+    dto: { coverMediaId?: string | null; coverAlt?: string },
+    authorization: { authorId: string; role: RoleName },
+  ): Promise<{ coverMediaId?: string | null; coverAlt?: string | null }> {
+    const { coverMediaId, coverAlt } = dto;
+    if (coverMediaId === undefined) {
+      if (coverAlt !== undefined)
+        throw new BadRequestException('coverAlt requires coverMediaId.');
+      return {};
+    }
+    if (coverMediaId === null) {
+      if (coverAlt !== undefined)
+        throw new BadRequestException(
+          'coverAlt cannot accompany cover removal.',
+        );
+      return { coverMediaId: null, coverAlt: null };
+    }
+    if (!coverAlt || !coverAlt.trim())
+      throw new BadRequestException('coverAlt is required with coverMediaId.');
+    await resolveCoverImage(this.prisma, coverMediaId, authorization);
+    return { coverMediaId, coverAlt };
   }
 
   async remove(

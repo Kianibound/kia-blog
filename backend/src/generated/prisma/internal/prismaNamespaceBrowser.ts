@@ -192,6 +192,8 @@ export const PostScalarFieldEnum = {
   slug: 'slug',
   content: 'content',
   contentDocument: 'contentDocument',
+  coverMediaId: 'coverMediaId',
+  coverAlt: 'coverAlt',
   status: 'status',
   publishedAt: 'publishedAt',
   authorId: 'authorId',

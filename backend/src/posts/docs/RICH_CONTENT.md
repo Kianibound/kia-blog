@@ -131,7 +131,9 @@ The current UI preview envelope is not an accepted API format. A later frontend
 adapter must submit the editor's raw document as `contentDocument`, consume that
 field when non-null, and fall back to literal `content` for legacy rows. It must
 enable/handle blockquote and inline code before offering this full feature set.
-Body images use the Issue #48 contract linked above. Covers remain excluded.
+Body images use the Issue #48 contract linked above. The optional article cover
+is a separate field-level contract (Issue #49): `coverMediaId` + `coverAlt` on
+create/update, resolved into `coverImage` on responses.
 
 ## Migration and verification
 

@@ -22,6 +22,11 @@ export class ContentMediaResponseDto {
   height: number | null;
 }
 
+export class CoverImageResponseDto extends ContentMediaResponseDto {
+  @ApiProperty({ description: 'Cover alternative text.' })
+  alt: string;
+}
+
 export class PostResponseDto {
   @ApiProperty({
     type: [ContentMediaResponseDto],
@@ -29,6 +34,13 @@ export class PostResponseDto {
       'Unique body image references in document order; empty for legacy or text-only documents. Contains no owner/provider IDs.',
   })
   contentMedia: ContentMediaResponseDto[];
+  @ApiProperty({
+    type: CoverImageResponseDto,
+    nullable: true,
+    description:
+      'Resolved optional cover image with alt text; null when the article has no cover.',
+  })
+  coverImage: CoverImageResponseDto | null;
   @ApiProperty({ format: 'uuid' })
   id: string;
   @ApiProperty()

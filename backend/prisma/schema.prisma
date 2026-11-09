@@ -124,6 +124,9 @@ model Post {
   content         String
   contentDocument Json?
   bodyMedia       PostMedia[]
+  coverMediaId    String?
+  coverMedia      Media?      @relation("PostCover", fields: [coverMediaId], references: [id], onDelete: Restrict)
+  coverAlt        String?
   status          PostStatus  @default(DRAFT)
   publishedAt     DateTime?
   authorId        String
@@ -138,6 +141,7 @@ model Post {
 
   @@index([authorId])
   @@index([status])
+  @@index([coverMediaId])
 }
 
 model Category {
@@ -210,6 +214,7 @@ model PostLike {
 
 model Media {
   bodyPosts    PostMedia[]
+  coverOf      Post[]      @relation("PostCover")
   id           String      @id @default(uuid())
   url          String
   publicId     String      @unique
