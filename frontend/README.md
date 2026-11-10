@@ -175,12 +175,19 @@ only available through fixture setup. Every preview page identifies the data as
 test doubles. The workspace links demonstrate shell navigation, not future
 article/account features or permission enforcement.
 
-The production application has no dashboard or preview routes, role switches,
+Production `/dashboard` and its role-scoped deep links now use the server-only
+session and verified Nest identity. Navigation is rendered per role; every route
+re-checks authorization server-side and cross-role or unknown deep links return
+404. Signed-out visitors are redirected to login with a safe return path, and
+terminal invalid sessions clear their cookie. These are shell/placeholder routes
+only; feature data adapters arrive in later issues.
+
+The production application exposes no preview routes, role switches,
 authentication bypass or fixture fallback. The preview reuses the root theme,
 Vazirmatn, Graphite stylesheet and public homepage. Dashboard checks cover role
 presentation, responsive keyboard navigation, loading/error/retry and both
 themes. `npm test` runs existing public checks and then the dashboard suite.
-Real sessions, authorization and private dashboard activation remain later work.
+The fixture dashboard preview remains fully isolated from production.
 
 Issue #18 adds `/dashboard/posts` in this same test-only host. Select AUTHOR in
 fixture setup; `author=sara` (default) or `author=nima` selects the test author.

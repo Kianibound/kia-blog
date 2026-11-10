@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import Link from "next/link";
 import { CoverImageField } from "./cover-image-field";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -108,6 +109,6 @@ export function ArticleForm({ article, categories, tags, saveAction, renderConte
     </form>
     <PublicationControls article={saved} action={publicationAction} readingHref={readingHref} busy={busy} dirty={dirty} blocked={lifecycleBlocked || blocked || state === "uncertain"} onSaved={post => { setSaved(post); setState("idle"); }} onPending={value => { pending.current = value; setLifecyclePending(value); }} onUncertain={() => setLifecycleBlocked(true)}
       saveControl={<Button type="submit" form={formId} size="md" disabled={!saveAction || busy || lifecycleBlocked || blocked || state === "uncertain"} className="min-h-12 w-full motion-reduce:transition-none sm:w-auto">{state === "saving" ? copy.saving : copy.save}</Button>} />
-    <a href="/dashboard/posts" className="inline-flex min-h-12 items-center rounded-control px-4 underline focus-visible:outline-2 focus-visible:outline-ring">{backLabel}</a>
+    <Link href="/dashboard/posts" className="inline-flex min-h-12 items-center rounded-control px-4 underline focus-visible:outline-2 focus-visible:outline-ring">{backLabel}</Link>
   </Card>;
 }

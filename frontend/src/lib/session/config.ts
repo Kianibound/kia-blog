@@ -74,8 +74,12 @@ export function loadSessionConfig(
       "Invalid session configuration: UPSTASH_REDIS_REST_URL",
     );
   }
+  const testRedis =
+    env.AUTH_TEST_MODE === "1" &&
+    parsedRedis.protocol === "http:" &&
+    parsedRedis.hostname === "127.0.0.1";
   if (
-    parsedRedis.protocol !== "https:" ||
+    (!testRedis && parsedRedis.protocol !== "https:") ||
     parsedRedis.username ||
     parsedRedis.password
   )

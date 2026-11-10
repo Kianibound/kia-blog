@@ -27,7 +27,14 @@ export async function handleReadRequest<T>(
       getCsrfToken: () => deps.getCsrfToken(sessionId),
     });
   } catch (error) {
-    if (error instanceof UnauthenticatedError) await deps.clearCookie();
+    if (error instanceof UnauthenticatedError) {
+      try {
+        await deps.clearCookie();
+      } catch {
+        // RSC render cannot modify cookies; the route redirects to the
+        // cleanup handler so the terminal cookie is still removed.
+      }
+    }
     throw error;
   }
 }

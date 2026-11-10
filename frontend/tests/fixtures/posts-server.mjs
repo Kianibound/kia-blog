@@ -30,6 +30,56 @@ function readJson(request) {
   });
 }
 
+// Test-only Upstash REST double. Never used by the production application.
+const redis = new Map();
+let authMode = "normal";
+let lastAuthUser = null;
+
+function redisGet(key) {
+  const entry = redis.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) { redis.delete(key); return null; }
+  return entry.value;
+}
+
+async function handleRedis(request, response) {
+  const command = await readJson(request);
+  if (!Array.isArray(command) || typeof command[0] !== "string") {
+    response.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "bad command" }));
+    return;
+  }
+  const [name, key, value, ...rest] = command;
+  let result = null;
+  if (name === "GET") {
+    result = redisGet(String(key));
+  } else if (name === "DEL") {
+    result = redis.delete(String(key)) ? 1 : 0;
+  } else if (name === "SET") {
+    const index = rest.indexOf("EX");
+    const ttl = index >= 0 ? Number(rest[index + 1]) : 0;
+    const mode = rest.includes("NX") ? "NX" : rest.includes("XX") ? "XX" : "";
+    const exists = redisGet(String(key)) !== null;
+    if ((mode === "NX" && exists) || (mode === "XX" && !exists)) result = null;
+    else {
+      redis.set(String(key), { value: String(value), expiresAt: ttl > 0 ? Date.now() + ttl * 1000 : Number.MAX_SAFE_INTEGER });
+      result = "OK";
+    }
+  }
+  response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ result }));
+}
+
+function userFor(email) {
+  const role = email.includes("admin") ? "ADMIN" : email.includes("author") ? "AUTHOR" : "USER";
+  return {
+    id: "90000000-0000-4000-8000-000000000001",
+    email,
+    username: "user_fixture",
+    name: null,
+    emailVerified: false,
+    role: { name: role },
+  };
+}
+
 // Minimal external API test double. Strict query handling checks the real wire boundary.
 createServer(async (request, response) => {
   const url = new URL(request.url, "http://127.0.0.1:4101");
@@ -37,6 +87,9 @@ createServer(async (request, response) => {
   if (request.method === "GET" && url.pathname === "/health") {
     response.end("ok");
     return;
+  }
+  if (request.method === "POST" && url.pathname === "/redis") {
+    return handleRedis(request, response);
   }
   if (request.method === "POST" && url.pathname === "/auth/register") {
     const body = await readJson(request);
@@ -63,18 +116,36 @@ createServer(async (request, response) => {
     if (email.includes("limited")) return response.writeHead(429, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Too many requests" }));
     if (email.includes("fail")) return response.writeHead(503, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unavailable" }));
     if (!email || email.includes("bad") || email.includes("disabled")) return response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Invalid email or password." }));
+    lastAuthUser = userFor(email);
     return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({
       accessToken: "fixture-access-token",
       refreshToken: "fixture-refresh-token",
-      user: {
-        id: "90000000-0000-4000-8000-000000000001",
-        email,
-        username: "user_fixture",
-        name: null,
-        emailVerified: false,
-        role: { name: "USER" },
-      },
+      user: lastAuthUser,
     }));
+  }
+  if (request.method === "GET" && url.pathname === "/auth/me") {
+    if (authMode === "unavailable") return response.writeHead(503, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unavailable" }));
+    if (authMode === "revoke" || !lastAuthUser || !request.headers.authorization) return response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unauthorized" }));
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(lastAuthUser));
+  }
+  if (request.method === "POST" && url.pathname === "/auth/refresh") {
+    if (authMode === "unavailable") return response.writeHead(503, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unavailable" }));
+    if (authMode === "revoke" || !lastAuthUser) return response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unauthorized" }));
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ accessToken: "fixture-access-refreshed" }));
+  }
+  if (request.method === "POST" && url.pathname === "/auth/logout") {
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Logged out successfully." }));
+  }
+  if (request.method === "POST" && url.pathname === "/__test/auth-mode") {
+    const mode = url.searchParams.get("mode");
+    if (!["normal", "revoke", "unavailable"].includes(mode)) return response.writeHead(400).end();
+    authMode = mode;
+    return response.writeHead(204).end();
+  }
+  if (request.method === "POST" && url.pathname === "/__test/session") {
+    if (url.searchParams.get("mode") !== "clear") return response.writeHead(400).end();
+    redis.clear();
+    return response.writeHead(204).end();
   }
   if (request.method === "POST" && url.pathname === "/__test/categories") {
     const mode = url.searchParams.get("mode");
