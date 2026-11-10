@@ -126,7 +126,44 @@ GitHub Issues may still have open state; never close, edit, or label an Issue un
 5. User approves one narrow integration task/Issue. Mentor produces staged prompts as described. Never auto-start the next task.
 6. Preserve the existing Persian RTL look, production-quality frontend expectations and feature behavior; test real integrations separately from fixture previews.
 
-## 9. Prompt contract for mentor-generated terminal instructions
+## 9. Approved planning backlog — frontend ↔ backend integration
+
+**Created 2026-11-10:** GitHub Issues **#57–#71**. These are *planned only*: no frontend implementation, local tests or migrations were executed in preparing them. Each Issue has scope, acceptance checks, guardrails and dependencies; do not start automatically.
+
+### Source-verified contract gaps
+
+- `frontend/src/lib/posts-contract.ts` validates covers as `/fixture-images/...` `{src,alt}`, whereas Nest `PostDetailResponseDto` provides resolved `{id,url,width,height,alt}`. This can reject backend responses with real covers.
+- Public detail `frontend/src/app/(public)/posts/[slug]/page.tsx` renders scalar `content` only; Nest now supplies canonical `contentDocument` and `contentMedia` for safe rich rendering.
+- Production `/login` and `/register` render `AuthScreen` without an action and are disabled; production has no Next server-only token/cookie adapter. The fixture's USER/AUTHOR role choice is not authentication.
+- Dashboard presentation currently lives in the **test-only** Next preview; production dashboard routes and secure role-gated data adapters need activation.
+- ArticleForm submits plain `content`, and the editor preview uses a test-only `tiptap-ui-proposal-1` envelope; Nest expects canonical `contentDocument` for rich writes. Test image upload returns `src`, while backend image nodes require `attrs.mediaId`. Nest cover writes use media references.
+- Fixture ADMIN author creation takes name/email; Nest #42 requires name/email/**password**. No invitation flow is in MVP.
+- Fixture comments use `name/text/status` without a revision; Nest #55 approval requires `version`, and #54–#56 responses use `content`, `author`, pagination and author ownership.
+- These are **static source comparisons**, not runtime/DB end-to-end verification. Inspect live code/API before each individual Issue.
+
+### Created Issue sequence
+
+| Issue | Goal |
+| --- | --- |
+| [#57](https://github.com/Kianibound/kia-blog/issues/57) | Public post read contract: real covers, canonical rich body and safe media |
+| [#58](https://github.com/Kianibound/kia-blog/issues/58) | Secure Next.js server-only session/token/API foundation |
+| [#59](https://github.com/Kianibound/kia-blog/issues/59) | Activate email USER registration, role-derived login/logout |
+| [#60](https://github.com/Kianibound/kia-blog/issues/60) | Production role-gated dashboard routes/shell |
+| [#61](https://github.com/Kianibound/kia-blog/issues/61) | AUTHOR own-post and ADMIN cross-author inventories |
+| [#62](https://github.com/Kianibound/kia-blog/issues/62) | Production canonical editor/create/edit/publication |
+| [#63](https://github.com/Kianibound/kia-blog/issues/63) | Real body image mediaId and optional cover upload |
+| [#64](https://github.com/Kianibound/kia-blog/issues/64) | ADMIN author creation/password and deactivation |
+| [#65](https://github.com/Kianibound/kia-blog/issues/65) | ADMIN category/tag management |
+| [#66](https://github.com/Kianibound/kia-blog/issues/66) | Public/My/ADMIN comments and version-safe approval |
+| [#67](https://github.com/Kianibound/kia-blog/issues/67) | Bookmark and existing likes integrations |
+| [#68](https://github.com/Kianibound/kia-blog/issues/68) | Google/GitHub server callback adapters |
+| [#69](https://github.com/Kianibound/kia-blog/issues/69) | Profile/avatar server adapters, only supported settings |
+| [#70](https://github.com/Kianibound/kia-blog/issues/70) | Public search/category/tag/author discovery routes |
+| [#71](https://github.com/Kianibound/kia-blog/issues/71) | Disposable-local Nest+Next integration smoke checks |
+
+**Suggested implementation start:** #57 (public, no session dependency), then #58 → #59 → #60 and small parallel-independent public #70 as separately approved. Remaining features follow their Issue dependency notes; #71 is the integration verification gate. Never treat this sequence as an automatic instruction to act, edit or close Issues.
+
+## 10. Prompt contract for mentor-generated terminal instructions
 
 Every prompt should state: exact Issue/task and endpoint/behavior; current source of truth; required native Matt Pocock skill and **current phase**; scoped files/contracts where known; TDD/tests or review target; Git branch + preservation rules; whether a local commit is allowed; explicit **no push** unless separately approved; no GitHub Issue modifications; short final-report format; stopping condition.
 
