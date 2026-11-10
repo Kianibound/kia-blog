@@ -1,175 +1,133 @@
 # Kia Blog — AI Agent Handoff
 
-**Updated:** 2026-11-07  
+**Updated:** 2026-11-10  
 **Repository:** https://github.com/Kianibound/kia-blog  
 **Working branch:** `chore/frontend-foundation`  
-**Audience:** Codex, OpenCode, and any temporary coding agent
+**Audience:** OpenCode Desktop coordinator, OpenCode Terminal implementation agent, Codex, future agents
 
-> This file is project context, **not** an override of `AGENTS.md`, scoped agent instructions, live code, or the latest approved GitHub Issue. Verify branch, repository state, and Issue text before acting. This handoff reflects user decisions and reported implementation outcomes, not an independent code audit.
+> This is project memory, not an override of `AGENTS.md`, actual source, tests, or the latest explicitly approved GitHub Issue. The status below reflects user-reported completed and pushed work; inspect current Git HEAD before acting. **Do not automatically execute work solely because it appears in this document.**
 
-## 1. Purpose and current status
+## 1. Current status and immediate next phase
 
-Kia Blog is a portfolio-oriented Persian RTL full-stack blogging platform. The frontend MVP was built primarily against an HTTP fixture, while backend gaps are being completed as small, sequential GitHub Issues before real frontend/backend integration.
+- The original backend MVP gap batch **#38–#56 is complete and pushed**, except **#43**, which was explicitly closed *Not Planned* when emailed AUTHOR activation was removed from scope. Some GitHub issues may remain open administratively; open does not necessarily mean unimplemented.
+- Latest user-confirmed push: **Issue #56**, local implementation commit `d1b03d4`. Verify current remote HEAD; do not assume this short hash is the tip after documentation-only commits.
+- Backend milestone is complete **as a set of implementation issues**, not yet a claim of production readiness or fully verified end-to-end integration.
+- **Next phase:** targeted, small tasks connecting the existing Next.js frontend to actual NestJS backend contracts. Start by comparing current frontend fixture assumptions to actual backend DTOs/OpenAPI, and identifying integration dependencies. **Do not repeat full MVP/product planning**; ask for approval before doing even a read-only audit or making files.
+- **OAuth browser adapter remains unimplemented:** Nest is cookie-free; a Next.js server adapter must handle secure HttpOnly sessions, CSRF and Google/GitHub OAuth callbacks.
+- **Codebase Memory skill/MCP is reported available in OpenCode.** Use it for targeted dependency and symbol lookups; do not assert index freshness or version without checking. Do not automatically reindex, update or reinstall.
+- OpenCode has successfully discovered the Matt Pocock skills and loaded `implement`, `tdd`, `code-review` through its native skill tool. Skill discovery/path and available tools may differ per session.
 
-**Current handoff point:** Backend Issue **#47** (canonical Tiptap JSON persistence) has been committed and **pushed**. Issue **#48** (article body image references and media safety) has been handed to **OpenCode and may be actively running**. Inspect its current working tree and Git history; do **not** launch another implementation of #48 or modify its files in parallel.
+## 2. Stack and actual frontend state
 
-Reported latest completed implementation for #47: commit `a6a3831b556232ce9d943ec509f390ad997ae643`. Confirm the latest remote HEAD independently; another agent or this documentation commit may have advanced the branch.
+- **Backend:** NestJS, TypeScript, Prisma, PostgreSQL, Swagger/OpenAPI, session-bound JWT access/refresh, USER/AUTHOR/ADMIN role guards, Cloudinary-backed media, existing mail module.
+- **Frontend:** Next.js 16 App Router, strict TypeScript, Tailwind v4, Persian RTL, VibeFarsi/Graphite/Vazirmatn, Tiptap.
+- **Important distinction:** Public frontend feed/article detail already fetch real backend via `API_BASE_URL` in `frontend/src/lib/posts.ts` (verify present code). Authenticated dashboard/editor UX was built against a resettable HTTP fixture + separate preview host. Do not describe *all* frontend functionality as fixture-only.
+- Existing preview conventions where needed: fixture on `127.0.0.1:4101`, Next dashboard preview `127.0.0.1:3102`. Verify scripts rather than assuming servers run.
+- Read root `AGENTS.md`, `frontend/AGENTS.md` for frontend, `backend/README.md`, `backend/ARCHITECTURE.md`, and `backend/GLOSSARY.md` for backend. Check for stale docs against code before trusting them.
 
-## 2. Stack and architecture
+## 3. Approved MVP product decisions
 
-- **Backend:** NestJS, TypeScript, Prisma, PostgreSQL, JWT access/refresh authentication with session revocation, role-based guards, Swagger/OpenAPI, Cloudinary-based media, existing mail integration.
-- **Frontend:** Next.js 16 App Router, strict TypeScript, Tailwind CSS v4, Persian RTL, VibeFarsi / Graphite UI conventions, Vazirmatn typography, Tiptap editor.
-- **Roles:** `USER`, `AUTHOR`, `ADMIN`.
-- Backend source and contracts are authoritative; read `backend/README.md`, `backend/ARCHITECTURE.md`, `backend/GLOSSARY.md`, root `AGENTS.md`, and `frontend/AGENTS.md` for frontend work.
-- The frontend fixture is *not* proof of live backend integration. Do not silently assume every fixture endpoint exists in production.
+### Roles and accounts
+- Public registration creates `USER` only. Accounts are needed for likes/bookmarks/comments. Public reading requires no account.
+- `ADMIN` directly creates an `AUTHOR` with **name, email and initial password**, via `POST /admin/authors`. No domain, invitation email, activation token, or mandatory first-login password change in MVP. Password reset deferred.
+- An existing `USER` cannot be promoted to `AUTHOR`.
+- `ADMIN` deactivates `AUTHOR` via `PATCH /admin/authors/:id/deactivate`: revoke sessions, block new login, preserve user, posts, comments, media, ownership and publication state. No hard account deletion.
+- `AUTHOR` may write/edit/publish/unpublish/republish own posts; only `ADMIN` may **permanently delete** a post. ADMIN can act on all posts, manage taxonomy and comment moderation.
+- A newly published/re-published post must have at least one Category. Existing legacy published rows without category are grandfathered for metadata-only editing; removing the last existing category from a published post is disallowed.
+- Public article feed/details/search, categories/tags and author pages are in MVP.
 
-## 3. Approved MVP behavior
-
-### Public / USER
-- Public feed, article details, search, category/tag lists, public author pages, and visible approved discussions.
-- Public registration creates `USER` only; email/password login and planned browser-integrated Google/GitHub login.
-- Accounts are required for likes, bookmarks, and comments.
-- Private account area includes bookmarks and basic profile/settings; own-comment management is included in MVP.
-
-### AUTHOR
-- `ADMIN` creates AUTHOR directly using **name, email, and initial password**. No invitation email, domain requirement, activation token/link, mandatory first-login password change, or MVP password-reset flow.
-- Existing `USER` accounts **must not** be promoted to `AUTHOR`, including by ADMIN.
-- AUTHOR may create, edit, publish, unpublish, and republish **own** posts without approval; may not permanently delete posts.
-- Publishing requires at least one ADMIN-managed category; tags optional; draft may have no category.
-- Rich article body features include headings, lists, quote, code blocks, inline code, links, and eventually media references. Editor/renderer behavior must match actual backend allowlist.
-- AUTHOR has no special moderation permissions.
-
-### ADMIN
-- May create/deactivate AUTHOR accounts, manage authors, read all-author article inventory, manage taxonomy and moderation, and edit/publish/unpublish/permanently delete any post.
-- Deactivating AUTHOR **must** revoke sessions and prevent protected operations while preserving user record, articles, comments, media, ownership and publication state.
-- No automatic hard deletion when an author is removed.
+### Rich content and media
+- `Post.contentDocument` stores validated Tiptap JSON; legacy `content` remains literal and serves as the derived plain-text search projection for rich writes.
+- Supported rich nodes include doc, paragraph, heading 2–4, lists/items, blockquote, codeBlock, text, hardBreak and, since #48, image.
+- Marks include bold, italic, inline code, and safe HTTP(S) links. Validate depth/size/node counts and untrusted rendering.
+- Body images are stable `mediaId` references, not arbitrary client URLs; response `contentMedia` resolves safe URLs. Image deletion is rejected while referenced by any post (including drafts).
+- #49 adds optional post cover image reference/alt and safe resolved `coverImage`; no cover required for legacy posts.
 
 ### Comments
-- New comments and replies require ADMIN approval.
-- Only approved comments whose ancestors are all approved are publicly visible; counts must use the same visibility rules.
-- Replies to replies permitted, without fixed backend depth limit.
-- Editing an approved comment returns it to `PENDING` and hides it until reapproval; descendants of hidden parents are also hidden.
-- Users may edit/delete own `PENDING` or `APPROVED` comments; `REJECTED` comments remain retained and cannot be edited/resubmitted by USER.
-- ADMIN may delete any comment; ADMIN may edit only own comments. Deleting a comment permanently removes its descendants.
-- USER My Comments is part of the scope; rejected comment administration is reserved for ADMIN.
+- New comments and replies are `PENDING`; public GET returns only `APPROVED` top-level comments and approved direct replies under approved roots.
+- Editing approved content sets it to `PENDING` atomically, hiding revised text from public queries.
+- #55 ADMIN queue and approve action exist; approval uses a supplied content `version` and atomic status/version update. **No `REJECTED` status or reject endpoint was implemented in #54–#56.** Earlier aspirational rejection/deep-reply rules must not be mistaken for already implemented behavior.
+- #56 provides authenticated `GET /comments/mine` for PENDING/APPROVED own comments (paginated, JWT-derived ownership) and preserves owner edit/delete rules.
+- Deep nested reply retrieval and approval of full ancestor chains may need separate integration scope if frontend needs them; current backend only serializes approved roots and direct replies.
+- USER own-comments support exists; no new admin moderation/rejection feature may be invented without an approved Issue.
 
-## 4. Authentication decisions and reported contracts
+## 4. Backend completion record and key contracts
 
-### Base auth / sessions
-- #38 email-based registration: `USER` only; username generated automatically; use existing backend password policy. Registration does not create a login session.
-- #39 security: access JWT bound to a session; guards check current DB role, user disabled state, ownership, expiry and revocation. Logout/refresh/session restrictions already exist.
-- NestJS remains **cookie-free**. Future **Next.js server adapter** handles browser sessions, HttpOnly cookies, CSRF, and server-side token storage. Never expose access/refresh tokens in redirect URLs or client-visible configuration.
-
-### OAuth (backend implemented, live browser integration not yet proven)
-- Google #40: `POST /auth/google` initiation and `POST /auth/google/callback` server exchange; intended Next.js callback `http://localhost:3001/auth/google/callback`.
-- GitHub #41: `POST /auth/github` initiation and `POST /auth/github/callback` server exchange; intended Next.js callback `http://localhost:3001/auth/github/callback`.
-- Both use short-lived single-use state; PKCE and provider checks as implemented. The initiation API returns authorization URL + flow verifier; **future adapter must keep the verifier and resulting JWTs server-side**, bind flow to browser session and enforce CSRF controls.
-- New OAuth identities get `USER`. Existing linked identities retain their DB role. Never automatically link solely on matching email; GitHub new users require a verified primary email.
-- OAuth provider tests so far used mocks. Real provider and browser callback interoperability remain deferred.
-- Never ask for, print, log, store in repository, or commit OAuth secrets or database credentials.
-
-### AUTHOR administration
-- #42: `POST /admin/authors` ADMIN-only; body `{ name, email, password }`; returns safe AUTHOR account, immediate email/password login; duplicate emails rejected; no USER promotion.
-- #44: `PATCH /admin/authors/:id/deactivate` ADMIN-only; idempotent, transactional disabled state/session revocation; returns safe account + `disabledAt`; cannot target USER/ADMIN.
-
-## 5. Implemented and pushed backend issues (reported)
-
-| Issue | Summary |
+| Issue | Reported pushed implementation |
 | --- | --- |
-| #38 | Email/password registration and login contract |
-| #39 | Revocable JWT-bound session and disabled-user foundation |
-| #40 | Google OAuth server-side exchange |
-| #41 | GitHub OAuth server-side exchange |
-| #42 | ADMIN creates AUTHOR with name, email, password |
-| #44 | ADMIN deactivates AUTHOR and invalidates sessions |
-| #45 | `GET /posts/mine?status=DRAFT|PUBLISHED` optional status filter, otherwise all including DEPRECATED |
-| #46 | `GET /posts/admin/inventory` ADMIN-only cross-author paginated summary for all statuses |
-| #47 | Tiptap JSON document persistence, validation and plain-text search projection |
+| #38 | Email/password registration; USER-only, username generated; no registration session |
+| #39 | Session-bound JWTs; refresh revocation and disabled-user/current-role enforcement |
+| #40 | Google OAuth server exchange |
+| #41 | GitHub OAuth server exchange |
+| #42 | ADMIN creates AUTHOR directly with name/email/password |
+| #43 | **Not Planned** — emailed activation abandoned |
+| #44 | ADMIN AUTHOR deactivation, revokes sessions without deleting content |
+| #45 | `GET /posts/mine?status=DRAFT|PUBLISHED`; omit filter for all, incl. DEPRECATED |
+| #46 | `GET /posts/admin/inventory` across authors/statuses, paginated |
+| #47 | Validated Tiptap JSONB persistence and plain-text search projection |
+| #48 | Safe article body-image references, media ownership and deletion protection |
+| #49 | Optional cover reference, alt and safe projected cover image |
+| #50 | Publication category invariant and ADMIN-only permanent post deletion |
+| #51 | Taxonomy name/slug validation, referenced delete conflict and Serializable race protection |
+| #52 | `DELETE /media/avatar`; conditional clear protects against concurrent replacement |
+| #53 | Idempotent bookmark create/delete; saved list PUBLISHED-only |
+| #54 | Comment PENDING/APPROVED persistence, editing resets to PENDING, approved-only public view |
+| #55 | `GET /admin/comments` + version-conditional `PATCH /admin/comments/:commentId/approve` |
+| #56 | `GET /comments/mine` for own paginated comments, safe fields and owner mutations |
 
-**#43** (emailed author activation) was closed **Not Planned** and must not be reintroduced as MVP scope.
+GitHub Issues may still have open state; never close, edit, or label an Issue unless explicitly requested. Always inspect actual code and latest Issue body before designing integrations.
 
-### #47 specifics relevant to #48
-- Added nullable Prisma/PostgreSQL JSONB `Post.contentDocument`; migration `20261107193000_add_post_content_document` verified on disposable PostgreSQL.
-- Existing create/update APIs accept either legacy string `content` or structured `contentDocument`; supplying both is rejected.
-- Rich writes derive searchable plain-text `content`; PATCH omission preserves both; string replacement clears rich document.
-- Read responses include both, with `contentDocument: null` for legacy records. Legacy content remains literal, even if HTML/JSON-looking.
-- Current rich nodes: doc, paragraph, heading levels 2–4, bullet/ordered list, list item, blockquote, code block, text, hard break.
-- Marks: bold, italic, code, link. Validation limits attributes, unsafe links (HTTP/S only), payload (~64 KiB), nesting and node/mark counts.
-- Image nodes deliberately excluded from #47; handled by **#48**. Cover image separately **#49**.
-- #47 reported 93 unit + 236 isolated tests passed, both reviews zero findings; code was reported pushed.
-- Frontend editor/renderer configuration may need explicit blockquote and inline-code support when real API integration begins.
+## 5. OAuth and browser security
 
-## 6. Planned backend issue queue
+- Nest initiation: `POST /auth/google` / `POST /auth/github`; Nest exchange: `POST /auth/google/callback` / `POST /auth/github/callback` (server-to-server, not browser redirect handlers).
+- Planned Next.js server callback URIs:
+  - `http://localhost:3001/auth/google/callback`
+  - `http://localhost:3001/auth/github/callback`
+- OAuth state is single-use; use existing PKCE/provider-identity contracts. Next.js server adapter must securely bind flow to the browser, protect against CSRF, keep verifier and access/refresh JWTs server-side, and use safe HttpOnly cookies.
+- No automatic identity linking by matching email; new OAuth accounts get USER; linked accounts retain database role.
+- Mock provider tests passed during implementation; **live Google/GitHub end-to-end interoperability has not been verified**. OAuth Client ID/Secret have been created privately by user; never request them in chat or commit them.
 
-- **#48 in progress with OpenCode:** Connect existing multipart/Cloudinary media upload to rich-document image nodes through stable server-controlled media references and safe resolved URLs. Validate attachment existence/ownership, MIME and size. Define deletion protection for media used in published posts. No cover feature, new upload provider, media UI or unrelated refactor.
-- **#49:** optional article cover.
-- **#50:** publication/category invariant and ADMIN-only permanent deletion.
-- **#51:** taxonomy validation/conflict handling.
-- **#52:** avatar removal.
-- **#53:** bookmark mutation consistency.
-- **#54:** comment statuses and visibility rules.
-- **#55:** ADMIN moderation queue and approve/reject actions.
-- **#56:** USER own-comment list/edit/delete.
+## 6. Migration/test status and remaining risks
 
-Read each Issue's **current GitHub body** for the precise scope; this list is a navigation aid. Do not automatically close/update Issues, create labels, or change issue descriptions.
+- User confirmed local PostgreSQL 18 and disposable `kia_blog_test`. The 20 existing migrations through #55 were applied successfully; `prisma migrate status` reported database schema up to date after `20261110130000_add_comment_version`.
+- #56 required **no new migration**.
+- Last reported #56 validation: **370 isolated + 101 unit tests passed**, lint with only pre-existing warnings, Nest build clean. Each issue has its own report; these figures are **not** proof of full E2E readiness.
+- User manually ran a scoped disposable-DB Category/Tag concurrency-check script for #51; its 10 checks passed. This does not prove absence of all concurrency races.
+- Known caveats include check-then-write post/category publication race, optional cloud media cleanup/orphans after provider failures, mocked Cloudinary/OAuth behavior, narrow bookmark duplicate-refetch race, and feature parity gaps between fixture and backend.
+- Never touch production resources. Local DB credentials are entered by the user securely in PowerShell; do not request, print or store passwords, tokens, .env secrets, or connection strings.
 
-## 7. Agent workflow — required
+## 7. Working style — explicit user approval is required
 
-1. Read root `AGENTS.md`, relevant scoped instructions, this document, and current GitHub Issue.
-2. Check `git status`, current branch/HEAD, and whether another agent is actively changing files. Working branch is `chore/frontend-foundation`; **do not create another branch** without explicit user approval.
-3. Inspect narrowly scoped source/DTOs/tests and relevant docs. Preserve unrelated staged, unstaged, and untracked work.
-4. Handle **one small Issue at a time**. Avoid broad planning loops, optional subagents, unrelated refactors, and redundant full-repo reads.
-5. Use installed **Matt Pocock `implement` skill** if actually available; follow mandatory **TDD**, **Standards Review**, and **Spec Review** as defined in that skill/repository. Skill invocation syntax may differ in OpenCode: discover the tool/skill and do not assume Codex's `$implement` syntax works there.
-6. Reuse existing approved isolated HTTP/module test seams. No new test harness unless truly necessary.
-7. Update accurate Swagger/OpenAPI for changed public backend contracts; add focused regression tests.
-8. For migrations, preserve existing rows and verify against disposable development/test PostgreSQL when practical. Never touch production databases.
-9. Run focused validation and required reviews; distinguish mocked/isolated tests from real DB/provider end-to-end checks. Report preexisting test typecheck errors or lint warnings honestly.
-10. Create **one focused local commit**, **do not push**, and **do not modify GitHub Issues** without explicit permission.
-11. Report commit, API/storage contracts, tests and counts, reviews, migration status, unverified live tests, blockers. Stop for user review.
-12. **Push is a separate approval and separate request.** Only a normal fast-forward push of the approved commit, no force, reset, rebase, extra modifications, or surprise commits.
+### Desktop coordinator / mentor (read-only by default)
+- Role: discuss with user **in friendly concise Persian**, review terminal reports, identify actual blockers, and provide **one copy-ready English prompt** for the next agreed terminal action.
+- **Never independently execute an action**: no local file edits, GitHub issue edits, GitHub commits/pushes, browser/computer actions, installations, reindexing, tests, migrations, or task creation **unless the user explicitly requests that specific action**.
+- Read-only inspection (docs, Git status, Codebase Memory lookup) is permitted **only when requested or clearly part of an approved read-only review**; do not start unasked audits or actions.
+- Offer advice rather than acting. If an operation requires approval, ask, then wait.
+- No repeated planning: approved Issues already define functionality. Ask about genuinely new scope/architecture decisions only.
 
-## 8. Local environment and safety
+### Terminal implementation agent
+- One small explicitly approved task at a time; stay on `chore/frontend-foundation`; preserve unrelated tracked/untracked work; never create a new branch automatically.
+- Follow root/scoped AGENTS instructions and use OpenCode native skill calls, not assumptions about Codex's `$implement` syntax.
+- Matt Pocock `implement`, `tdd`, and `code-review` were discovered; `code-review` has independent **Standards** and **Spec** axes. Avoid running `implement-spec`, `wayfinder` or optional subagents without approval.
+- **Established four phases, each a separate user-approved prompt:**
+  1. **Implementation + TDD:** inspect relevant code, implement approved small scope, focused tests/build; no reviews, commit or push yet.
+  2. **Review:** read-only Standards + Spec review; flag critical blockers; no file changes/tests/commit/push.
+  3. **Fix + local commit:** fix only essential findings, focused validation, one scoped commit; no push.
+  4. **Push:** only with **separate explicit user approval**, fast-forward only; verify HEAD/tracking; no surprise commits, merges/rebases, force push or issue edits.
+- Do not restart completed phases, run redundant broad tests, or spawn extra subagents. Use existing approved isolated HTTP/module testing seams.
+- Report only essentials: outcome, commit/push status, test/review results and critical risks, ideally **under 150 words**; agent in terminal communicates in English.
 
-- User works on Windows with PowerShell / Windows Terminal, Codex CLI and OpenCode.
-- Local PostgreSQL 18 available; disposable database `kia_blog_test` used for migration checks. Do not assume DB service is running or unattended credentials are available.
-- Docker unavailable in past workflows; do not require Docker to execute normal development.
-- Local OAuth credentials exist but are private; never request that they be pasted into chat, hardcoded or committed.
-- Backend-only tasks do not need frontend fixture/preview startup. Frontend tasks requiring visual review should reuse existing HTTP fixture on `127.0.0.1:4101` and Next preview on `127.0.0.1:3102` where appropriate; verify actual scripts before execution.
-- Never simultaneously run different agents editing the same working tree.
+## 8. How the next phase should proceed
 
-## 9. Memory / documentation strategy
+1. User starts a **new Desktop mentoring chat** (read-only) and, separately, a **new Terminal execution session** in the same local repository. Avoid two agents editing the same working tree.
+2. Each reads `AGENTS.md`, this document, relevant scoped instructions, and **verifies current Git HEAD and working-tree status**. The handoff's own commit may make remote ahead of local; integrate carefully with explicit permission and preserve local modifications.
+3. Use **Codebase Memory** for targeted architecture/symbol navigation when available; verify index freshness before trusting it. Do not automatically reinstall, reindex or mutate its graph.
+4. Before implementation, identify small integration discrepancies between live Nest Swagger/DTO contracts and Next.js fixture/adapter assumptions, prioritizing browser auth/session, OAuth callbacks, rich content/media, author admin and moderation. This is targeted contract verification **when the user asks**, not a new full product planning exercise.
+5. User approves one narrow integration task/Issue. Mentor produces staged prompts as described. Never auto-start the next task.
+6. Preserve the existing Persian RTL look, production-quality frontend expectations and feature behavior; test real integrations separately from fixture previews.
 
-A new coding agent should read **repository-owned context**, not assume it can inspect Codex conversation memory:
-- Root/scoped `AGENTS.md`
-- `docs/AI_HANDOFF.md`
-- `docs/agents/issue-tracker.md` and other applicable scoped instructions
-- Backend README, architecture, glossary, Prisma schema and migration history
-- Relevant frontend Tiptap editor/schema only for editor-related issues
-- Current GitHub Issue, current Git tree and tests
+## 9. Prompt contract for mentor-generated terminal instructions
 
-The **actual code and most recently approved Issue requirements** win over stale notes. Update this handoff after significant decisions or milestone changes, with a separate scoped documentation commit and user approval when needed.
+Every prompt should state: exact Issue/task and endpoint/behavior; current source of truth; required native Matt Pocock skill and **current phase**; scoped files/contracts where known; TDD/tests or review target; Git branch + preservation rules; whether a local commit is allowed; explicit **no push** unless separately approved; no GitHub Issue modifications; short final-report format; stopping condition.
 
-## 10. Prompt template for future implementation tasks
-
-```text
-Implement Kia Blog Issue #N: https://github.com/Kianibound/kia-blog/issues/N
-
-Read AGENTS.md, relevant scoped instructions, docs/AI_HANDOFF.md, and the current Issue.
-Check current branch, HEAD, git status, and any ongoing agent work before editing.
-Remain on chore/frontend-foundation; preserve unrelated changes.
-Use available Matt Pocock implement skill and mandatory TDD, Standards Review, Spec Review.
-Reuse existing test seams; make only the smallest changes required by the Issue.
-Update Swagger/OpenAPI and focused tests as needed.
-If schema migration is needed, preserve data and verify on disposable local PostgreSQL when available.
-Avoid production, secrets, new branches, incidental refactors, and redundant tool calls.
-Create one focused LOCAL commit only. DO NOT PUSH or modify GitHub Issues.
-Report commit, contracts, validation counts, reviews, migrations, risks, blockers.
-Stop and await separate push approval.
-```
-
-## 11. Next agent entry checklist
-
-- Is #48 already in progress or completed in the current working tree? **Avoid overwriting its work.**
-- Has OpenCode discovered `AGENTS.md` and Matt Pocock skill installation paths? If not, do read-only onboarding first.
-- Is the current HEAD ahead of this handoff due to the documentation commit? Refresh before making implementation changes.
-- Never treat a successful mock test as proof of end-to-end Google/GitHub OAuth or Cloudinary behavior.
+**Do not** ask the user to repeat known project context, promise background work, or conflate suggested actions with permission to execute. 
