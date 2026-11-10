@@ -503,6 +503,20 @@ approval increments it again. Existing ADMIN comment deletion, public
 APPROVED-only visibility and owner-controlled editing are unchanged. Migration
 `20261110130000_add_comment_version` adds the integer column with default 1.
 
+### USER own comments (Issue #56)
+
+`GET /comments/mine` requires a Bearer session and returns the authenticated
+user's own comments in every status (`PENDING` and `APPROVED`), newest first,
+paginated with the shared `page`/`limit` rules (defaults 1/10, limit 1–50) and the
+`{ data, meta }` envelope. Each row returns `id`, `content`, `status`,
+`version`, `postId`, `authorId`, `parentId`, `createdAt` and `updatedAt`, and is
+always scoped to the caller; other users' comments are never returned. Existing
+edit and delete endpoints keep their ownership rules (owner or ADMIN), editing
+content returns an `APPROVED` comment to `PENDING`, and deleted comments
+disappear from both this personal list and the public `APPROVED`-only list. No
+database migration is required for this issue; the existing `authorId` index
+supports the query.
+
 ### Owned Post status filtering (Issue #45)
 
 `GET /posts/mine` remains restricted to authenticated AUTHOR/ADMIN accounts and

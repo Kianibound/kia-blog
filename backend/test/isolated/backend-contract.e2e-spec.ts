@@ -4214,6 +4214,212 @@ describe('Backend contracts with isolated I/O', () => {
     });
   });
 
+  describe('USER own comments (Issue #56)', () => {
+    const authAs = (id = 'user-1') => {
+      persistence.refreshToken.findUnique.mockResolvedValue({
+        userId: id,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+        user: { ...safeUser, id, role: { name: 'USER' } },
+      });
+      return jwt.sign({
+        sub: id,
+        email: safeUser.email,
+        role: 'USER',
+        sid: 'session-1',
+      });
+    };
+    const row = (overrides: Record<string, unknown> = {}) => ({
+      id: 'c1',
+      content: 'My comment',
+      status: 'PENDING',
+      version: 1,
+      postId: 'post-1',
+      authorId: 'user-1',
+      parentId: null,
+      createdAt: new Date('2020-01-01'),
+      updatedAt: new Date('2020-01-01'),
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      persistence.comment.findMany.mockResolvedValue([]);
+      persistence.comment.count.mockResolvedValue(0);
+      persistence.post.findFirst.mockResolvedValue({ id: 'post-1' });
+    });
+
+    it('returns the current user PENDING and APPROVED comments, paginated', async () => {
+      persistence.comment.findMany.mockResolvedValue([
+        row({ id: 'c2', status: 'APPROVED', version: 2 }),
+        row({ id: 'c1', status: 'PENDING' }),
+      ]);
+      persistence.comment.count.mockResolvedValue(5);
+      const response = await request(app.getHttpServer())
+        .get('/comments/mine?page=2&limit=2')
+        .auth(authAs('user-1'), { type: 'bearer' })
+        .expect(200);
+      expect(persistence.comment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { authorId: 'user-1' },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          skip: 2,
+          take: 2,
+        }),
+      );
+      const args = persistence.comment.findMany.mock.calls[0][0] as {
+        select: Record<string, unknown>;
+      };
+      expect(args.select).toMatchObject({
+        id: true,
+        content: true,
+        status: true,
+        version: true,
+        postId: true,
+        authorId: true,
+        parentId: true,
+        createdAt: true,
+        updatedAt: true,
+      });
+      expect(persistence.comment.count).toHaveBeenCalledWith({
+        where: { authorId: 'user-1' },
+      });
+      expect(response.body.meta).toEqual({
+        page: 2,
+        limit: 2,
+        total: 5,
+        totalPages: 3,
+      });
+      expect(response.body.data.map((item: { status: string }) => item.status)).toEqual(
+        ['APPROVED', 'PENDING'],
+      );
+    });
+
+    it('requires authentication and never queries other users', async () => {
+      await request(app.getHttpServer()).get('/comments/mine').expect(401);
+      expect(persistence.comment.findMany).not.toHaveBeenCalled();
+    });
+
+    it('scopes the personal list to the authenticated user', async () => {
+      persistence.comment.findMany.mockResolvedValue([
+        row({ id: 'c9', authorId: 'user-2' }),
+      ]);
+      const response = await request(app.getHttpServer())
+        .get('/comments/mine')
+        .auth(authAs('user-2'), { type: 'bearer' })
+        .expect(200);
+      expect(persistence.comment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { authorId: 'user-2' } }),
+      );
+      expect(persistence.comment.count).toHaveBeenCalledWith({
+        where: { authorId: 'user-2' },
+      });
+      expect(response.body.data[0].authorId).toBe('user-2');
+    });
+
+    it('validates pagination and rejects extra filters', async () => {
+      await request(app.getHttpServer())
+        .get('/comments/mine?limit=51')
+        .auth(authAs(), { type: 'bearer' })
+        .expect(400);
+      await request(app.getHttpServer())
+        .get('/comments/mine?status=PENDING')
+        .auth(authAs(), { type: 'bearer' })
+        .expect(400);
+      expect(persistence.comment.findMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects an authorId override and keeps JWT-derived ownership', async () => {
+      await request(app.getHttpServer())
+        .get('/comments/mine?authorId=user-2')
+        .auth(authAs('user-1'), { type: 'bearer' })
+        .expect(400);
+      expect(persistence.comment.findMany).not.toHaveBeenCalled();
+
+      persistence.comment.findMany.mockResolvedValue([]);
+      persistence.comment.count.mockResolvedValue(0);
+      await request(app.getHttpServer())
+        .get('/comments/mine')
+        .auth(authAs('user-1'), { type: 'bearer' })
+        .expect(200);
+      expect(persistence.comment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { authorId: 'user-1' } }),
+      );
+    });
+
+    it('enforces ownership on delete and removal from both lists', async () => {
+      interface Row {
+        id: string;
+        content: string;
+        status: string;
+        version: number;
+        postId: string;
+        authorId: string;
+        parentId: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+      }
+      const rows: Row[] = [row({ status: 'APPROVED' }) as Row];
+      persistence.comment.findMany.mockImplementation(async (raw) => {
+        const where = (raw as { where: Record<string, unknown> }).where;
+        if (typeof where.authorId === 'string')
+          return rows.filter((entry) => entry.authorId === where.authorId);
+        return rows.filter(
+          (entry) =>
+            entry.postId === where.postId &&
+            entry.parentId === where.parentId &&
+            entry.status === where.status,
+        );
+      });
+      persistence.comment.count.mockImplementation(async (raw) => {
+        const where = (raw as { where: { authorId?: string } }).where;
+        return where.authorId
+          ? rows.filter((entry) => entry.authorId === where.authorId).length
+          : 0;
+      });
+      persistence.comment.findUnique.mockImplementation(async (raw) => {
+        const id = (raw as { where: { id: string } }).where.id;
+        return rows.find((entry) => entry.id === id) ?? null;
+      });
+      persistence.comment.delete.mockImplementation(async (raw) => {
+        const id = (raw as { where: { id: string } }).where.id;
+        const index = rows.findIndex((entry) => entry.id === id);
+        if (index >= 0) rows.splice(index, 1);
+        return {};
+      });
+
+      const mine = () =>
+        request(app.getHttpServer())
+          .get('/comments/mine')
+          .auth(authAs('user-1'), { type: 'bearer' });
+      const publicList = () =>
+        request(app.getHttpServer()).get('/posts/post-1/comments');
+      const removeMine = (token: string) =>
+        request(app.getHttpServer())
+          .delete('/comments/c1')
+          .auth(token, { type: 'bearer' });
+
+      expect((await mine().expect(200)).body.data).toHaveLength(1);
+      expect((await publicList().expect(200)).body).toHaveLength(1);
+
+      await removeMine(authAs('user-2')).expect(403);
+      expect(rows).toHaveLength(1);
+
+      await removeMine(authAs('user-1')).expect(200);
+      expect((await mine().expect(200)).body.data).toHaveLength(0);
+      expect((await publicList().expect(200)).body).toHaveLength(0);
+    });
+
+    it('documents the personal comment contract', async () => {
+      const api = (
+        await request(app.getHttpServer()).get('/api-json').expect(200)
+      ).body;
+      const operation = api.paths['/comments/mine'].get;
+      expect(operation.security).toEqual([{ 'access-token': [] }]);
+      expect(operation.responses['200']).toBeDefined();
+      expect(operation.responses['401']).toBeDefined();
+    });
+  });
+
   describe('ADMIN post inventory', () => {
     // Test-only rows behind the existing persistence seam, including private
     // author data so response projection is exercised rather than assumed.

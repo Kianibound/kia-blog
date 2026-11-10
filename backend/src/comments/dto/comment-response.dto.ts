@@ -71,3 +71,12 @@ export class AdminCommentsResponseDto {
   @ApiProperty({ type: PaginationMetaResponseDto })
   meta: PaginationMetaResponseDto;
 }
+
+// The authenticated user's own comments (PENDING and APPROVED), newest first.
+export class MyCommentsResponseDto {
+  @ApiProperty({ type: [CommentResponseDto] })
+  data: CommentResponseDto[];
+
+  @ApiProperty({ type: PaginationMetaResponseDto })
+  meta: PaginationMetaResponseDto;
+}

@@ -4,6 +4,7 @@ import {
   CommentResponseDto,
   AdminCommentSummaryResponseDto,
   AdminCommentsResponseDto,
+  MyCommentsResponseDto,
 } from './dto/comment-response.dto';
 import {
   ErrorResponseDto,
@@ -30,6 +31,7 @@ import { CurrentUser } from '../access-control/decorators/current-user.decorator
 import { CommentsService } from './comments.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { AdminCommentsQueryDto } from './dto/admin-comments-query.dto';
+import { MyCommentsQueryDto } from './dto/my-comments-query.dto';
 import { ApproveCommentDto } from './dto/approve-comment.dto';
 
 import type { AccessTokenPayload } from '../access-control/types/access-token-payload.type';
@@ -127,6 +129,36 @@ export class CommentsController {
     @Body() dto: ApproveCommentDto,
   ) {
     return this.commentsService.approve(commentId, dto.version);
+  }
+
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: "Get the current user's own comments",
+    description:
+      "Paginated list of the authenticated user's comments in every status (PENDING and APPROVED), newest first. Never includes other users' comments.",
+  })
+  @ApiResponse({
+    type: MyCommentsResponseDto,
+    status: 200,
+    description: 'Owned comments returned successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 400,
+    description: 'Invalid pagination or unsupported query fields.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 401,
+    description: 'Valid authenticated session required.',
+  })
+  @Get('comments/mine')
+  @UseGuards(JwtAuthGuard)
+  findMine(
+    @CurrentUser() user: AccessTokenPayload,
+    @Query() query: MyCommentsQueryDto,
+  ) {
+    return this.commentsService.findMine(user.sub, query.page, query.limit);
   }
 
   @ApiBearerAuth('access-token')

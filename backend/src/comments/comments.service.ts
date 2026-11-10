@@ -42,6 +42,19 @@ const adminCommentSelect = {
   updatedAt: true,
 } as const;
 
+// Explicit safe projection for the owner's personal comment list.
+const myCommentSelect = {
+  id: true,
+  content: true,
+  status: true,
+  version: true,
+  postId: true,
+  authorId: true,
+  parentId: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
 @Injectable()
 export class CommentsService {
   constructor(
@@ -174,6 +187,26 @@ export class CommentsService {
     });
     if (!approved) throw new NotFoundException('Comment not found.');
     return approved;
+  }
+
+  // The authenticated user's own comments, in every status, newest first.
+  async findMine(userId: string, page: number, limit: number) {
+    const where = { authorId: userId };
+    const [comments, total] = await Promise.all([
+      this.prisma.comment.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+        select: myCommentSelect,
+      }),
+      this.prisma.comment.count({ where }),
+    ]);
+
+    return {
+      data: comments,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
   }
 
   async reply(
