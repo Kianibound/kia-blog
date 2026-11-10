@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { RichContent } from "@/components/posts/rich-content";
 import { messages } from "@/i18n/messages/fa";
 import { getPublishedPost } from "@/lib/posts";
 import { formatPublicationDate } from "@/lib/publication-date";
@@ -33,6 +34,22 @@ export default async function ArticleDetail({ params, bookmark }: { params: Prom
       <Link href="/" className="inline-flex min-h-12 items-center rounded-md px-4 font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">{messages.article.backToFeed}</Link>
       <Card className="relative">
         {bookmark && <div className="absolute end-4 top-4 sm:end-6 sm:top-6">{bookmark}</div>}
+        {post.coverImage && (
+          // Covers are normalized server-side; only image URLs from the API payload are used.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={post.coverImage.src}
+            alt={post.coverImage.alt}
+            width={post.coverImage.width ?? 640}
+            height={post.coverImage.height ?? 360}
+            className={`${post.coverImage.width && post.coverImage.height ? "" : "aspect-video"} w-full rounded-t-surface border-b border-border object-cover`}
+            style={
+              post.coverImage.width && post.coverImage.height
+                ? { aspectRatio: `${post.coverImage.width} / ${post.coverImage.height}` }
+                : undefined
+            }
+          />
+        )}
         <header className={bookmark ? "space-y-6 p-6 pe-20 sm:p-8 sm:pe-24" : "space-y-6 p-6 sm:p-8"}>
           <h1 id="article-title" className="text-3xl leading-tight font-bold wrap-anywhere">{fa(post.title)}</h1>
           <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground">
@@ -50,7 +67,17 @@ export default async function ArticleDetail({ params, bookmark }: { params: Prom
             </ul>
           )}
         </header>
-        <section aria-label={messages.article.content} className="border-t border-border p-6 whitespace-pre-wrap wrap-anywhere sm:p-8" style={{ unicodeBidi: "plaintext" }}>{post.content}</section>
+        <section aria-label={messages.article.content} className="border-t border-border p-6 sm:p-8">
+          {post.contentDocument ? (
+            <div className="wrap-anywhere">
+              <RichContent document={post.contentDocument} media={post.contentMedia} />
+            </div>
+          ) : (
+            <div className="whitespace-pre-wrap wrap-anywhere" style={{ unicodeBidi: "plaintext" }}>
+              {post.content}
+            </div>
+          )}
+        </section>
       </Card>
     </article>
   );

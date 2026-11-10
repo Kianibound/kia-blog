@@ -42,7 +42,7 @@ createServer((request, response) => {
   }
   if (request.method === "POST" && url.pathname === "/__test/details") {
     const mode = url.searchParams.get("mode");
-    if (!["success", "error", "rate-limit", "malformed", "invalid", "non-public", "disconnect", "timeout"].includes(mode)) return response.writeHead(400).end();
+    if (!["success", "rich", "error", "rate-limit", "malformed", "invalid", "non-public", "disconnect", "timeout"].includes(mode)) return response.writeHead(400).end();
     detailMode = mode;
     return response.writeHead(204).end();
   }
@@ -61,6 +61,49 @@ createServer((request, response) => {
     if (detailMode === "malformed") return response.end("{TEST DOUBLE");
     if (detailMode === "invalid") return response.end(JSON.stringify({ ...post, content: 5 }));
     if (detailMode === "non-public") return response.end(JSON.stringify({ ...post, status: "DRAFT", content: "PRIVATE TEST DOUBLE" }));
+    if (detailMode === "rich") return response.end(JSON.stringify({
+      ...post,
+      coverImage: {
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        url: "https://res.cloudinary.com/demo/image/upload/v1/rich/cover.png",
+        width: 800,
+        height: 450,
+        alt: "جلد مقاله",
+      },
+      content: "عنوان بخش\nمتن غنی",
+      contentDocument: {
+        type: "doc",
+        attrs: { dir: "rtl" },
+        content: [
+          { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "عنوان بخش" }] },
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: "متن پررنگ ", marks: [{ type: "bold" }] },
+              { type: "text", text: "پیوند", marks: [{ type: "link", attrs: { href: "https://example.test/blank", target: "_blank" } }] },
+              { type: "text", text: " " },
+              { type: "text", text: "پیوند دوم", marks: [{ type: "link", attrs: { href: "https://example.test/same" } }] },
+            ],
+          },
+          { type: "image", attrs: { mediaId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", alt: "تصویر متن" } },
+          { type: "image", attrs: { mediaId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", alt: "تصویر گمشده" } },
+          {
+            type: "orderedList",
+            attrs: { start: 2 },
+            content: [{ type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "مورد اول" }] }] }],
+          },
+          { type: "codeBlock", attrs: { language: "ts" }, content: [{ type: "text", text: "const x = 1;" }] },
+        ],
+      },
+      contentMedia: [
+        {
+          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          url: "https://res.cloudinary.com/demo/image/upload/v1/rich/body.png",
+          width: 400,
+          height: 300,
+        },
+      ],
+    }));
     return response.end(JSON.stringify(post));
   }
   if (request.method === "GET" && url.pathname === "/categories" && !url.search && !request.headers.authorization) {

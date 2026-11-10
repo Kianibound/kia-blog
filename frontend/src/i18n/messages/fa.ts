@@ -62,6 +62,8 @@ export const messages = {
     error: "دریافت مقاله ممکن نشد.",
     notFound: "مقاله پیدا نشد",
     notFoundHelp: "این مقاله وجود ندارد یا برای خواندن در دسترس نیست.",
+    imageUnavailable: "تصویر این بخش در دسترس نیست.",
+    codeBlock: "بلوک کد",
   },
   about: {
     title: "دربارهٔ کیا بلاگ",

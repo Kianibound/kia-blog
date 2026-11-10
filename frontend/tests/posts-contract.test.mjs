@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseBookmarkState, parseBookmarkedPosts, parsePublishedPost, parsePublishedPosts } from "../src/lib/posts-contract.ts";
+import { parseBookmarkState, parseBookmarkedPosts, parsePublishedPost, parsePublishedPosts, buildRichBlocks, parseContentMedia, parseRichDocument } from "../src/lib/posts-contract.ts";
 import { feed } from "./fixtures/posts.mjs";
 import { previewPosts } from "./fixtures/preview-posts.mjs";
 import { parseOwnPosts, parseAdminPosts } from "../src/lib/own-posts-contract.ts";
@@ -95,7 +95,11 @@ test("Author creation requires a name and a well-formed email", () => {
 test("public cards preserve optional covers and reject unsafe cover references", () => {
   const cover = { src: "/fixture-images/12345678-abcd", alt: "تصویر جلد مقاله" };
   const withCover = { ...feed, data: [{ ...feed.data[0], coverImage: cover }] };
-  assert.deepEqual(parsePublishedPosts(withCover).data[0].coverImage, cover);
+  assert.deepEqual(parsePublishedPosts(withCover).data[0].coverImage, {
+    ...cover,
+    width: null,
+    height: null,
+  });
   assert.equal(parsePublishedPosts(feed).data[0].coverImage, null);
   for (const invalid of [{ src: "javascript:alert(1)", alt: "تصویر" }, { src: cover.src, alt: " " }, "bad"]) {
     assert.throws(() => parsePublishedPosts({ ...feed, data: [{ ...feed.data[0], coverImage: invalid }] }));
@@ -159,4 +163,292 @@ test("incompatible or non-public responses are rejected instead of becoming an e
   for (const response of invalidResponses) {
     assert.throws(() => parsePublishedPosts(response), /Invalid public posts response/);
   }
+});
+
+// Actual-shaped Nest `coverImage: { id, url, width, height, alt }` (#49).
+const nestCover = {
+  id: "7a3e0fe6-81f3-4f42-b61e-361beea3a217",
+  url: "https://res.cloudinary.com/demo/image/upload/v1/articles/cover.png",
+  width: 800,
+  height: 450,
+  alt: "جلد مقاله",
+};
+const mediaId = "7a3e0fe6-81f3-4f42-b61e-361beea3a217";
+const safeMediaUrl = "https://res.cloudinary.com/demo/image/upload/v1/articles/body.png";
+
+test("public cover parsing accepts the Nest shape and rejects unsafe references", () => {
+  const withNestCover = { ...feed, data: [{ ...feed.data[0], coverImage: nestCover }] };
+  assert.deepEqual(parsePublishedPosts(withNestCover).data[0].coverImage, {
+    src: nestCover.url,
+    alt: nestCover.alt,
+    width: nestCover.width,
+    height: nestCover.height,
+  });
+  assert.equal(parsePublishedPosts(feed).data[0].coverImage, null);
+  for (const coverImage of [
+    { ...nestCover, url: "http://res.cloudinary.com/demo/image/upload/a.png" },
+    { ...nestCover, url: "javascript:alert(1)" },
+    { ...nestCover, url: "https://user:pass@res.cloudinary.com/demo/image/upload/a.png" },
+    { ...nestCover, url: "https://evil.test/demo/image/upload/a.png" },
+    { ...nestCover, url: "https://res.cloudinary.com/demo/raw/upload/a.png" },
+    { ...nestCover, url: "https://res.cloudinary.com:8443/demo/image/upload/a.png" },
+    { ...nestCover, url: "https://res.cloudinary.com/demo/image/upload/a.png?x=1" },
+    { ...nestCover, url: "https://res.cloudinary.com/demo/image/upload/a.png#x" },
+    { ...nestCover, alt: " " },
+    { id: nestCover.id, url: nestCover.url, width: 800, height: 450 },
+    { ...nestCover, width: 0 },
+  ]) {
+    assert.throws(() =>
+      parsePublishedPosts({ ...feed, data: [{ ...feed.data[0], coverImage }] }),
+    );
+  }
+});
+
+const richDocument = {
+  type: "doc",
+  attrs: { dir: "rtl" },
+  content: [
+    {
+      type: "heading",
+      attrs: { level: 2, dir: "rtl" },
+      content: [{ type: "text", text: "عنوان" }],
+    },
+    {
+      type: "paragraph",
+      attrs: { dir: "rtl" },
+      content: [
+        { type: "text", text: "متن ", marks: [{ type: "bold" }] },
+        { type: "text", text: "کد", marks: [{ type: "code" }] },
+        { type: "hardBreak" },
+        {
+          type: "text",
+          text: "پیوند",
+          marks: [{ type: "link", attrs: { href: "https://example.test/x", target: "_blank" } }],
+        },
+      ],
+    },
+    { type: "image", attrs: { mediaId, alt: "تصویر متن" } },
+    {
+      type: "blockquote",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "نقل" }] }],
+    },
+    {
+      type: "orderedList",
+      attrs: { start: 2 },
+      content: [
+        {
+          type: "listItem",
+          content: [{ type: "paragraph", content: [{ type: "text", text: "اول" }] }],
+        },
+      ],
+    },
+    {
+      type: "codeBlock",
+      attrs: { language: "ts" },
+      content: [{ type: "text", text: "const x = 1;" }],
+    },
+  ],
+};
+
+const richDetail = {
+  ...previewPosts[0],
+  coverImage: nestCover,
+  content: "عنوان متن",
+  contentDocument: richDocument,
+  contentMedia: [{ id: mediaId, url: safeMediaUrl, width: 800, height: 450 }],
+};
+
+test("detail parsing accepts a Nest rich document and resolves media by id", () => {
+  const detail = parsePublishedPost(richDetail);
+  assert.equal(detail.contentDocument.type, "doc");
+  assert.deepEqual(detail.contentMedia, [
+    { id: mediaId, url: safeMediaUrl, width: 800, height: 450 },
+  ]);
+  assert.deepEqual(detail.coverImage, {
+    src: nestCover.url,
+    alt: nestCover.alt,
+    width: nestCover.width,
+    height: nestCover.height,
+  });
+  assert.equal(detail.content, "عنوان متن");
+});
+
+test("legacy detail keeps plain text and an empty media projection", () => {
+  for (const payload of [
+    { ...previewPosts[0], contentDocument: null },
+    previewPosts[0],
+  ]) {
+    const detail = parsePublishedPost(payload);
+    assert.equal(detail.contentDocument, null);
+    assert.deepEqual(detail.contentMedia, []);
+    assert.equal(detail.content, payload.content);
+  }
+});
+
+test("rich documents and media projections reject unsafe or malformed values", () => {
+  const unsafeDocuments = [
+    {
+      ...richDocument,
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text: "پیوند",
+              marks: [{ type: "link", attrs: { href: "javascript:alert(1)" } }],
+            },
+          ],
+        },
+      ],
+    },
+    { ...richDocument, content: [{ type: "image", attrs: { mediaId: "not-a-uuid", alt: "x" } }] },
+    { ...richDocument, content: [{ type: "image", attrs: { mediaId, alt: " " } }] },
+    { ...richDocument, content: [{ type: "table" }] },
+    "not-a-document",
+  ];
+  for (const contentDocument of unsafeDocuments) {
+    assert.throws(
+      () => parsePublishedPost({ ...richDetail, contentDocument }),
+      /Invalid content document/,
+    );
+  }
+
+  for (const contentMedia of [
+    [{ id: mediaId, url: "http://res.cloudinary.com/demo/image/upload/a.png", width: 1, height: 1 }],
+    [{ id: mediaId, url: "javascript:alert(1)", width: 1, height: 1 }],
+    [{ id: mediaId, url: "https://evil.test/demo/image/upload/a.png", width: 1, height: 1 }],
+    [{ id: mediaId, url: "https://res.cloudinary.com/demo/raw/upload/a.png", width: 1, height: 1 }],
+    [{ id: mediaId, url: "https://res.cloudinary.com:8443/demo/image/upload/a.png", width: 1, height: 1 }],
+    [{ id: mediaId, url: safeMediaUrl + "?v=1", width: 1, height: 1 }],
+    [{ id: mediaId, url: safeMediaUrl, width: "800", height: 450 }],
+    [
+      { id: mediaId, url: safeMediaUrl, width: 1, height: 1 },
+      { id: mediaId, url: safeMediaUrl, width: 1, height: 1 },
+    ],
+  ]) {
+    assert.throws(() => parseContentMedia(contentMedia), /Invalid content media/);
+  }
+});
+
+test("rich blocks resolve verified media and never fall back to a URL", () => {
+  const document = parseRichDocument(richDocument);
+  const blocks = buildRichBlocks(document, parseContentMedia(richDetail.contentMedia));
+  assert.deepEqual(blocks.map((block) => block.kind), [
+    "heading",
+    "paragraph",
+    "image",
+    "blockquote",
+    "list",
+    "codeBlock",
+  ]);
+
+  const paragraph = blocks[1];
+  assert.equal(paragraph.runs[0].bold, true);
+  assert.equal(paragraph.runs[1].code, true);
+  assert.equal(paragraph.runs[2].kind, "break");
+  assert.equal(paragraph.runs[3].href, "https://example.test/x");
+
+  const image = blocks[2];
+  assert.equal(image.media.url, safeMediaUrl);
+  assert.equal(image.alt, "تصویر متن");
+
+  for (const media of [
+    [],
+    [{ id: "another-media", url: safeMediaUrl, width: 1, height: 1 }],
+    [{ id: mediaId, url: "http://insecure.test/a.png", width: 1, height: 1 }],
+  ]) {
+    const unresolved = buildRichBlocks(document, media).find((block) => block.kind === "image");
+    assert.equal(unresolved.media, null);
+    assert.equal(unresolved.alt, "تصویر متن");
+  }
+
+  assert.equal(blocks[4].ordered, true);
+  assert.equal(blocks[4].start, 2);
+  assert.equal(blocks[5].text, "const x = 1;");
+});
+
+test("rich text stays literal text and is never parsed as HTML", () => {
+  const hostile = {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: '<script>alert("x")</script>' }],
+      },
+    ],
+  };
+  const blocks = buildRichBlocks(parseRichDocument(hostile), []);
+  assert.equal(blocks[0].runs[0].text, '<script>alert("x")</script>');
+});
+
+test("whitespace-only text nodes match the backend and are preserved verbatim", () => {
+  const document = parseRichDocument({
+    type: "doc",
+    content: [{ type: "paragraph", content: [{ type: "text", text: " " }] }],
+  });
+  assert.equal(document.content[0].content[0].text, " ");
+  assert.equal(buildRichBlocks(document, [])[0].runs[0].text, " ");
+});
+
+test("inline image nodes are rejected instead of silently degrading", () => {
+  assert.throws(
+    () =>
+      parseRichDocument({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "image", attrs: { mediaId, alt: "تصویر" } }],
+          },
+        ],
+      }),
+    /Invalid content document/,
+  );
+});
+
+test("server media is only accepted from the Cloudinary image delivery path", () => {
+  const document = parseRichDocument(richDocument);
+  for (const url of [
+    "https://evil.test/demo/image/upload/a.png",
+    "https://res.cloudinary.com/demo/raw/upload/a.png",
+    "http://res.cloudinary.com/demo/image/upload/a.png",
+  ]) {
+    const image = buildRichBlocks(document, [
+      { id: mediaId, url, width: 1, height: 1 },
+    ]).find((block) => block.kind === "image");
+    assert.equal(image.media, null);
+  }
+});
+
+test("link target semantics are preserved from the backend document", () => {
+  const document = parseRichDocument({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          {
+            type: "text",
+            text: "new tab",
+            marks: [
+              {
+                type: "link",
+                attrs: { href: "https://example.test/blank", target: "_blank" },
+              },
+            ],
+          },
+          {
+            type: "text",
+            text: "same tab",
+            marks: [{ type: "link", attrs: { href: "https://example.test/same" } }],
+          },
+        ],
+      },
+    ],
+  });
+  const runs = buildRichBlocks(document, [])[0].runs;
+  assert.equal(runs[0].target, "_blank");
+  assert.equal(runs[1].href, "https://example.test/same");
+  assert.equal(runs[1].target, undefined);
 });

@@ -96,3 +96,41 @@ test("all 25 preview articles have matching detailed content and list records re
     }
   }
 });
+
+test("canonical rich content renders safely with covers, media and link semantics", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/details?mode=rich");
+  const response = await page.goto("/posts/test-post-2");
+  expect(response?.status()).toBe(200);
+  const article = page.getByRole("article");
+
+  const cover = article.getByRole("img", { name: "جلد مقاله" });
+  await expect(cover).toHaveAttribute("src", /res\.cloudinary\.com\/demo\/image\/upload/);
+  await expect(cover).toHaveAttribute("width", "800");
+  await expect(cover).toHaveAttribute("height", "450");
+
+  await expect(article.getByRole("heading", { level: 2, name: "عنوان بخش" })).toBeVisible();
+  await expect(article.getByText("متن پررنگ", { exact: false })).toBeVisible();
+
+  const blank = article.getByRole("link", { name: "پیوند", exact: true });
+  await expect(blank).toHaveAttribute("target", "_blank");
+  await expect(blank).toHaveAttribute("rel", "noopener noreferrer");
+
+  const same = article.getByRole("link", { name: "پیوند دوم", exact: true });
+  await expect(same).toHaveAttribute("href", "https://example.test/same");
+  await expect(same).not.toHaveAttribute("target", "_blank");
+
+  const body = article.getByRole("img", { name: "تصویر متن" });
+  await expect(body).toHaveAttribute("src", /demo\/image\/upload\/v1\/rich\/body\.png/);
+  await expect(body).toHaveAttribute("width", "400");
+
+  await expect(article.getByText("تصویر گمشده")).toBeVisible();
+  await expect(article.getByText("تصویر این بخش در دسترس نیست.")).toBeVisible();
+  await expect(article.getByText("مورد اول")).toBeVisible();
+  await expect(article.locator("ol")).toHaveAttribute("start", "2");
+
+  const pre = article.locator("pre");
+  await expect(pre).toContainText("const x = 1;");
+  await expect(pre).toHaveAttribute("tabindex", "0");
+  await expect(pre).toHaveAttribute("aria-label", "بلوک کد");
+  await expect(article).not.toContainText("<script");
+});
