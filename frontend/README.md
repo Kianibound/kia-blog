@@ -33,7 +33,25 @@ generated route types exist. Copy `.env.example` to `.env.local` and set
 homepage fetches public `GET /posts?page=1&limit=10&sort=newest` on the server,
 without authentication or persistent caching. Builds do not require a running
 backend; a missing/invalid origin or response fails the request rather than
-substituting sample articles. The frontend does not handle tokens.
+substituting sample articles.
+
+The server-only session foundation (Issue #58) keeps access/refresh JWTs out of
+the browser. The browser receives only an opaque `HttpOnly` session ID
+(`__Host-kia_session` in production) whose SHA-256 hash keys an encrypted record
+in Upstash Redis. Configure `UPSTASH_REDIS_REST_URL`,
+`UPSTASH_REDIS_REST_TOKEN`, `SESSION_ENCRYPTION_KEY` and `APP_ORIGIN`; missing
+values fail closed. Access-token refresh uses an atomic conditional Redis write,
+so a concurrent logout/invalidation cannot resurrect the session or extend its
+refresh deadline. Route handlers must enter through
+`src/lib/session/server.ts`; authenticated mutations and logout use
+`handleAuthenticatedMutation`/`handleLogoutMutation`, which require the trusted
+Origin and the per-session CSRF token. Login/register UI and OAuth flows remain
+inactive, and Nest does not rotate refresh tokens.
+
+Follow-ups for Issue #59: login and registration mutations must enforce
+Origin/CSRF protections; authenticated read paths must clear invalid cookies on
+terminal authentication failure; do not reintroduce session-ID rotation without
+an approved atomic design; Nest refresh returns only a new `accessToken`.
 
 ## Focused verification
 
@@ -166,7 +184,8 @@ scenarios demonstrate presentation and failure handling, not real authorization.
 - `src/i18n/messages/fa.ts`: app copy and metadata. No language switch or
   multilingual routing yet. English support can later add a dictionary and
   locale selection without moving business logic.
-- `src/lib/`: official VibeFarsi utilities; no generic API architecture yet.
+- `src/lib/`: official VibeFarsi utilities and the server-only session
+  foundation (enter through `src/lib/session/server.ts`).
 - `src/app/globals.css`: official Graphite theme and Tailwind token mapping.
 - Use logical classes (`ps-*`, `me-*`, `text-start`); scope LTR to email/code.
 
