@@ -25,6 +25,7 @@ import {
 import { SessionService } from "../src/lib/session/service.ts";
 import { UpstashSessionStore } from "../src/lib/session/store.ts";
 import { handleMutationRequest } from "../src/lib/session/mutation-handler.ts";
+import { handleReadRequest } from "../src/lib/session/read-handler.ts";
 import {
   CsrfError,
   SessionStoreUnavailableError,
@@ -773,4 +774,38 @@ test("API paths are constrained to the configured Nest origin", () => {
   for (const path of ["//evil.test/auth", "https://evil.test/auth", "auth/me", "/\\evil"]) {
     assert.throws(() => service.apiUrl(path), /Invalid API path/);
   }
+});
+
+test("authenticated read clears the cookie on terminal invalid-session failure", async () => {
+  let cleared = 0;
+  const returned = await handleReadRequest(
+    {
+      readSessionId: async () => "session-id",
+      authedFetch: async () => {
+        throw new UnauthenticatedError();
+      },
+      getCsrfToken: async () => "csrf",
+      clearCookie: async () => {
+        cleared += 1;
+      },
+    },
+    async ({ read }) => read("/auth/me"),
+  ).catch((error) => error);
+  assert.ok(returned instanceof UnauthenticatedError);
+  assert.equal(cleared, 1);
+
+  cleared = 0;
+  const none = await handleReadRequest(
+    {
+      readSessionId: async () => null,
+      authedFetch: async () => new Response(),
+      getCsrfToken: async () => "csrf",
+      clearCookie: async () => {
+        cleared += 1;
+      },
+    },
+    async () => "unexpected",
+  );
+  assert.equal(none, null);
+  assert.equal(cleared, 0);
 });

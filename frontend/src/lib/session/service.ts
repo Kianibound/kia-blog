@@ -340,6 +340,7 @@ export class SessionService {
         ...requestInit,
         headers,
         cache: "no-store",
+        signal: requestInit.signal ?? AbortSignal.timeout(this.timeoutMs),
       });
     };
 

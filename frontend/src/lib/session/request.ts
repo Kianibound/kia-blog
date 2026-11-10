@@ -1,12 +1,20 @@
 import "server-only";
 import { cookies } from "next/headers";
-import { loadSessionConfig, type SessionConfig } from "./config.ts";
+import {
+  loadCookiePolicy,
+  loadSessionConfig,
+  type SessionConfig,
+} from "./config.ts";
 import { clearedSessionCookieOptions, sessionCookieOptions } from "./cookie.ts";
 import { parseEncryptionKey } from "./crypto.ts";
 import {
   handleMutationRequest,
   type AuthorizedMutationContext,
 } from "./mutation-handler.ts";
+import {
+  handleReadRequest,
+  type AuthorizedReadContext,
+} from "./read-handler.ts";
 import { SessionService } from "./service.ts";
 import { UpstashSessionStore } from "./store.ts";
 import type { SessionCredentials } from "./service.ts";
@@ -37,7 +45,8 @@ export function getSessionService(): SessionService {
 }
 
 export async function readBrowserSessionId(): Promise<string | null> {
-  const value = (await cookies()).get(getSessionConfig().cookieName)?.value;
+  const { cookieName } = loadCookiePolicy();
+  const value = (await cookies()).get(cookieName)?.value;
   return value && value.length > 0 ? value : null;
 }
 
@@ -89,8 +98,32 @@ export async function handleLogoutMutation(
 }
 
 export async function clearBrowserSession(): Promise<void> {
-  const config = getSessionConfig();
+  const { cookieName, secureCookies } = loadCookiePolicy();
   (await cookies()).set(
-    clearedSessionCookieOptions(config.cookieName, config.secureCookies),
+    clearedSessionCookieOptions(cookieName, secureCookies),
+  );
+}
+
+export type AuthenticatedReadContext = AuthorizedReadContext;
+
+/**
+ * Server-side authenticated read entry point. A terminal 401 clears the
+ * browser cookie before the caller sees the failure.
+ */
+export async function readAuthenticated<T>(
+  perform: (context: AuthenticatedReadContext) => Promise<T>,
+): Promise<T | null> {
+  const sessionId = await readBrowserSessionId();
+  if (!sessionId) return null;
+  const service = getSessionService();
+  return handleReadRequest(
+    {
+      readSessionId: async () => sessionId,
+      authedFetch: (current, path, init) =>
+        service.authedFetch(current, path, init),
+      getCsrfToken: (current) => service.getCsrfToken(current),
+      clearCookie: clearBrowserSession,
+    },
+    perform,
   );
 }

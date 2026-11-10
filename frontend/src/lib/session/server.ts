@@ -11,8 +11,10 @@ export {
   getSessionConfig,
   handleAuthenticatedMutation,
   handleLogoutMutation,
+  readAuthenticated,
   readBrowserSessionId,
 } from "./request.ts";
+export type { AuthenticatedReadContext } from "./request.ts";
 export type { AuthorizedMutationContext } from "./mutation-handler.ts";
 export type { MutationRequestInit } from "./service.ts";
 export { CsrfError, UnauthenticatedError } from "./errors.ts";

@@ -20,13 +20,61 @@ const categories = [
   { id: "20000000-0000-4000-8000-000000000002", name: "یادگیری 2026", slug: "", createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" },
 ];
 
+function readJson(request) {
+  return new Promise((resolve) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      try { resolve(JSON.parse(body)); } catch { resolve(null); }
+    });
+  });
+}
+
 // Minimal external API test double. Strict query handling checks the real wire boundary.
-createServer((request, response) => {
+createServer(async (request, response) => {
   const url = new URL(request.url, "http://127.0.0.1:4101");
   if (handleDashboardFixture(request, response, url, categories)) return;
   if (request.method === "GET" && url.pathname === "/health") {
     response.end("ok");
     return;
+  }
+  if (request.method === "POST" && url.pathname === "/auth/register") {
+    const body = await readJson(request);
+    const email = typeof body?.email === "string" ? body.email : "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return response.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Invalid email" }));
+    if (email.includes("taken")) return response.writeHead(409, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Account exists" }));
+    if (email.includes("limited")) return response.writeHead(429, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Too many requests" }));
+    if (email.includes("fail")) return response.writeHead(503, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unavailable" }));
+    return response.writeHead(201, { "Content-Type": "application/json" }).end(JSON.stringify({
+      message: "Registration successful. Log in with your email and password. No session was created.",
+      user: {
+        id: "90000000-0000-4000-8000-000000000001",
+        email,
+        username: "user_fixture",
+        name: null,
+        emailVerified: false,
+        role: { name: "USER" },
+      },
+    }));
+  }
+  if (request.method === "POST" && url.pathname === "/auth/login") {
+    const body = await readJson(request);
+    const email = typeof body?.email === "string" ? body.email : "";
+    if (email.includes("limited")) return response.writeHead(429, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Too many requests" }));
+    if (email.includes("fail")) return response.writeHead(503, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unavailable" }));
+    if (!email || email.includes("bad") || email.includes("disabled")) return response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Invalid email or password." }));
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({
+      accessToken: "fixture-access-token",
+      refreshToken: "fixture-refresh-token",
+      user: {
+        id: "90000000-0000-4000-8000-000000000001",
+        email,
+        username: "user_fixture",
+        name: null,
+        emailVerified: false,
+        role: { name: "USER" },
+      },
+    }));
   }
   if (request.method === "POST" && url.pathname === "/__test/categories") {
     const mode = url.searchParams.get("mode");

@@ -48,10 +48,20 @@ refresh deadline. Route handlers must enter through
 Origin and the per-session CSRF token. Login/register UI and OAuth flows remain
 inactive, and Nest does not rotate refresh tokens.
 
-Follow-ups for Issue #59: login and registration mutations must enforce
-Origin/CSRF protections; authenticated read paths must clear invalid cookies on
-terminal authentication failure; do not reintroduce session-ID rotation without
-an approved atomic design; Nest refresh returns only a new `accessToken`.
+Follow-ups: Google/GitHub OAuth remains inactive (Issue #68); session-ID
+rotation stays deferred until an approved atomic design; Nest refresh returns
+only a new `accessToken`.
+
+### Email authentication (Issue #59)
+
+Production `/login` and `/register` submit through server actions; no access or
+refresh token enters client JavaScript. Registration sends only email, password
+and confirmation, creates a USER account without a session, and redirects to the
+separate login step. Login derives the role from Nest's verified identity and
+creates the Issue #58 session; the signed-in header offers logout. Login,
+registration and logout require the exact `APP_ORIGIN` plus a signed CSRF token
+(the session secret doubles as the token key). OAuth buttons remain inactive
+until Issue #68. The dashboard preview keeps its isolated fixture role choice.
 
 ## Focused verification
 
