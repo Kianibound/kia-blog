@@ -171,6 +171,7 @@ model Comment {
   id      String @id @default(uuid())
   content String
   status  CommentStatus @default(PENDING)
+  version Int           @default(1)
 
   postId String
   post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)

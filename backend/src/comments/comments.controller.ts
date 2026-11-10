@@ -2,6 +2,8 @@ import {
   CommentAuthorResponseDto,
   CommentThreadResponseDto,
   CommentResponseDto,
+  AdminCommentSummaryResponseDto,
+  AdminCommentsResponseDto,
 } from './dto/comment-response.dto';
 import {
   ErrorResponseDto,
@@ -15,14 +17,20 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 
 import { JwtAuthGuard } from '../access-control/guards/jwt-auth.guard';
+import { RolesGuard } from '../access-control/guards/roles.guard';
+import { Roles } from '../access-control/decorators/roles.decorator';
+import { ROLE } from '../roles/constants/role.constants';
 import { CurrentUser } from '../access-control/decorators/current-user.decorator';
 
 import { CommentsService } from './comments.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
+import { AdminCommentsQueryDto } from './dto/admin-comments-query.dto';
+import { ApproveCommentDto } from './dto/approve-comment.dto';
 
 import type { AccessTokenPayload } from '../access-control/types/access-token-payload.type';
 import { UpdateCommentDto } from './dto/update-comment.dto';
@@ -39,6 +47,87 @@ import {
 @Controller()
 export class CommentsController {
   constructor(private readonly commentsService: CommentsService) {}
+
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Inventory all comments (admin only)',
+    description:
+      'Paginated moderation queue across every post and both statuses, newest first. Rows carry status, content, version and minimal safe author identity; no article reference is required.',
+  })
+  @ApiResponse({
+    type: AdminCommentsResponseDto,
+    status: 200,
+    description: 'Paginated comment inventory.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 400,
+    description: 'Invalid pagination or unsupported query fields.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 401,
+    description: 'Valid authenticated session required.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'ADMIN required.',
+  })
+  @Get('admin/comments')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLE.ADMIN)
+  findAdminInventory(@Query() query: AdminCommentsQueryDto) {
+    return this.commentsService.findAdminInventory(query.page, query.limit);
+  }
+
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Approve a pending comment (admin only)',
+    description:
+      'Atomically approves the exact revision identified by version. If the comment was edited since it was loaded, or is no longer PENDING, the request returns 409 and nothing changes.',
+  })
+  @ApiBody({ type: ApproveCommentDto })
+  @ApiResponse({
+    type: AdminCommentSummaryResponseDto,
+    status: 200,
+    description: 'Comment approved.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 400,
+    description: 'Invalid or missing version.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 401,
+    description: 'Valid authenticated session required.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'ADMIN required.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 404,
+    description: 'Comment not found.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 409,
+    description:
+      'Comment changed since it was loaded or is no longer PENDING.',
+  })
+  @Patch('admin/comments/:commentId/approve')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(ROLE.ADMIN)
+  approve(
+    @Param('commentId') commentId: string,
+    @Body() dto: ApproveCommentDto,
+  ) {
+    return this.commentsService.approve(commentId, dto.version);
+  }
 
   @ApiBearerAuth('access-token')
   @ApiOperation({

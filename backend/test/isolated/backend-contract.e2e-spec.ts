@@ -98,6 +98,8 @@ describe('Backend contracts with isolated I/O', () => {
       findMany: query(),
       findUnique: query(),
       update: query(),
+      updateMany: query(),
+      count: query(),
       delete: query(),
     },
     bookmark: {
@@ -3916,7 +3918,11 @@ describe('Backend contracts with isolated I/O', () => {
       const response = await editComment(authAs(), '  Revised  ').expect(200);
       expect(persistence.comment.update).toHaveBeenCalledWith({
         where: { id: 'c1' },
-        data: { content: 'Revised', status: 'PENDING' },
+        data: {
+          content: 'Revised',
+          status: 'PENDING',
+          version: { increment: 1 },
+        },
       });
       expect(response.body.status).toBe('PENDING');
     });
@@ -3934,6 +3940,7 @@ describe('Backend contracts with isolated I/O', () => {
         id: string;
         content: string;
         status: string;
+        version: number;
         postId: string;
         authorId: string;
         parentId: string | null;
@@ -3946,6 +3953,7 @@ describe('Backend contracts with isolated I/O', () => {
           id: 'c1',
           content: 'Original',
           status: 'APPROVED',
+          version: 1,
           postId: 'post-1',
           authorId: 'user-1',
           parentId: null,
@@ -3984,10 +3992,16 @@ describe('Backend contracts with isolated I/O', () => {
       persistence.comment.update.mockImplementation(async (raw) => {
         const args = raw as {
           where: { id: string };
-          data: { content?: string; status?: string };
+          data: {
+            content?: string;
+            status?: string;
+            version?: { increment: number };
+          };
         };
         const row = rows.find((entry) => entry.id === args.where.id)!;
-        Object.assign(row, args.data, { updatedAt: new Date() });
+        const { version, ...rest } = args.data;
+        Object.assign(row, rest, { updatedAt: new Date() });
+        if (version) row.version += version.increment;
         return row;
       });
 
@@ -4019,6 +4033,184 @@ describe('Backend contracts with isolated I/O', () => {
         api.paths['/posts/{postId}/comments'].post.responses['400'],
       ).toBeDefined();
       expect(api.paths['/comments/{commentId}'].patch.responses['400']).toBeDefined();
+    });
+  });
+
+  describe('ADMIN comment moderation (Issue #55)', () => {
+    const author = {
+      id: 'user-1',
+      username: 'reader',
+      name: 'Reader',
+      avatarUrl: null,
+    };
+    const adminRow = (overrides: Record<string, unknown> = {}) => ({
+      id: 'c1',
+      status: 'PENDING',
+      content: 'Needs review',
+      version: 2,
+      author,
+      createdAt: new Date('2020-01-01'),
+      updatedAt: new Date('2020-01-01'),
+      ...overrides,
+    });
+    const approve = (id: string, body: object, token = auth('ADMIN')) =>
+      request(app.getHttpServer())
+        .patch(`/admin/comments/${id}/approve`)
+        .auth(token, { type: 'bearer' })
+        .send(body);
+
+    beforeEach(() => {
+      persistence.comment.findMany.mockResolvedValue([]);
+      persistence.comment.count.mockResolvedValue(0);
+    });
+
+    it('lists comments for ADMIN with safe fields and pagination', async () => {
+      persistence.comment.findMany.mockResolvedValue([adminRow()]);
+      persistence.comment.count.mockResolvedValue(5);
+      const response = await request(app.getHttpServer())
+        .get('/admin/comments?page=2&limit=2')
+        .auth(auth('ADMIN'), { type: 'bearer' })
+        .expect(200);
+      const args = persistence.comment.findMany.mock.calls[0][0] as {
+        orderBy: unknown;
+        skip: number;
+        take: number;
+        select: Record<string, unknown>;
+      };
+      expect(args).toMatchObject({
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: 2,
+        take: 2,
+      });
+      expect(args.select).not.toHaveProperty('postId');
+      expect(args.select).not.toHaveProperty('parentId');
+      expect(response.body.meta).toEqual({
+        page: 2,
+        limit: 2,
+        total: 5,
+        totalPages: 3,
+      });
+      expect(response.body.data[0]).toMatchObject({
+        id: 'c1',
+        status: 'PENDING',
+        content: 'Needs review',
+        version: 2,
+        author: { id: 'user-1', username: 'reader' },
+      });
+      expect(response.body.data[0]).not.toHaveProperty('postId');
+    });
+
+    it('requires ADMIN for the inventory', async () => {
+      await request(app.getHttpServer()).get('/admin/comments').expect(401);
+      await request(app.getHttpServer())
+        .get('/admin/comments')
+        .auth(auth('USER'), { type: 'bearer' })
+        .expect(403);
+      await request(app.getHttpServer())
+        .get('/admin/comments')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .expect(403);
+      expect(persistence.comment.findMany).not.toHaveBeenCalled();
+    });
+
+    it('validates inventory pagination and rejects extra filters', async () => {
+      await request(app.getHttpServer())
+        .get('/admin/comments?limit=51')
+        .auth(auth('ADMIN'), { type: 'bearer' })
+        .expect(400);
+      await request(app.getHttpServer())
+        .get('/admin/comments?status=PENDING')
+        .auth(auth('ADMIN'), { type: 'bearer' })
+        .expect(400);
+      expect(persistence.comment.findMany).not.toHaveBeenCalled();
+    });
+
+    it('approves the exact pending revision atomically', async () => {
+      persistence.comment.updateMany.mockResolvedValue({ count: 1 });
+      persistence.comment.findUnique.mockResolvedValue(
+        adminRow({ status: 'APPROVED', version: 3 }),
+      );
+      const response = await approve('c1', { version: 2 }).expect(200);
+      expect(persistence.comment.updateMany).toHaveBeenCalledWith({
+        where: { id: 'c1', status: 'PENDING', version: 2 },
+        data: { status: 'APPROVED', version: { increment: 1 } },
+      });
+      expect(response.body.status).toBe('APPROVED');
+    });
+
+    it('rejects approval when the comment changed since it was loaded', async () => {
+      persistence.comment.updateMany.mockResolvedValue({ count: 0 });
+      persistence.comment.findUnique.mockResolvedValue({
+        id: 'c1',
+        status: 'PENDING',
+      });
+      await approve('c1', { version: 1 }).expect(409);
+    });
+
+    it('rejects approval when the comment is no longer pending', async () => {
+      persistence.comment.updateMany.mockResolvedValue({ count: 0 });
+      persistence.comment.findUnique.mockResolvedValue({
+        id: 'c1',
+        status: 'APPROVED',
+      });
+      await approve('c1', { version: 2 }).expect(409);
+    });
+
+    it('returns 404 for a missing comment', async () => {
+      persistence.comment.updateMany.mockResolvedValue({ count: 0 });
+      persistence.comment.findUnique.mockResolvedValue(null);
+      await approve('missing', { version: 1 }).expect(404);
+    });
+
+    it.each([{}, { version: 0 }, { version: 'x' }, { version: 2, extra: true }])(
+      'rejects invalid approval body %j',
+      async (body) => {
+        await approve('c1', body).expect(400);
+        expect(persistence.comment.updateMany).not.toHaveBeenCalled();
+      },
+    );
+
+    it('requires ADMIN to approve', async () => {
+      await request(app.getHttpServer())
+        .patch('/admin/comments/c1/approve')
+        .send({ version: 1 })
+        .expect(401);
+      await request(app.getHttpServer())
+        .patch('/admin/comments/c1/approve')
+        .auth(auth('USER'), { type: 'bearer' })
+        .send({ version: 1 })
+        .expect(403);
+      await request(app.getHttpServer())
+        .patch('/admin/comments/c1/approve')
+        .auth(auth('AUTHOR'), { type: 'bearer' })
+        .send({ version: 1 })
+        .expect(403);
+      expect(persistence.comment.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('documents the admin comment contracts', async () => {
+      const api = (
+        await request(app.getHttpServer()).get('/api-json').expect(200)
+      ).body;
+      expect(api.paths['/admin/comments'].get.security).toEqual([
+        { 'access-token': [] },
+      ]);
+      expect(api.paths['/admin/comments'].get.responses['403']).toBeDefined();
+      const operation = api.paths['/admin/comments/{commentId}/approve'].patch;
+      expect(operation.responses['200']).toBeDefined();
+      expect(operation.responses['404']).toBeDefined();
+      expect(operation.responses['409']).toBeDefined();
+      const schema = api.components.schemas.AdminCommentSummaryResponseDto;
+      expect(Object.keys(schema.properties).sort()).toEqual([
+        'author',
+        'content',
+        'createdAt',
+        'id',
+        'status',
+        'updatedAt',
+        'version',
+      ]);
+      expect(schema.properties).not.toHaveProperty('postId');
     });
   });
 

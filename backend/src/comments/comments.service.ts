@@ -2,6 +2,7 @@ import { PrismaService } from '../database/prisma.service';
 import type { CreateCommentDto } from './dto/create-comment.dto';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -23,6 +24,23 @@ function normalizeCommentContent(content: unknown): string {
     throw new BadRequestException('Comment content cannot be blank.');
   return trimmed;
 }
+
+const adminCommentSelect = {
+  id: true,
+  status: true,
+  content: true,
+  version: true,
+  author: {
+    select: {
+      id: true,
+      username: true,
+      name: true,
+      avatarUrl: true,
+    },
+  },
+  createdAt: true,
+  updatedAt: true,
+} as const;
 
 @Injectable()
 export class CommentsService {
@@ -104,6 +122,60 @@ export class CommentsService {
     });
   }
 
+  // ADMIN dashboard inventory: moderation fields plus minimal safe author
+  // identity, without article references.
+  async findAdminInventory(page: number, limit: number) {
+    const [comments, total] = await Promise.all([
+      this.prisma.comment.findMany({
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+        select: adminCommentSelect,
+      }),
+      this.prisma.comment.count(),
+    ]);
+
+    return {
+      data: comments,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  async approve(commentId: string, version: number) {
+    // One atomic conditional update: only the revision the ADMIN loaded can be
+    // approved while it is still PENDING. A concurrent content edit bumps the
+    // version (and resets to PENDING), so a stale approval changes nothing.
+    const result = await this.prisma.comment.updateMany({
+      where: {
+        id: commentId,
+        status: CommentStatus.PENDING,
+        version,
+      },
+      data: {
+        status: CommentStatus.APPROVED,
+        version: { increment: 1 },
+      },
+    });
+
+    if (result.count === 0) {
+      const existing = await this.prisma.comment.findUnique({
+        where: { id: commentId },
+        select: { id: true, status: true },
+      });
+      if (!existing) throw new NotFoundException('Comment not found.');
+      throw new ConflictException(
+        'Comment changed since it was loaded; reload and retry.',
+      );
+    }
+
+    const approved = await this.prisma.comment.findUnique({
+      where: { id: commentId },
+      select: adminCommentSelect,
+    });
+    if (!approved) throw new NotFoundException('Comment not found.');
+    return approved;
+  }
+
   async reply(
     parentCommentId: string,
     authorId: string,
@@ -182,13 +254,15 @@ export class CommentsService {
     }
 
     // Editing content atomically returns the comment to PENDING, so revised text
-    // stays hidden until it is reviewed again.
+    // stays hidden until it is reviewed again. The version bump invalidates any
+    // approval prepared against the previous revision.
     const data =
       dto.content === undefined
         ? {}
         : {
             content: normalizeCommentContent(dto.content),
             status: CommentStatus.PENDING,
+            version: { increment: 1 },
           };
 
     return this.prisma.comment.update({

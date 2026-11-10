@@ -485,9 +485,23 @@ Blank or whitespace-only content is rejected with 400 on create, reply and edit,
 and the stored text is trimmed. Author and post associations remain
 server-controlled. Migration `20261110120000_add_comment_status` adds the enum and
 column with a `PENDING` default and grandfathers every pre-existing comment as
-`APPROVED`, preserving current visibility. Admin approval/rejection endpoints
-(Issue #55) and the user's own-comment list (Issue #56) are not part of this
-contract.
+`APPROVED`, preserving current visibility. ADMIN approval is implemented by
+Issue #55; the user's own-comment list (Issue #56) is not part of this contract.
+
+### ADMIN comment inventory and approval (Issue #55)
+
+`GET /admin/comments` is ADMIN-only and paginated (`page`, `limit`, defaults
+1/10, limit 1–50) across every post and both statuses, newest first. Rows contain
+`id`, `status`, `content`, `version`, minimal safe author identity
+(`id`/`username`/`name`/`avatarUrl`) and timestamps; no article reference is
+required by the dashboard. `PATCH /admin/comments/:commentId/approve` takes
+`{ version }` and approves only that exact revision while it is still `PENDING`.
+The check and write are one atomic conditional update; if the comment was edited
+(`version` bumped) or is no longer `PENDING`, nothing changes and the request
+returns 409. Missing comments return 404. Content edits increment `version`;
+approval increments it again. Existing ADMIN comment deletion, public
+APPROVED-only visibility and owner-controlled editing are unchanged. Migration
+`20261110130000_add_comment_version` adds the integer column with default 1.
 
 ### Owned Post status filtering (Issue #45)
 
