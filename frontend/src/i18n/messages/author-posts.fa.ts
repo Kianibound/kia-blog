@@ -17,6 +17,11 @@ export const authorPostsMessages = {
   of: "از",
   updated: "آخرین تغییر",
   slug: "نشانی مقاله",
+  authorLabel: "نویسنده:",
+  denied: "دسترسی به این فهرست برای نقش شما مجاز نیست.",
+  invalidFilter: "فیلتر وضعیت انتخابی معتبر نیست.",
+  showAll: "نمایش همهٔ مقاله‌ها",
+  back: "بازگشت به پیشخوان",
   states: { DRAFT: "پیش‌نویس", PUBLISHED: "منتشرشده", DEPRECATED: "کنارگذاشته‌شده" },
 };
 

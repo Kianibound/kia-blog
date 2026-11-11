@@ -179,8 +179,13 @@ Production `/dashboard` and its role-scoped deep links now use the server-only
 session and verified Nest identity. Navigation is rendered per role; every route
 re-checks authorization server-side and cross-role or unknown deep links return
 404. Signed-out visitors are redirected to login with a safe return path, and
-terminal invalid sessions clear their cookie. These are shell/placeholder routes
-only; feature data adapters arrive in later issues.
+terminal invalid sessions clear their cookie. Other dashboard sections remain
+shell/placeholder routes; feature data adapters arrive in later issues.
+
+`/dashboard/posts` is read-only: AUTHOR lists call `GET /posts/mine` (owner
+derived from the session), ADMIN lists call `GET /posts/admin/inventory` with
+real author summaries. Pagination and AUTHOR DRAFT/PUBLISHED filters follow the
+Nest DTOs; DEPRECATED remains visible when no explicit status filter is set.
 
 The production application exposes no preview routes, role switches,
 authentication bypass or fixture fallback. The preview reuses the root theme,

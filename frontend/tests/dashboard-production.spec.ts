@@ -5,6 +5,7 @@ const fixture = "http://127.0.0.1:4101";
 async function resetFixture(request: APIRequestContext) {
   await request.post(`${fixture}/__test/auth-mode?mode=normal`);
   await request.post(`${fixture}/__test/session?mode=clear`);
+  await request.post(`${fixture}/__test/inventory?mode=success`);
 }
 
 async function login(page: Page, email: string, next = "/dashboard") {
@@ -121,4 +122,84 @@ test("an invalid session cookie is cleared and never renders protected content",
   await expect(page).toHaveURL(/\/login\?next=%2Fdashboard$/);
   expect((await context.cookies()).some((cookie) => cookie.name.includes("kia_session"))).toBe(false);
   await expect(page.getByRole("navigation", { name: "راهبری پیشخوان" })).toHaveCount(0);
+});
+
+test("AUTHOR inventory uses the real mine endpoint, filters and pagination", async ({ page }) => {
+  await login(page, "author@example.test");
+  await page.goto("/dashboard/posts");
+  await expect(page.getByRole("heading", { name: /مقالهٔ آزمایشی/ }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "مقاله جدید" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "ویرایش" })).toHaveCount(0);
+
+  await page.locator('a[href="/dashboard/posts?status=DRAFT"]').click();
+  await expect(page).toHaveURL(/status=DRAFT$/);
+  await expect(page.getByRole("heading", { name: /مقالهٔ آزمایشی/ })).toHaveCount(4);
+
+  await page.goto("/dashboard/posts");
+  await page.locator('a[href="/dashboard/posts?page=2"]').click();
+  await expect(page).toHaveURL(/page=2$/);
+  await expect(page.getByRole("heading", { name: /مقالهٔ آزمایشی/ })).toHaveCount(2);
+});
+
+test("ADMIN inventory shows all statuses and real author summaries without mutations", async ({ page }) => {
+  await login(page, "admin@example.test");
+  await page.goto("/dashboard/posts");
+  await expect(page.getByRole("heading", { name: /مقالهٔ آزمایشی/ })).toHaveCount(5);
+  await expect(page.getByText("سارا", { exact: false }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "مقاله جدید" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "حذف" })).toHaveCount(0);
+});
+
+test("invalid status queries are rejected instead of silently showing all posts", async ({ page }) => {
+  await login(page, "author@example.test");
+  for (const status of ["DEPRECATED", "deprecated", "UNKNOWN"]) {
+    await page.goto(`/dashboard/posts?status=${status}`);
+    await expect(page.getByText("فیلتر وضعیت انتخابی معتبر نیست.", { exact: false })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /مقالهٔ آزمایشی/ })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "نمایش همهٔ مقاله‌ها" })).toBeVisible();
+  }
+  await page.goto("/dashboard/posts?status=DRAFT");
+  await expect(page.getByRole("heading", { name: /مقالهٔ آزمایشی/ })).toHaveCount(4);
+
+  await page.context().clearCookies();
+  await login(page, "admin@example.test");
+  await page.goto("/dashboard/posts?status=DRAFT");
+  await expect(page.getByText("فیلتر وضعیت انتخابی معتبر نیست.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /مقالهٔ آزمایشی/ })).toHaveCount(0);
+});
+
+test("AUTHOR and ADMIN denial is distinct from recoverable backend failure", async ({ page, request }) => {
+  for (const [email, unavailable] of [
+    ["author@example.test", "دریافت مقاله‌های شما ممکن نشد."],
+    ["admin@example.test", "دریافت مقاله‌ها ممکن نشد."],
+  ]) {
+    await page.context().clearCookies();
+    await login(page, email);
+    await request.post(`${fixture}/__test/inventory?mode=forbidden`);
+    await page.goto("/dashboard/posts");
+    await expect(page.getByText("دسترسی به این فهرست برای نقش شما مجاز نیست.", { exact: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: "تلاش دوباره" })).toHaveCount(0);
+
+    await request.post(`${fixture}/__test/inventory?mode=error`);
+    await page.goto("/dashboard/posts");
+    await expect(page.getByText(unavailable, { exact: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: "تلاش دوباره" })).toBeVisible();
+  }
+});
+
+test("ADMIN empty, error and out-of-range pages stay recoverable", async ({ page, request }) => {
+  await login(page, "admin@example.test");
+
+  await request.post(`${fixture}/__test/inventory?mode=empty`);
+  await page.goto("/dashboard/posts");
+  await expect(page.locator("main").getByRole("status")).toBeVisible();
+
+  await request.post(`${fixture}/__test/inventory?mode=error`);
+  await page.goto("/dashboard/posts");
+  await expect(page.locator("main").getByRole("alert")).toBeVisible();
+
+  await request.post(`${fixture}/__test/inventory?mode=success`);
+  await page.goto("/dashboard/posts?page=2");
+  await expect(page.getByText("در این صفحه مقاله‌ای وجود ندارد.", { exact: false })).toBeVisible();
+  await expect(page.locator('main a[href="/dashboard/posts"]')).toBeVisible();
 });

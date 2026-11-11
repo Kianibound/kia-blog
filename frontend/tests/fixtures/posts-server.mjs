@@ -34,6 +34,7 @@ function readJson(request) {
 const redis = new Map();
 let authMode = "normal";
 let lastAuthUser = null;
+let inventoryMode = "success";
 
 function redisGet(key) {
   const entry = redis.get(key);
@@ -77,6 +78,56 @@ function userFor(email) {
     name: null,
     emailVerified: false,
     role: { name: role },
+  };
+}
+
+function inventoryPost(index, status, authorId) {
+  return {
+    id: `post-${index}`,
+    title: `مقالهٔ آزمایشی ${index}`,
+    slug: `test-post-${index}`,
+    content: `متن آزمایشی ${index}`,
+    status,
+    authorId,
+    publishedAt: status === "DRAFT" ? null : "2026-01-02T10:00:00.000Z",
+    createdAt: "2026-01-01T10:00:00.000Z",
+    updatedAt: "2026-01-02T10:00:00.000Z",
+  };
+}
+
+function inventoryMeta(page, limit, total) {
+  return { page, limit, total, totalPages: Math.ceil(total / limit) };
+}
+
+function authorInventory(authorId, status, page, limit) {
+  const statuses = ["DRAFT", "PUBLISHED", "DEPRECATED"];
+  const all = Array.from({ length: 12 }, (_, index) => inventoryPost(index + 1, statuses[index % 3], authorId));
+  const filtered = status ? all.filter((post) => post.status === status) : all;
+  const start = (page - 1) * limit;
+  return { data: filtered.slice(start, start + limit), meta: inventoryMeta(page, limit, filtered.length) };
+}
+
+function adminInventory(page, limit) {
+  const posts = [
+    inventoryPost(1, "DRAFT", "author-1"),
+    inventoryPost(2, "PUBLISHED", "author-1"),
+    inventoryPost(3, "DEPRECATED", "author-2"),
+    inventoryPost(4, "PUBLISHED", "author-2"),
+    inventoryPost(5, "DRAFT", "author-3"),
+  ];
+  const authors = {
+    "author-1": { id: "author-1", username: "sara", name: "سارا", avatarUrl: null },
+    "author-2": { id: "author-2", username: "nima", name: null, avatarUrl: null },
+    "author-3": { id: "author-3", username: "mina", name: "مینا", avatarUrl: null },
+  };
+  const start = (page - 1) * limit;
+  return {
+    data: posts.slice(start, start + limit).map((post) => {
+      const summary = { ...post };
+      delete summary.content;
+      return { ...summary, author: authors[post.authorId] };
+    }),
+    meta: inventoryMeta(page, limit, posts.length),
   };
 }
 
@@ -135,6 +186,34 @@ createServer(async (request, response) => {
   }
   if (request.method === "POST" && url.pathname === "/auth/logout") {
     return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Logged out successfully." }));
+  }
+  if (request.method === "GET" && url.pathname === "/posts/mine") {
+    if (authMode === "unavailable") return response.writeHead(503, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unavailable" }));
+    if (authMode === "revoke" || !lastAuthUser) return response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unauthorized" }));
+    if (lastAuthUser.role.name !== "AUTHOR" && lastAuthUser.role.name !== "ADMIN") return response.writeHead(403, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Forbidden" }));
+    if (inventoryMode === "error") return response.writeHead(503, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unavailable" }));
+    if (inventoryMode === "forbidden") return response.writeHead(403, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Forbidden" }));
+    if (inventoryMode === "empty") return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ data: [], meta: inventoryMeta(1, 10, 0) }));
+    const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+    const status = url.searchParams.get("status");
+    const filteredStatus = status === "DRAFT" || status === "PUBLISHED" ? status : undefined;
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(authorInventory(lastAuthUser.id, filteredStatus, page, 10)));
+  }
+  if (request.method === "GET" && url.pathname === "/posts/admin/inventory") {
+    if (authMode === "unavailable") return response.writeHead(503, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unavailable" }));
+    if (authMode === "revoke" || !lastAuthUser) return response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unauthorized" }));
+    if (lastAuthUser.role.name !== "ADMIN") return response.writeHead(403, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Forbidden" }));
+    if (inventoryMode === "error") return response.writeHead(503, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unavailable" }));
+    if (inventoryMode === "forbidden") return response.writeHead(403, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Forbidden" }));
+    if (inventoryMode === "empty") return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ data: [], meta: inventoryMeta(1, 10, 0) }));
+    const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(adminInventory(page, 10)));
+  }
+  if (request.method === "POST" && url.pathname === "/__test/inventory") {
+    const mode = url.searchParams.get("mode");
+    if (!["success", "empty", "error", "forbidden"].includes(mode)) return response.writeHead(400).end();
+    inventoryMode = mode;
+    return response.writeHead(204).end();
   }
   if (request.method === "POST" && url.pathname === "/__test/auth-mode") {
     const mode = url.searchParams.get("mode");
