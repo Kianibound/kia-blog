@@ -17,11 +17,11 @@ export function AuthorPostFilters({ status, href }: { status?: OwnPostStatusFilt
   </nav>;
 }
 
-export function AuthorPostList({ posts, href, status, formLinks, authors, renderAction }: { posts: OwnPosts; href: (page: number) => string; status?: OwnPostStatusFilter; formLinks?: { create?: string; edit: (id: string) => string }; authors?: Record<string, string>; renderAction?: (post: OwnPost) => ReactNode }) {
+export function AuthorPostList({ posts, href, status, formLinks, createHref, authors, renderAction }: { posts: OwnPosts; href: (page: number) => string; status?: OwnPostStatusFilter; formLinks?: { create?: string; edit: (id: string) => string }; createHref?: string; authors?: Record<string, string>; renderAction?: (post: OwnPost) => ReactNode }) {
   const messages = authors ? adminPostsMessages : copy;
   const { data, meta } = posts;
   return <section className="min-h-64 space-y-6" aria-label={messages.title}>
-    {formLinks?.create && <Link href={formLinks.create} className={controlClass}>{formCopy.create}</Link>}
+    {(formLinks?.create || createHref) && <Link href={formLinks?.create ?? createHref ?? "/dashboard/posts/new"} className={controlClass}>{formLinks?.create ? formCopy.create : formCopy.productionCreate}</Link>}
     {data.length > 0 && <ul aria-label={messages.title} className="space-y-4">{data.map(post => <li key={post.id}>
       <Card className="space-y-4 p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">

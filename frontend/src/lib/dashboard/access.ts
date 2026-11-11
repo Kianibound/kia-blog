@@ -5,6 +5,7 @@ import type {
 } from "@/components/dashboard/types";
 import type { AuthenticatedUser } from "@/lib/auth/nest-auth";
 import { dashboardMessages as copy } from "../../i18n/messages/dashboard.fa.ts";
+import { articleFormMessages } from "../../i18n/messages/article-form.fa.ts";
 
 export type DashboardSectionMeta = {
   title: string;
@@ -79,6 +80,19 @@ function sectionKey(section: readonly string[]): string {
   return section.join("/");
 }
 
+function articleSection(section: readonly string[]): "new" | "edit" | null {
+  if (section.length === 2 && section[0] === "posts" && section[1] === "new")
+    return "new";
+  if (
+    section.length === 3 &&
+    section[0] === "posts" &&
+    section[1] &&
+    section[2] === "edit"
+  )
+    return "edit";
+  return null;
+}
+
 const ROLE_SET = new Set<DashboardRole>(["USER", "AUTHOR", "ADMIN"]);
 
 export function dashboardDestinations(
@@ -92,6 +106,8 @@ export function canAccessDashboard(
   section: readonly string[],
 ): boolean {
   if (!ROLE_SET.has(role as DashboardRole)) return false;
+  if (articleSection(section))
+    return role === "AUTHOR" || role === "ADMIN";
   if (section.length > 1) return false;
   const entry = sections[sectionKey(section)];
   return !!entry && entry.roles.has(role as DashboardRole);
@@ -102,6 +118,13 @@ export function dashboardSectionMeta(
   section: readonly string[],
 ): DashboardSectionMeta | null {
   if (!canAccessDashboard(role, section)) return null;
+  const article = articleSection(section);
+  if (article)
+    return {
+      title:
+        article === "new" ? articleFormMessages.productionCreate : articleFormMessages.edit,
+      description: "",
+    };
   return sections[sectionKey(section)].meta;
 }
 

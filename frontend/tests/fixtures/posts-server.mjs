@@ -20,6 +20,13 @@ const categories = [
   { id: "20000000-0000-4000-8000-000000000002", name: "یادگیری 2026", slug: "", createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" },
 ];
 
+const tags = [
+  { id: "30000000-0000-4000-8000-000000000001", name: "ری‌اکت", slug: "react", createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" },
+  { id: "30000000-0000-4000-8000-000000000002", name: "نست", slug: "nest", createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" },
+];
+
+const editorPosts = new Map();
+
 function readJson(request) {
   return new Promise((resolve) => {
     let body = "";
@@ -35,6 +42,7 @@ const redis = new Map();
 let authMode = "normal";
 let lastAuthUser = null;
 let inventoryMode = "success";
+let lastArticleWrite = null;
 
 function redisGet(key) {
   const entry = redis.get(key);
@@ -131,6 +139,81 @@ function adminInventory(page, limit) {
   };
 }
 
+function articleResponse(post) {
+  return {
+    ...post,
+    coverImage: null,
+    contentMedia: [],
+    categories: categories.filter((item) => post.categoryIds.includes(item.id)),
+    tags: tags.filter((item) => post.tagIds.includes(item.id)),
+    author: { id: post.authorId, username: "sara", name: "سارا", avatarUrl: null },
+  };
+}
+
+function editorPost(id, title, status, authorId, contentDocument, categoryIds = [], tagIds = []) {
+  return {
+    id,
+    title,
+    slug: `editor-${id}`,
+    content: "متن مقاله",
+    contentDocument,
+    status,
+    authorId,
+    publishedAt: status === "DRAFT" ? null : "2026-01-02T10:00:00.000Z",
+    createdAt: "2026-01-01T10:00:00.000Z",
+    updatedAt: "2026-01-02T10:00:00.000Z",
+    categoryIds,
+    tagIds,
+  };
+}
+
+function ensureEditorSeed(authorId) {
+  if (!editorPosts.has("post-1")) {
+    editorPosts.set("post-1", editorPost("post-1", "مقالهٔ قابل ویرایش", "DRAFT", authorId, {
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "متن اولیه" }] }],
+    }, [categories[0].id], [tags[0].id]));
+  }
+  if (!editorPosts.has("post-2")) {
+    editorPosts.set("post-2", editorPost("post-2", "مقالهٔ نویسندهٔ دیگر", "DRAFT", "other-author", {
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "متن دیگر" }] }],
+    }));
+  }
+  if (!editorPosts.has("post-3")) {
+    editorPosts.set("post-3", editorPost("post-3", "مقالهٔ کنارگذاشته", "DEPRECATED", authorId, {
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "متن بازنشر" }] }],
+    }, [categories[0].id]));
+  }
+  if (!editorPosts.has("post-4")) {
+    const legacy = editorPost("post-4", "مقالهٔ متنی قدیمی", "DRAFT", authorId, null);
+    legacy.content = "متن قدیمی\nخط دوم";
+    editorPosts.set("post-4", legacy);
+  }
+  if (!editorPosts.has("post-5")) {
+    editorPosts.set("post-5", editorPost("post-5", "مقالهٔ تصویری", "DRAFT", authorId, {
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "متن تصویر" }] },
+        { type: "image", attrs: { mediaId: "40000000-0000-4000-8000-000000000001", alt: "تصویر متن" } },
+      ],
+    }, [categories[0].id]));
+  }
+  if (!editorPosts.has("post-6")) {
+    editorPosts.set("post-6", editorPost("post-6", "مقالهٔ تصویر ناسازگار", "DRAFT", authorId, {
+      type: "doc",
+      content: [{ type: "image", attrs: { src: "https://example.test/temp.png", alt: "تصویر موقت" } }],
+    }));
+  }
+  if (!editorPosts.has("post-7")) {
+    editorPosts.set("post-7", editorPost("post-7", "مقالهٔ منتشرشده", "PUBLISHED", authorId, {
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "متن منتشرشده" }] }],
+    }, [categories[0].id]));
+  }
+}
+
 // Minimal external API test double. Strict query handling checks the real wire boundary.
 createServer(async (request, response) => {
   const url = new URL(request.url, "http://127.0.0.1:4101");
@@ -209,11 +292,76 @@ createServer(async (request, response) => {
     const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
     return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(adminInventory(page, 10)));
   }
+  if (request.method === "GET" && url.pathname === "/tags" && !url.search && !request.headers.authorization) {
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(tags));
+  }
+  if (request.method === "GET" && url.pathname.startsWith("/posts/mine/")) {
+    if (authMode === "unavailable") return response.writeHead(503, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unavailable" }));
+    if (authMode === "revoke" || !lastAuthUser) return response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unauthorized" }));
+    const id = decodeURIComponent(url.pathname.slice("/posts/mine/".length));
+    ensureEditorSeed(lastAuthUser.id);
+    const post = editorPosts.get(id);
+    if (!post || (lastAuthUser.role.name !== "ADMIN" && post.authorId !== lastAuthUser.id)) return response.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Not found" }));
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(articleResponse(post)));
+  }
+  if (request.method === "POST" && url.pathname === "/posts") {
+    if (authMode === "unavailable") return response.writeHead(503, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unavailable" }));
+    if (authMode === "revoke" || !lastAuthUser) return response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unauthorized" }));
+    if (lastAuthUser.role.name !== "AUTHOR" && lastAuthUser.role.name !== "ADMIN") return response.writeHead(403, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Forbidden" }));
+    const body = await readJson(request);
+    lastArticleWrite = { method: "POST", body };
+    if (!body || typeof body.title !== "string" || !body.title.trim() || body.content !== undefined || !body.contentDocument || body.contentDocument.type !== "doc" || !Array.isArray(body.contentDocument.content)) return response.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Invalid write" }));
+    const requestedCategories = Array.isArray(body.categoryIds) ? body.categoryIds : [];
+    const requestedTags = Array.isArray(body.tagIds) ? body.tagIds : [];
+    if ([...requestedCategories, ...requestedTags].some((id) => ![...categories, ...tags].some((item) => item.id === id))) return response.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Invalid taxonomy" }));
+    const status = body.status === "PUBLISHED" ? "PUBLISHED" : "DRAFT";
+    if (status === "PUBLISHED" && requestedCategories.length === 0) return response.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Category required" }));
+    const id = `created-${editorPosts.size + 1}`;
+    const post = editorPost(id, body.title.trim(), status, lastAuthUser.id, body.contentDocument, requestedCategories, requestedTags);
+    editorPosts.set(id, post);
+    return response.writeHead(201, { "Content-Type": "application/json" }).end(JSON.stringify(articleResponse(post)));
+  }
+  if (request.method === "PATCH" && url.pathname.startsWith("/posts/") && !url.pathname.startsWith("/posts/mine/") && !url.pathname.startsWith("/posts/admin/")) {
+    if (authMode === "unavailable") return response.writeHead(503, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unavailable" }));
+    if (authMode === "revoke" || !lastAuthUser) return response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unauthorized" }));
+    const id = decodeURIComponent(url.pathname.slice("/posts/".length));
+    ensureEditorSeed(lastAuthUser.id);
+    const post = editorPosts.get(id);
+    if (!post || (lastAuthUser.role.name !== "ADMIN" && post.authorId !== lastAuthUser.id)) return response.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Not found" }));
+    const body = await readJson(request);
+    lastArticleWrite = { method: "PATCH", body };
+    if (!body || (body.content !== undefined && body.contentDocument !== undefined)) return response.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Invalid write" }));
+    if (body.content !== undefined && (typeof body.content !== "string" || !body.content.trim())) return response.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Invalid content" }));
+    if (body.contentDocument !== undefined && (body.contentDocument.type !== "doc" || !Array.isArray(body.contentDocument.content))) return response.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Invalid document" }));
+    const nextStatus = body.status === "PUBLISHED" ? "PUBLISHED" : body.status === "DRAFT" ? "DRAFT" : post.status;
+    const categoryIds = Array.isArray(body.categoryIds) ? body.categoryIds : post.categoryIds;
+    if (nextStatus === "PUBLISHED" && categoryIds.length === 0) return response.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Category required" }));
+    const updated = {
+      ...post,
+      ...(typeof body.title === "string" && body.title.trim() ? { title: body.title.trim() } : {}),
+      ...(body.contentDocument !== undefined ? { contentDocument: body.contentDocument, content: "متن مقاله" } : {}),
+      ...(typeof body.content === "string" ? { content: body.content, contentDocument: null } : {}),
+      status: nextStatus,
+      publishedAt: nextStatus === "DRAFT" ? null : post.publishedAt ?? "2026-01-02T10:00:00.000Z",
+      ...(Array.isArray(body.categoryIds) ? { categoryIds } : {}),
+      ...(Array.isArray(body.tagIds) ? { tagIds: body.tagIds } : {}),
+    };
+    editorPosts.set(id, updated);
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(articleResponse(updated)));
+  }
   if (request.method === "POST" && url.pathname === "/__test/inventory") {
     const mode = url.searchParams.get("mode");
     if (!["success", "empty", "error", "forbidden"].includes(mode)) return response.writeHead(400).end();
     inventoryMode = mode;
     return response.writeHead(204).end();
+  }
+  if (request.method === "POST" && url.pathname === "/__test/articles" && url.searchParams.get("mode") === "reset") {
+    editorPosts.clear();
+    lastArticleWrite = null;
+    return response.writeHead(204).end();
+  }
+  if (request.method === "GET" && url.pathname === "/__test/articles") {
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(lastArticleWrite));
   }
   if (request.method === "POST" && url.pathname === "/__test/auth-mode") {
     const mode = url.searchParams.get("mode");

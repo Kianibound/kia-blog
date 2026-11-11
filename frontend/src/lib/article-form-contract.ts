@@ -1,10 +1,11 @@
-import { parseOwnPosts, type OwnPost } from "./own-posts-contract";
-import { parseCoverImage, type CoverImage } from "./posts-contract";
+import { parseOwnPosts, type OwnPost } from "./own-posts-contract.ts";
+import { parseCoverImage, type CoverImage } from "./posts-contract.ts";
+import type { EditorDocument } from "@/components/editor/types";
 
 export type ArticleTaxonomy = { id: string; name: string; slug: string };
-export type ArticleInput = { title: string; content: string; categoryIds: string[]; tagIds: string[]; coverImage?: CoverImage | null };
-export type ArticleRecord = OwnPost & { categories: ArticleTaxonomy[]; tags: ArticleTaxonomy[]; coverImage?: CoverImage | null };
-export type ArticleSaveResult = { state: "saved"; post: ArticleRecord } | { state: "error" | "uncertain" };
+export type ArticleInput = { title: string; content?: string; contentDocument?: EditorDocument; categoryIds: string[]; tagIds: string[]; coverImage?: CoverImage | null };
+export type ArticleRecord = OwnPost & { contentDocument?: EditorDocument | null; categories: ArticleTaxonomy[]; tags: ArticleTaxonomy[]; coverImage?: CoverImage | null };
+export type ArticleSaveResult = { state: "saved"; post: ArticleRecord } | { state: "error"; message?: string } | { state: "uncertain"; message?: string };
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -24,7 +25,9 @@ export function parseArticleTaxonomy(value: unknown): ArticleTaxonomy[] {
 function parseArticle(value: unknown): ArticleRecord {
   if (!record(value)) throw new Error("Invalid article");
   const post = parseOwnPosts({ data: [value], meta: { page: 1, limit: 1, total: 1, totalPages: 1 } }, 1, 1).data[0];
-  return { ...post, coverImage: parseCoverImage(value.coverImage), categories: parseArticleTaxonomy(value.categories), tags: parseArticleTaxonomy(value.tags) };
+  const contentDocument = value.contentDocument;
+  if (contentDocument !== undefined && contentDocument !== null && !record(contentDocument)) throw new Error("Invalid article document");
+  return { ...post, contentDocument: contentDocument === undefined ? null : (contentDocument as EditorDocument | null), coverImage: parseCoverImage(value.coverImage), categories: parseArticleTaxonomy(value.categories), tags: parseArticleTaxonomy(value.tags) };
 }
 
 export function parseArticleDetail(value: unknown): ArticleRecord {

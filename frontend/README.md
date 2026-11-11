@@ -187,6 +187,12 @@ derived from the session), ADMIN lists call `GET /posts/admin/inventory` with
 real author summaries. Pagination and AUTHOR DRAFT/PUBLISHED filters follow the
 Nest DTOs; DEPRECATED remains visible when no explicit status filter is set.
 
+`/dashboard/posts/new` and `/dashboard/posts/[id]/edit` reuse the Tiptap editor
+with canonical `contentDocument` writes (never the preview envelope), real
+category/tag IDs and the Issue #58 authenticated mutation/CSRF wrapper. Legacy
+text content loads safely; publication uses Nest status transitions and the
+published-category invariant. Image/cover upload remains inactive until #63.
+
 The production application exposes no preview routes, role switches,
 authentication bypass or fixture fallback. The preview reuses the root theme,
 Vazirmatn, Graphite stylesheet and public homepage. Dashboard checks cover role

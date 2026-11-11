@@ -8,6 +8,8 @@ import {
   ProductionPosts,
   ProductionPostsLoading,
 } from "@/components/dashboard/production-posts";
+import { ArticleFormLoading } from "@/components/dashboard/article-form";
+import { ProductionArticleEditor } from "@/components/dashboard/production-article-editor";
 import { Card } from "@/components/ui/card";
 import { dashboardMessages as copy } from "@/i18n/messages/dashboard.fa";
 import { lookupPublicAccount } from "@/lib/auth/current-user";
@@ -37,8 +39,7 @@ export default async function DashboardPage({
   const { section = [] } = await params;
   const query = await searchParams;
   const page = inventoryPage(query.page);
-  const lookup = await lookupPublicAccount();
-  if (lookup.status === "unauthenticated")
+  const lookup = await lookupPublicAccount();  if (lookup.status === "unauthenticated")
     redirect(
       `/session/clear?next=${encodeURIComponent(dashboardDestination(section))}`,
     );
@@ -63,6 +64,14 @@ export default async function DashboardPage({
   const invalidStatus =
     parsedStatus === null ||
     (account.user.role === "ADMIN" && query.status !== undefined);
+  const newArticle =
+    section.length === 2 && section[0] === "posts" && section[1] === "new";
+  const editId =
+    section.length === 3 &&
+    section[0] === "posts" &&
+    section[2] === "edit"
+      ? section[1]
+      : undefined;
 
   return (
     <DashboardShell
@@ -80,7 +89,14 @@ export default async function DashboardPage({
         </Link>
       }
     >
-      {section.length === 1 && section[0] === "posts" ? (
+      {newArticle || editId ? (
+        <Suspense
+          key={editId ?? "new"}
+          fallback={<ArticleFormLoading />}
+        >
+          <ProductionArticleEditor account={account} articleId={editId} />
+        </Suspense>
+      ) : section.length === 1 && section[0] === "posts" ? (
         <Suspense
           key={`${page}-${status ?? "all"}`}
           fallback={

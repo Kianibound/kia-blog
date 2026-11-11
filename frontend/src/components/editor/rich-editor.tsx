@@ -26,7 +26,15 @@ const ArticleImage = Image.extend({
   addInputRules() { return []; },
   parseHTML() { return [{ tag: "img[src]", getAttrs: element => safeImage(element.getAttribute("src")) ? null : false }]; },
   addAttributes() {
-    return { ...this.parent?.(), src: { default: null, renderHTML: attrs => safeImage(attrs.src) ? { src: attrs.src } : {} } };
+    return {
+      ...this.parent?.(),
+      src: { default: null, renderHTML: attrs => safeImage(attrs.src) ? { src: attrs.src } : {} },
+      mediaId: {
+        default: null,
+        parseHTML: element => element.getAttribute("data-media-id"),
+        renderHTML: attrs => typeof attrs.mediaId === "string" && attrs.mediaId ? { "data-media-id": attrs.mediaId } : {},
+      },
+    };
   },
 });
 

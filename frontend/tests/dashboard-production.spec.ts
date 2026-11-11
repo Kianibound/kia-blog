@@ -6,6 +6,7 @@ async function resetFixture(request: APIRequestContext) {
   await request.post(`${fixture}/__test/auth-mode?mode=normal`);
   await request.post(`${fixture}/__test/session?mode=clear`);
   await request.post(`${fixture}/__test/inventory?mode=success`);
+  await request.post(`${fixture}/__test/articles?mode=reset`);
 }
 
 async function login(page: Page, email: string, next = "/dashboard") {
@@ -128,8 +129,8 @@ test("AUTHOR inventory uses the real mine endpoint, filters and pagination", asy
   await login(page, "author@example.test");
   await page.goto("/dashboard/posts");
   await expect(page.getByRole("heading", { name: /مقالهٔ آزمایشی/ }).first()).toBeVisible();
-  await expect(page.getByRole("link", { name: "مقاله جدید" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "ویرایش" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "مقالهٔ جدید" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "ویرایش مقاله" })).toHaveCount(10);
 
   await page.locator('a[href="/dashboard/posts?status=DRAFT"]').click();
   await expect(page).toHaveURL(/status=DRAFT$/);
@@ -146,7 +147,7 @@ test("ADMIN inventory shows all statuses and real author summaries without mutat
   await page.goto("/dashboard/posts");
   await expect(page.getByRole("heading", { name: /مقالهٔ آزمایشی/ })).toHaveCount(5);
   await expect(page.getByText("سارا", { exact: false }).first()).toBeVisible();
-  await expect(page.getByRole("link", { name: "مقاله جدید" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "مقالهٔ جدید" })).toBeVisible();
   await expect(page.getByRole("button", { name: "حذف" })).toHaveCount(0);
 });
 
@@ -202,4 +203,123 @@ test("ADMIN empty, error and out-of-range pages stay recoverable", async ({ page
   await page.goto("/dashboard/posts?page=2");
   await expect(page.getByText("در این صفحه مقاله‌ای وجود ندارد.", { exact: false })).toBeVisible();
   await expect(page.locator('main a[href="/dashboard/posts"]')).toBeVisible();
+});
+
+test("AUTHOR creates and reloads a canonical rich article from the production editor", async ({ page }) => {
+  await login(page, "author@example.test");
+  await page.goto("/dashboard/posts/new");
+  await expect(page.getByRole("heading", { name: "مقالهٔ جدید", exact: true })).toBeVisible();
+  await expect(page.getByText("داده‌های آزمایشی", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("خواندن آزمایشی", { exact: false })).toHaveCount(0);
+
+  const editor = page.getByRole("textbox", { name: "متن مقاله", exact: true });
+  await expect(editor).toHaveAttribute("contenteditable", "true");
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("مقالهٔ تازه");
+  await editor.fill("متن تازه");
+  await page.getByRole("checkbox").first().check();
+  await page.getByRole("button", { name: /ذخیره/ }).click();
+  await expect(page.getByText("مقاله ذخیره شد.", { exact: false })).toBeVisible();
+  await expect(page).toHaveURL(/\/dashboard\/posts\/created-1\/edit$/);
+
+  await page.reload();
+  await expect(page.getByLabel("عنوان مقاله", { exact: true })).toHaveValue("مقالهٔ تازه");
+  await expect(page.getByRole("textbox", { name: "متن مقاله", exact: true })).toContainText("متن تازه");
+
+  await page.getByRole("button", { name: "انتشار مقاله", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "تأیید انتشار مقاله", exact: true }).click();
+  await expect(page.getByText("مقاله منتشر شد.", { exact: false })).toBeVisible();
+});
+
+test("AUTHOR edits an owned article and ADMIN can open the same editor", async ({ page }) => {
+  await login(page, "author@example.test");
+  await page.goto("/dashboard/posts/post-1/edit");
+  await expect(page.getByLabel("عنوان مقاله", { exact: true })).toHaveValue("مقالهٔ قابل ویرایش");
+  await expect(page.getByRole("textbox", { name: "متن مقاله", exact: true })).toContainText("متن اولیه");
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("عنوان ویرایش‌شده");
+  await page.getByRole("button", { name: /ذخیره/ }).click();
+  await expect(page.getByText("مقاله ذخیره شد.", { exact: false })).toBeVisible();
+
+  await page.goto("/dashboard/posts/post-2/edit");
+  await expect(page.getByLabel("عنوان مقاله")).toHaveCount(0);
+
+  await page.context().clearCookies();
+  await login(page, "admin@example.test");
+  await page.goto("/dashboard/posts/post-1/edit");
+  await expect(page.getByLabel("عنوان مقاله", { exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "متن مقاله", exact: true })).toBeVisible();
+  await page.goto("/dashboard/posts/post-2/edit");
+  await expect(page.getByLabel("عنوان مقاله", { exact: true })).toHaveValue("مقالهٔ نویسندهٔ دیگر");
+});
+
+test("USER cannot open production article editor routes", async ({ page }) => {
+  await login(page, "user@example.test");
+  for (const path of ["/dashboard/posts/new", "/dashboard/posts/post-1/edit"]) {
+    await page.goto(path);
+    await expect(page.locator("main h1")).toBeVisible();
+    await expect(page.getByLabel("عنوان مقاله")).toHaveCount(0);
+  }
+});
+
+test("canonical image media IDs survive edit and save without becoming src URLs", async ({ page, request }) => {
+  await login(page, "author@example.test");
+  await page.goto("/dashboard/posts/post-5/edit");
+  await expect(page.getByRole("textbox", { name: "متن مقاله", exact: true })).toContainText("متن تصویر");
+  await page.getByRole("button", { name: /ذخیره/ }).click();
+  await expect(page.getByText("مقاله ذخیره شد.", { exact: false })).toBeVisible();
+
+  const write = await request.get(`${fixture}/__test/articles`).then((response) => response.json());
+  const image = write.body.contentDocument.content.find((node: { type?: string }) => node.type === "image");
+  expect(image.attrs.mediaId).toBe("40000000-0000-4000-8000-000000000001");
+  expect(image.attrs.alt).toBe("تصویر متن");
+  expect(image.attrs.src).toBeUndefined();
+});
+
+test("unchanged legacy saves keep content and intentional edits convert to contentDocument", async ({ page, request }) => {
+  await login(page, "author@example.test");
+  await page.goto("/dashboard/posts/post-4/edit");
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("عنوان متنی");
+  await page.getByRole("button", { name: /ذخیره/ }).click();
+  await expect(page.getByText("مقاله ذخیره شد.", { exact: false })).toBeVisible();
+
+  let write = await request.get(`${fixture}/__test/articles`).then((response) => response.json());
+  expect(write.body.content).toBe("متن قدیمی\nخط دوم");
+  expect(write.body.contentDocument).toBeUndefined();
+
+  const editor = page.getByRole("textbox", { name: "متن مقاله", exact: true });
+  await editor.fill("متن تازه");
+  await page.getByRole("button", { name: /ذخیره/ }).click();
+  await expect(page.getByText("مقاله ذخیره شد.", { exact: false })).toBeVisible();
+  write = await request.get(`${fixture}/__test/articles`).then((response) => response.json());
+  expect(write.body.content).toBeUndefined();
+  expect(write.body.contentDocument.type).toBe("doc");
+});
+
+test("published articles cannot lose their last category", async ({ page }) => {
+  await login(page, "author@example.test");
+  await page.goto("/dashboard/posts/post-7/edit");
+  await page.getByRole("checkbox").first().uncheck();
+  await page.getByRole("button", { name: /ذخیره/ }).click();
+  await expect(page.locator("main").getByRole("alert")).toBeVisible();
+  await expect(page.getByLabel("عنوان مقاله", { exact: true })).toHaveValue("مقالهٔ منتشرشده");
+});
+
+test("unsupported image nodes block saving and preserve the editor", async ({ page, request }) => {
+  await login(page, "author@example.test");
+  await page.goto("/dashboard/posts/post-6/edit");
+  await page.getByRole("button", { name: /ذخیره/ }).click();
+  await expect(page.getByText("این مقاله تصویر ناسازگار دارد", { exact: false })).toBeVisible();
+  await expect(page.getByLabel("عنوان مقاله", { exact: true })).toHaveValue("مقالهٔ تصویر ناسازگار");
+  const write = await request.get(`${fixture}/__test/articles`).then((response) => response.json());
+  expect(write).toBeNull();
+});
+
+test("DEPRECATED articles can be republished when a category exists", async ({ page, request }) => {
+  await login(page, "author@example.test");
+  await page.goto("/dashboard/posts/post-3/edit");
+  await expect(page.getByRole("button", { name: "انتشار مقاله", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "انتشار مقاله", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "تأیید انتشار مقاله", exact: true }).click();
+  await expect(page.getByText("مقاله منتشر شد.", { exact: false })).toBeVisible();
+  const write = await request.get(`${fixture}/__test/articles`).then((response) => response.json());
+  expect(write.body).toEqual({ status: "PUBLISHED" });
 });

@@ -65,6 +65,8 @@ export async function ProductionPosts({
       <AuthorPostList
         posts={posts}
         authors={authors}
+        createHref="/dashboard/posts/new"
+        formLinks={{ edit: (id) => `/dashboard/posts/${encodeURIComponent(id)}/edit` }}
         href={(nextPage) => inventoryHref("ADMIN", nextPage)}
       />
     );
@@ -79,6 +81,8 @@ export async function ProductionPosts({
       <AuthorPostList
         posts={result.posts}
         status={status}
+        createHref="/dashboard/posts/new"
+        formLinks={{ edit: (id) => `/dashboard/posts/${encodeURIComponent(id)}/edit` }}
         href={(nextPage) => inventoryHref("AUTHOR", nextPage, status)}
       />
     </div>
