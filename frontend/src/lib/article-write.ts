@@ -1,5 +1,6 @@
 import type { EditorDocument } from "@/components/editor/types";
 import type { ArticleTaxonomy } from "./article-form-contract";
+import type { ContentMedia } from "./posts-contract.ts";
 import { CsrfError } from "./session/errors.ts";
 
 export type ArticleWritePayload = {
@@ -8,6 +9,8 @@ export type ArticleWritePayload = {
   contentDocument?: EditorDocument;
   categoryIds: string[];
   tagIds: string[];
+  coverMediaId?: string | null;
+  coverAlt?: string;
 };
 
 export class UnsupportedArticleImageError extends Error {
@@ -77,6 +80,8 @@ export function buildArticleWritePayload(input: {
   content?: string;
   categoryIds: string[];
   tagIds: string[];
+  coverMediaId?: string | null;
+  coverAlt?: string;
 }): ArticleWritePayload {
   if (!input.title.trim()) throw new Error("Invalid article title");
   const hasDocument = input.document !== undefined;
@@ -87,6 +92,10 @@ export function buildArticleWritePayload(input: {
     throw new Error("Invalid article content");
   if (new Set(input.categoryIds).size !== input.categoryIds.length) throw new Error("Duplicate category");
   if (new Set(input.tagIds).size !== input.tagIds.length) throw new Error("Duplicate tag");
+  if (input.coverMediaId !== undefined && input.coverMediaId !== null) {
+    if (!MEDIA_ID.test(input.coverMediaId) || !input.coverAlt?.trim())
+      throw new Error("Invalid cover image");
+  }
   return {
     title: input.title.trim(),
     ...(hasDocument
@@ -94,6 +103,14 @@ export function buildArticleWritePayload(input: {
       : { content: input.content }),
     categoryIds: input.categoryIds,
     tagIds: input.tagIds,
+    ...(input.coverMediaId !== undefined
+      ? { coverMediaId: input.coverMediaId }
+      : {}),
+    ...(input.coverMediaId !== undefined &&
+    input.coverMediaId !== null &&
+    input.coverAlt !== undefined
+      ? { coverAlt: input.coverAlt }
+      : {}),
   };
 }
 
@@ -144,4 +161,47 @@ export function articleDocument(record: {
       ...(line ? { content: [{ type: "text", text: line }] } : {}),
     })),
   };
+}
+
+/** Hydrate editor-only src values from trusted server-resolved contentMedia. */
+export function prepareArticleDocument(record: {
+  content?: string;
+  contentDocument?: EditorDocument | null;
+  contentMedia?: ContentMedia[];
+}): EditorDocument {
+  const source = articleDocument(record);
+  if (!record.contentDocument) return source;
+  const media = new Map((record.contentMedia ?? []).map((item) => [item.id, item]));
+  const visit = (value: unknown): unknown => {
+    if (!isRecord(value)) return value;
+    if (value.type === "image") {
+      const attrs = value.attrs;
+      if (
+        !isRecord(attrs) ||
+        typeof attrs.mediaId !== "string" ||
+        !MEDIA_ID.test(attrs.mediaId) ||
+        typeof attrs.alt !== "string" ||
+        !attrs.alt.trim()
+      )
+        throw new UnsupportedArticleImageError();
+      const resolved = media.get(attrs.mediaId);
+      if (!resolved) throw new UnsupportedArticleImageError();
+      return {
+        type: "image",
+        attrs: {
+          mediaId: attrs.mediaId,
+          alt: attrs.alt,
+          src: resolved.url,
+          ...(typeof attrs.title === "string" ? { title: attrs.title } : {}),
+        },
+      };
+    }
+    return {
+      ...value,
+      ...(Array.isArray(value.content)
+        ? { content: value.content.map((child) => visit(child)) }
+        : {}),
+    };
+  };
+  return visit(source) as EditorDocument;
 }

@@ -9,6 +9,7 @@ import { Field, Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { editorMessages as copy } from "@/i18n/messages/editor.fa";
 import type { EditorDocument, RichEditorProps } from "./types";
+import { MediaUploadError, mediaUploadMessage } from "@/lib/media-upload";
 import "./rich-editor.css";
 
 function safeLink(value: string) {
@@ -138,13 +139,16 @@ export function RichEditor({ id, label, initialDocument, editable, readOnly = fa
     setImageError("");
     onImagePending?.(true);
     try {
-      const src = await uploadImage(imageFile, controller.signal);
+      const uploaded = await uploadImage(imageFile, controller.signal);
       if (controller.signal.aborted || editor.isDestroyed) return;
-      if (!safeImage(src)) throw new Error("Invalid image reference");
-      editor.chain().focus().setTextSelection(imagePosition).setImage({ src, alt: imageAlt.trim() }).run();
+      const src = typeof uploaded === "string" ? uploaded : uploaded.url;
+      const mediaId = typeof uploaded === "string" ? null : uploaded.id;
+      if (!safeImage(src) || (mediaId !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(mediaId))) throw new Error("Invalid image reference");
+      editor.chain().focus().setTextSelection(imagePosition).setImage({ src, alt: imageAlt.trim(), ...(mediaId ? { mediaId } : {}) }).run();
       closeImage();
-    } catch {
-      if (!controller.signal.aborted) setImageError(copy.imageError);
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setImageError(error instanceof MediaUploadError ? mediaUploadMessage(error.kind) : copy.imageError);
     } finally {
       if (imageRequest.current === controller) { imageRequest.current = null; setUploading(false); }
       // Failed uploads remain unresolved until retry or cancel.

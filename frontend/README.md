@@ -191,7 +191,13 @@ Nest DTOs; DEPRECATED remains visible when no explicit status filter is set.
 with canonical `contentDocument` writes (never the preview envelope), real
 category/tag IDs and the Issue #58 authenticated mutation/CSRF wrapper. Legacy
 text content loads safely; publication uses Nest status transitions and the
-published-category invariant. Image/cover upload remains inactive until #63.
+published-category invariant. Body images and optional covers upload through the
+authenticated `/api/media/images` adapter, store only canonical `mediaId`
+references, and resolve display URLs exclusively from trusted upload or
+`contentMedia` responses.
+
+Image/cover upload requires Issue #63's authenticated media endpoint; it remains
+separate from the fixture preview adapter.
 
 The production application exposes no preview routes, role switches,
 authentication bypass or fixture fallback. The preview reuses the root theme,

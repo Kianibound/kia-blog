@@ -26,6 +26,14 @@ const tags = [
 ];
 
 const editorPosts = new Map();
+const mediaFixtures = new Map([
+  ["40000000-0000-4000-8000-000000000001", {
+    id: "40000000-0000-4000-8000-000000000001",
+    url: "https://res.cloudinary.com/demo/image/upload/v1/seed/body.png",
+    width: 400,
+    height: 300,
+  }],
+]);
 
 function readJson(request) {
   return new Promise((resolve) => {
@@ -43,6 +51,7 @@ let authMode = "normal";
 let lastAuthUser = null;
 let inventoryMode = "success";
 let lastArticleWrite = null;
+let mediaUploadMode = "success";
 
 function redisGet(key) {
   const entry = redis.get(key);
@@ -140,10 +149,19 @@ function adminInventory(page, limit) {
 }
 
 function articleResponse(post) {
+  const contentMedia = [];
+  const visit = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "image" && node.attrs?.mediaId && mediaFixtures.has(node.attrs.mediaId))
+      contentMedia.push(mediaFixtures.get(node.attrs.mediaId));
+    node.content?.forEach(visit);
+  };
+  visit(post.contentDocument);
+  const cover = post.coverMediaId ? mediaFixtures.get(post.coverMediaId) : null;
   return {
     ...post,
-    coverImage: null,
-    contentMedia: [],
+    coverImage: cover ? { ...cover, alt: post.coverAlt ?? "" } : null,
+    contentMedia,
     categories: categories.filter((item) => post.categoryIds.includes(item.id)),
     tags: tags.filter((item) => post.tagIds.includes(item.id)),
     author: { id: post.authorId, username: "sara", name: "سارا", avatarUrl: null },
@@ -211,6 +229,12 @@ function ensureEditorSeed(authorId) {
       type: "doc",
       content: [{ type: "paragraph", content: [{ type: "text", text: "متن منتشرشده" }] }],
     }, [categories[0].id]));
+  }
+  if (!editorPosts.has("post-8")) {
+    editorPosts.set("post-8", editorPost("post-8", "مقالهٔ رسانهٔ گمشده", "DRAFT", authorId, {
+      type: "doc",
+      content: [{ type: "image", attrs: { mediaId: "40000000-0000-4000-8000-000000000002", alt: "تصویر گمشده" } }],
+    }));
   }
 }
 
@@ -295,6 +319,27 @@ createServer(async (request, response) => {
   if (request.method === "GET" && url.pathname === "/tags" && !url.search && !request.headers.authorization) {
     return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(tags));
   }
+  if (request.method === "POST" && url.pathname === "/media/images") {
+    await new Promise((resolve) => { request.resume(); request.on("end", resolve); request.on("error", resolve); });
+    if (authMode === "unavailable") return response.writeHead(503, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unavailable" }));
+    if (authMode === "revoke" || !lastAuthUser) return response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unauthorized" }));
+    if (mediaUploadMode === "too-large") return response.writeHead(413, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Too large" }));
+    if (mediaUploadMode === "invalid") return response.writeHead(422, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Invalid image" }));
+    const id = "40000000-0000-4000-8000-000000000099";
+    const media = { id, url: "https://res.cloudinary.com/demo/image/upload/v1/uploaded/image.png", width: 640, height: 360 };
+    mediaFixtures.set(id, media);
+    if (mediaUploadMode === "slow") {
+      setTimeout(() => response.writeHead(201, { "Content-Type": "application/json" }).end(JSON.stringify(media)), 1500);
+      return;
+    }
+    return response.writeHead(201, { "Content-Type": "application/json" }).end(JSON.stringify(media));
+  }
+  if (request.method === "POST" && url.pathname === "/__test/media") {
+    const mode = url.searchParams.get("mode");
+    if (!["success", "too-large", "invalid", "slow"].includes(mode)) return response.writeHead(400).end();
+    mediaUploadMode = mode;
+    return response.writeHead(204).end();
+  }
   if (request.method === "GET" && url.pathname.startsWith("/posts/mine/")) {
     if (authMode === "unavailable") return response.writeHead(503, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unavailable" }));
     if (authMode === "revoke" || !lastAuthUser) return response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unauthorized" }));
@@ -318,6 +363,10 @@ createServer(async (request, response) => {
     if (status === "PUBLISHED" && requestedCategories.length === 0) return response.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Category required" }));
     const id = `created-${editorPosts.size + 1}`;
     const post = editorPost(id, body.title.trim(), status, lastAuthUser.id, body.contentDocument, requestedCategories, requestedTags);
+    if (typeof body.coverMediaId === "string" && mediaFixtures.has(body.coverMediaId)) {
+      post.coverMediaId = body.coverMediaId;
+      post.coverAlt = typeof body.coverAlt === "string" ? body.coverAlt : "";
+    }
     editorPosts.set(id, post);
     return response.writeHead(201, { "Content-Type": "application/json" }).end(JSON.stringify(articleResponse(post)));
   }
@@ -345,6 +394,11 @@ createServer(async (request, response) => {
       publishedAt: nextStatus === "DRAFT" ? null : post.publishedAt ?? "2026-01-02T10:00:00.000Z",
       ...(Array.isArray(body.categoryIds) ? { categoryIds } : {}),
       ...(Array.isArray(body.tagIds) ? { tagIds: body.tagIds } : {}),
+      ...(body.coverMediaId === null
+        ? { coverMediaId: undefined, coverAlt: undefined }
+        : typeof body.coverMediaId === "string" && mediaFixtures.has(body.coverMediaId)
+          ? { coverMediaId: body.coverMediaId, coverAlt: typeof body.coverAlt === "string" ? body.coverAlt : "" }
+          : {}),
     };
     editorPosts.set(id, updated);
     return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(articleResponse(updated)));

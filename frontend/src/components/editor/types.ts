@@ -7,6 +7,13 @@ export type EditorDocument = {
   marks?: { type: string; attrs?: Record<string, unknown> }[];
 };
 
+export type UploadedEditorImage = {
+  id: string;
+  url: string;
+  width?: number | null;
+  height?: number | null;
+};
+
 export type RichEditorProps = {
   id: string;
   label: string;
@@ -14,7 +21,7 @@ export type RichEditorProps = {
   editable: boolean;
   readOnly?: boolean;
   error?: string;
-  uploadImage?: (file: File, signal: AbortSignal) => Promise<string>;
+  uploadImage?: (file: File, signal: AbortSignal) => Promise<string | UploadedEditorImage>;
   onImagePending?: (pending: boolean) => void;
   onChange: (value: { document: EditorDocument; plainText: string }) => void;
 };

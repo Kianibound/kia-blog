@@ -40,6 +40,7 @@ export function parseBookmarkedPosts(value: unknown, userId: string): PostDetail
 // Normalized presentation cover. Accepts Nest's `{ id, url, width, height, alt }`
 // and the existing test-preview `{ src, alt }` shape.
 export type CoverImage = {
+  id?: string;
   src: string;
   alt: string;
   width: number | null;
@@ -62,6 +63,7 @@ export function parseCoverImage(value: unknown): CoverImage | null {
   )
     throw new Error("Invalid cover image");
   return {
+    id: value.id,
     src: value.url,
     alt: value.alt,
     width: value.width,

@@ -22,7 +22,7 @@ type Props = {
   publicationAction?: PublicationAction;
   readingHref?: (slug: string) => string;
   contentBlocked?: boolean;
-  uploadImage?: (file: File, signal: AbortSignal) => Promise<string>;
+  uploadImage?: (file: File, signal: AbortSignal) => Promise<string | { id: string; url: string; width?: number | null; height?: number | null }>;
   backLabel?: string;
   helpText?: string;
   savedText?: string;

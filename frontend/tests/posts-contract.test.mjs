@@ -179,6 +179,7 @@ const safeMediaUrl = "https://res.cloudinary.com/demo/image/upload/v1/articles/b
 test("public cover parsing accepts the Nest shape and rejects unsafe references", () => {
   const withNestCover = { ...feed, data: [{ ...feed.data[0], coverImage: nestCover }] };
   assert.deepEqual(parsePublishedPosts(withNestCover).data[0].coverImage, {
+    id: nestCover.id,
     src: nestCover.url,
     alt: nestCover.alt,
     width: nestCover.width,
@@ -265,6 +266,7 @@ test("detail parsing accepts a Nest rich document and resolves media by id", () 
     { id: mediaId, url: safeMediaUrl, width: 800, height: 450 },
   ]);
   assert.deepEqual(detail.coverImage, {
+    id: nestCover.id,
     src: nestCover.url,
     alt: nestCover.alt,
     width: nestCover.width,

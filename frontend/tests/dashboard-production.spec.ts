@@ -7,6 +7,7 @@ async function resetFixture(request: APIRequestContext) {
   await request.post(`${fixture}/__test/session?mode=clear`);
   await request.post(`${fixture}/__test/inventory?mode=success`);
   await request.post(`${fixture}/__test/articles?mode=reset`);
+  await request.post(`${fixture}/__test/media?mode=success`);
 }
 
 async function login(page: Page, email: string, next = "/dashboard") {
@@ -303,12 +304,12 @@ test("published articles cannot lose their last category", async ({ page }) => {
   await expect(page.getByLabel("عنوان مقاله", { exact: true })).toHaveValue("مقالهٔ منتشرشده");
 });
 
-test("unsupported image nodes block saving and preserve the editor", async ({ page, request }) => {
+test("unsupported image nodes block editing and preserve the source", async ({ page, request }) => {
   await login(page, "author@example.test");
   await page.goto("/dashboard/posts/post-6/edit");
-  await page.getByRole("button", { name: /ذخیره/ }).click();
   await expect(page.getByText("این مقاله تصویر ناسازگار دارد", { exact: false })).toBeVisible();
-  await expect(page.getByLabel("عنوان مقاله", { exact: true })).toHaveValue("مقالهٔ تصویر ناسازگار");
+  await expect(page.getByLabel("عنوان مقاله")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /ذخیره/ })).toHaveCount(0);
   const write = await request.get(`${fixture}/__test/articles`).then((response) => response.json());
   expect(write).toBeNull();
 });
@@ -322,4 +323,105 @@ test("DEPRECATED articles can be republished when a category exists", async ({ p
   await expect(page.getByText("مقاله منتشر شد.", { exact: false })).toBeVisible();
   const write = await request.get(`${fixture}/__test/articles`).then((response) => response.json());
   expect(write.body).toEqual({ status: "PUBLISHED" });
+});
+
+test("production upload inserts canonical mediaIds for body image and cover, and cover removal clears it", async ({ page, request }) => {
+  await login(page, "author@example.test");
+  await page.goto("/dashboard/posts/post-5/edit");
+  await page.getByRole("button", { name: "افزودن تصویر", exact: true }).click();
+  await page.getByLabel("فایل تصویر", { exact: true }).setInputFiles("public/social/linkedin.png");
+  await page.getByLabel("متن جایگزین تصویر", { exact: true }).fill("تصویر تازه");
+  await page.getByRole("button", { name: "درج تصویر", exact: true }).click();
+  await expect(page.locator(".rich-editor img")).toHaveCount(2);
+  await page.getByRole("button", { name: /ذخیره/ }).click();
+  await expect(page.getByText("مقاله ذخیره شد.", { exact: false })).toBeVisible();
+
+  let write = await request.get(`${fixture}/__test/articles`).then((response) => response.json());
+  const images = write.body.contentDocument.content.filter((node: { type?: string }) => node.type === "image");
+  expect(images.map((node: { attrs: { mediaId: string } }) => node.attrs.mediaId)).toContain("40000000-0000-4000-8000-000000000099");
+  await page.reload();
+  await expect(page.locator(".rich-editor img")).toHaveCount(2);
+
+  await page.goto("/dashboard/posts/post-1/edit");
+  await page.getByLabel("فایل تصویر جلد", { exact: true }).setInputFiles("public/social/linkedin.png");
+  await page.getByLabel("متن جایگزین جلد", { exact: true }).fill("جلد تازه");
+  await page.getByRole("button", { name: "انتخاب تصویر جلد", exact: true }).click();
+  await page.getByRole("button", { name: /ذخیره/ }).click();
+  await expect(page.getByText("مقاله ذخیره شد.", { exact: false })).toBeVisible();
+  write = await request.get(`${fixture}/__test/articles`).then((response) => response.json());
+  expect(write.body.coverMediaId).toBe("40000000-0000-4000-8000-000000000099");
+  expect(write.body.coverAlt).toBe("جلد تازه");
+
+  await page.getByRole("button", { name: "حذف تصویر جلد", exact: true }).click();
+  await page.getByRole("button", { name: /ذخیره/ }).click();
+  await expect(page.getByText("مقاله ذخیره شد.", { exact: false })).toBeVisible();
+  write = await request.get(`${fixture}/__test/articles`).then((response) => response.json());
+  expect(write.body.coverMediaId).toBeNull();
+  expect(write.body.coverAlt).toBeUndefined();
+});
+
+test("missing server-resolved media blocks editing with a clear Persian error", async ({ page }) => {
+  await login(page, "author@example.test");
+  await page.goto("/dashboard/posts/post-8/edit");
+  await expect(page.getByText("این مقاله تصویر ناسازگار دارد", { exact: false })).toBeVisible();
+  await expect(page.getByLabel("عنوان مقاله")).toHaveCount(0);
+  await expect(page.getByRole("img")).toHaveCount(0);
+});
+
+test("cover upload error states are specific and leak no backend details", async ({ page, request }) => {
+  await login(page, "author@example.test");
+  await page.goto("/dashboard/posts/post-1/edit");
+  await expect(page.getByRole("textbox", { name: "متن مقاله", exact: true })).toHaveAttribute("contenteditable", "true");
+
+  for (const [mode, message] of [
+    ["too-large", "حجم تصویر باید کمتر از ۵ مگابایت باشد."],
+    ["invalid", "فقط تصویر JPEG، PNG یا WebP مجاز است."],
+  ]) {
+    await request.post(`${fixture}/__test/media?mode=${mode}`);
+    const fileInput = page.getByLabel("فایل تصویر جلد", { exact: true });
+    const altInput = page.getByLabel("متن جایگزین جلد", { exact: true });
+    await fileInput.setInputFiles("public/social/linkedin.png");
+    await expect.poll(async () => fileInput.evaluate((input: HTMLInputElement) => input.files?.length)).toBe(1);
+    await altInput.fill("جلد آزمایش");
+    await expect(altInput).toHaveValue("جلد آزمایش");
+    await page.getByRole("button", { name: "انتخاب تصویر جلد", exact: true }).click();
+    await expect(page.locator("#cover-error")).toHaveText(message);
+    await request.post(`${fixture}/__test/media?mode=success`);
+  }
+
+  await request.post(`${fixture}/__test/media?mode=slow`);
+  const slowFile = page.getByLabel("فایل تصویر جلد", { exact: true });
+  const slowAlt = page.getByLabel("متن جایگزین جلد", { exact: true });
+  await slowFile.setInputFiles("public/social/linkedin.png");
+  await expect.poll(async () => slowFile.evaluate((input: HTMLInputElement) => input.files?.length)).toBe(1);
+  await slowAlt.fill("جلد لغوشده");
+  await expect(slowAlt).toHaveValue("جلد لغوشده");
+  await page.getByRole("button", { name: "انتخاب تصویر جلد", exact: true }).click();
+  await expect(page.getByText("در حال بارگذاری تصویر…", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "انصراف از انتخاب جلد", exact: true }).click();
+  await expect(page.locator("#cover-error")).toHaveText("");
+  await request.post(`${fixture}/__test/media?mode=success`);
+
+  await request.post(`${fixture}/__test/auth-mode?mode=revoke`);
+  const authFile = page.getByLabel("فایل تصویر جلد", { exact: true });
+  const authAlt = page.getByLabel("متن جایگزین جلد", { exact: true });
+  await authFile.setInputFiles("public/social/linkedin.png");
+  await expect.poll(async () => authFile.evaluate((input: HTMLInputElement) => input.files?.length)).toBe(1);
+  await authAlt.fill("جلد نشست");
+  await expect(authAlt).toHaveValue("جلد نشست");
+  await page.getByRole("button", { name: "انتخاب تصویر جلد", exact: true }).click();
+  await expect(page.locator("#cover-error")).toHaveText("نشست شما معتبر نیست. صفحه را دوباره بارگذاری کنید.");
+  await expect(page.getByText("Unauthorized", { exact: false })).toHaveCount(0);
+});
+
+test("production upload errors stay in the editor and expose no backend details", async ({ page, request }) => {
+  await login(page, "author@example.test");
+  await request.post(`${fixture}/__test/media?mode=too-large`);
+  await page.goto("/dashboard/posts/post-5/edit");
+  await page.getByRole("button", { name: "افزودن تصویر", exact: true }).click();
+  await page.getByLabel("فایل تصویر", { exact: true }).setInputFiles("public/social/linkedin.png");
+  await page.getByLabel("متن جایگزین تصویر", { exact: true }).fill("تصویر بزرگ");
+  await page.getByRole("button", { name: "درج تصویر", exact: true }).click();
+  await expect(page.getByText("حجم تصویر باید کمتر از ۵ مگابایت باشد.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Too large", { exact: false })).toHaveCount(0);
 });

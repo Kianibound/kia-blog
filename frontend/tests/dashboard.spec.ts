@@ -1616,13 +1616,14 @@ test("cover validation, upload retry and cancellation preserve the article on mo
   await request.post(control);
   await page.setViewportSize({ width: 360, height: 900 });
   await page.goto("/dashboard/posts/00000000-0000-4000-8000-000000000001/edit");
+  await expect(page.getByRole("textbox", { name: "متن مقاله", exact: true })).toHaveAttribute("contenteditable", "true");
   const save = page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true });
   const choose = page.getByRole("button", { name: "انتخاب تصویر جلد", exact: true });
   const file = page.getByLabel("فایل تصویر جلد", { exact: true });
   await file.setInputFiles({ name: "invalid.txt", mimeType: "text/plain", buffer: Buffer.from("test double") });
   await page.getByLabel("متن جایگزین جلد", { exact: true }).fill("جلد حفظ‌شده");
   await choose.click();
-  await expect(page.getByRole("main").getByRole("alert")).toContainText("یک فایل PNG، JPEG یا WebP غیرخالی تا ۵ مگابایت انتخاب کنید.");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("فقط تصویر JPEG، PNG یا WebP مجاز است.");
   await expect(save).toBeDisabled();
   await file.setInputFiles("public/social/linkedin.png");
   await request.post(`${control}&imageMode=error`);

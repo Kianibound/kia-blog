@@ -7,10 +7,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { articleFormMessages as copy } from "@/i18n/messages/article-form.fa";
 import { editorMessages } from "@/i18n/messages/editor.fa";
 import { parseCoverImage, type CoverImage } from "@/lib/posts-contract";
+import {
+  MediaUploadError,
+  mediaUploadMessage,
+  validateImageFile,
+} from "@/lib/media-upload";
 
 export function CoverImageField({ value, disabled, uploadImage, onChange, onPending }: {
   value: CoverImage | null; disabled: boolean;
-  uploadImage: (file: File, signal: AbortSignal) => Promise<string>;
+  uploadImage: (file: File, signal: AbortSignal) => Promise<string | { id: string; url: string; width?: number | null; height?: number | null }>;
   onChange: (value: CoverImage | null) => void; onPending: (pending: boolean) => void;
 }) {
   const [file, setFile] = useState<File>();
@@ -30,15 +35,21 @@ export function CoverImageField({ value, disabled, uploadImage, onChange, onPend
   async function choose() {
     if (disabled || request.current) return;
     if (!file || !alt.trim()) { setError(editorMessages.imageRequired); return; }
-    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || !file.size || file.size > 5 * 1024 * 1024) { setError(editorMessages.imageInvalid); return; }
+    const invalid = validateImageFile(file);
+    if (invalid) { setError(mediaUploadMessage(invalid)); return; }
     const controller = new AbortController(); request.current = controller;
     setUploading(true); setError(""); onPending(true);
     try {
-      const src = await uploadImage(file, controller.signal);
+      const uploaded = await uploadImage(file, controller.signal);
       if (controller.signal.aborted) return;
-      onChange(parseCoverImage({ src, alt: alt.trim() }));
+      onChange(typeof uploaded === "string"
+        ? parseCoverImage({ src: uploaded, alt: alt.trim() })
+        : parseCoverImage({ id: uploaded.id, url: uploaded.url, alt: alt.trim(), width: uploaded.width ?? null, height: uploaded.height ?? null }));
       cancel();
-    } catch { if (!controller.signal.aborted) setError(editorMessages.imageError); }
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setError(error instanceof MediaUploadError ? mediaUploadMessage(error.kind) : editorMessages.imageError);
+    }
     finally { if (request.current === controller) { request.current = null; setUploading(false); } }
   }
 

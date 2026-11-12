@@ -48,6 +48,10 @@ export async function saveArticleAction(
         : { content: input.content }),
       categoryIds: input.categoryIds,
       tagIds: input.tagIds,
+      ...(input.coverMediaId !== undefined
+        ? { coverMediaId: input.coverMediaId }
+        : {}),
+      ...(input.coverAlt !== undefined ? { coverAlt: input.coverAlt } : {}),
     });
     const request = await mutationRequest(csrfToken);
     let writeResponse: Response | null = null;

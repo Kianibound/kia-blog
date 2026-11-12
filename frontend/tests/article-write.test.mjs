@@ -7,6 +7,7 @@ import {
   buildArticleWritePayload,
   buildStatusPayload,
   mutationErrorResult,
+  prepareArticleDocument,
   publicationFailureMessage,
   UnsupportedArticleImageError,
 } from "../src/lib/article-write.ts";
@@ -125,6 +126,58 @@ test("canonical image media IDs are preserved and unsupported images fail closed
         tagIds: [],
       }),
     UnsupportedArticleImageError,
+  );
+});
+
+test("server-resolved contentMedia hydrates display src without changing identity", () => {
+  const mediaId = "40000000-0000-4000-8000-000000000001";
+  const contentDocument = {
+    type: "doc",
+    content: mediaId
+      ? [{ type: "image", attrs: { mediaId, alt: "تصویر متن" } }]
+      : [],
+  };
+  const prepared = prepareArticleDocument({
+    contentDocument,
+    contentMedia: [
+      { id: mediaId, url: "https://res.cloudinary.com/demo/image/upload/v1/body.png", width: 400, height: 300 },
+    ],
+  });
+  assert.deepEqual(prepared.content[0].attrs, {
+    mediaId,
+    alt: "تصویر متن",
+    src: "https://res.cloudinary.com/demo/image/upload/v1/body.png",
+  });
+  assert.throws(
+    () => prepareArticleDocument({ contentDocument, contentMedia: [] }),
+    UnsupportedArticleImageError,
+  );
+});
+
+test("cover media IDs and alt text use the exact Nest create/update fields", () => {
+  const mediaId = "40000000-0000-4000-8000-000000000001";
+  const withCover = buildArticleWritePayload({
+    title: "جلد",
+    document,
+    categoryIds: [],
+    tagIds: [],
+    coverMediaId: mediaId,
+    coverAlt: "جلد مقاله",
+  });
+  assert.equal(withCover.coverMediaId, mediaId);
+  assert.equal(withCover.coverAlt, "جلد مقاله");
+  const removed = buildArticleWritePayload({
+    title: "جلد",
+    document,
+    categoryIds: [],
+    tagIds: [],
+    coverMediaId: null,
+  });
+  assert.equal(removed.coverMediaId, null);
+  assert.equal("coverAlt" in removed, false);
+  assert.throws(
+    () => buildArticleWritePayload({ title: "جلد", document, categoryIds: [], tagIds: [], coverMediaId: "not-a-uuid", coverAlt: "x" }),
+    /cover/,
   );
 });
 
