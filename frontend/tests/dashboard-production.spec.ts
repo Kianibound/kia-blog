@@ -9,6 +9,7 @@ async function resetFixture(request: APIRequestContext) {
   await request.post(`${fixture}/__test/articles?mode=reset`);
   await request.post(`${fixture}/__test/media?mode=success`);
   await request.post(`${fixture}/__test/authors?mode=reset`);
+  await request.post(`${fixture}/__test/taxonomy?mode=reset`);
 }
 
 async function login(page: Page, email: string, next = "/dashboard") {
@@ -72,7 +73,7 @@ test("AUTHOR gets AUTHOR navigation and cannot open USER or ADMIN deep links", a
 test("ADMIN follows the approved ADMIN route matrix and is denied USER links", async ({ page }) => {
   await login(page, "admin@example.test");
   expect(await dashboardNavigation(page)).toEqual(["پیشخوان", "فضای مدیریت", "دسته‌بندی‌ها و تگ‌ها", "کامنت‌ها", "مقاله‌ها", "نویسندگان"]);
-  for (const path of ["/dashboard/workspace", "/dashboard/posts", "/dashboard/comments", "/dashboard/categories", "/dashboard/authors"]) {
+  for (const path of ["/dashboard/workspace", "/dashboard/posts", "/dashboard/comments", "/dashboard/categories", "/dashboard/tags", "/dashboard/authors"]) {
     expect((await page.goto(path))?.status()).toBe(200);
   }
   for (const path of ["/dashboard/bookmarks", "/dashboard/my-comments"]) {
@@ -493,4 +494,66 @@ test("production upload errors stay in the editor and expose no backend details"
   await page.getByRole("button", { name: "درج تصویر", exact: true }).click();
   await expect(page.getByText("حجم تصویر باید کمتر از ۵ مگابایت باشد.", { exact: false })).toBeVisible();
   await expect(page.getByText("Too large", { exact: false })).toHaveCount(0);
+});
+
+test("ADMIN creates categories and tags through the real endpoints", async ({ page }) => {
+  await login(page, "admin@example.test");
+  await page.goto("/dashboard/categories");
+  await expect(page.getByRole("navigation", { name: "مدیریت دسته‌بندی‌ها و تگ‌ها" })).toBeVisible();
+  await expect(page.getByText("توسعهٔ وب", { exact: false })).toBeVisible();
+
+  await page.getByLabel("نام دسته‌بندی", { exact: true }).fill("  DevOps  ");
+  await page.getByRole("button", { name: "افزودن", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "دسته‌بندی ایجاد شد." })).toBeVisible();
+  await expect(page.getByText("DevOps", { exact: false }).first()).toBeVisible();
+
+  await page.getByRole("link", { name: "تگ‌ها", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/tags$/);
+  await page.getByLabel("نام تگ", { exact: true }).fill("TypeScript");
+  await page.getByRole("button", { name: "افزودن", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "تگ ایجاد شد." })).toBeVisible();
+
+  // The editor reads the same live endpoints and must see the new tags.
+  await page.goto("/dashboard/posts/new");
+  await expect(page.getByText("TypeScript", { exact: false }).first()).toBeVisible();
+});
+
+test("duplicate and slug-collision creates show the duplicate message", async ({ page }) => {
+  await login(page, "admin@example.test");
+  await page.goto("/dashboard/categories");
+  // "WEB" normalizes to the existing "web" slug without matching the name.
+  await page.getByLabel("نام دسته‌بندی", { exact: true }).fill("WEB");
+  await page.getByRole("button", { name: "افزودن", exact: true }).click();
+  await expect(page.locator("#taxonomy-duplicate")).toHaveText("این نام یا نشانی آن قبلاً ثبت شده است.");
+  await expect(page.getByLabel("نام دسته‌بندی", { exact: true })).toHaveValue("WEB");
+  await expect(page.getByText("Duplicate", { exact: false })).toHaveCount(0);
+});
+
+test("referenced taxonomy cannot be deleted while unused rows can", async ({ page }) => {
+  await login(page, "admin@example.test");
+  await page.goto("/dashboard/categories");
+
+  const referenced = page.getByRole("listitem").filter({ hasText: "یادگیری ۲۰۲۶" });
+  await referenced.getByRole("button", { name: "حذف", exact: true }).click();
+  const dialog = page.getByRole("alertdialog", { name: "حذف دسته‌بندی", exact: true });
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("این مورد در مقاله‌ای استفاده شده است و حذف نمی‌شود.");
+  await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+  await expect(referenced).toBeVisible();
+
+  const unused = page.getByRole("listitem").filter({ hasText: "توسعهٔ وب" });
+  await unused.getByRole("button", { name: "حذف", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "دسته‌بندی حذف شد." })).toBeVisible();
+  await expect(unused).toHaveCount(0);
+});
+
+test("non-admin roles cannot open taxonomy management routes", async ({ page }) => {
+  await login(page, "author@example.test");
+  for (const path of ["/dashboard/categories", "/dashboard/tags"]) {
+    await page.goto(path);
+    await expect(page.locator("main h1")).toBeVisible();
+    await expect(page.getByRole("button", { name: "افزودن", exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("نام دسته‌بندی")).toHaveCount(0);
+  }
 });

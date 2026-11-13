@@ -35,6 +35,10 @@ export const dashboardMessages = {
       title: "دسته‌بندی‌ها و تگ‌ها",
       description: "مدیریت موضوع‌های سایت.",
     },
+    tags: {
+      title: "تگ‌ها",
+      description: "مدیریت تگ‌های سایت.",
+    },
     authors: {
       title: "نویسندگان",
       description: "مدیریت حساب نویسندگان.",

@@ -30,9 +30,9 @@ test("cross-role and deep-link authorization is denied server-side", () => {
   const allowed = {
     USER: [[], ["bookmarks"], ["my-comments"]],
     AUTHOR: [[], ["workspace"], ["posts"], ["avatar"]],
-    ADMIN: [[], ["workspace"], ["posts"], ["comments"], ["categories"], ["authors"], ["authors", "new"]],
+    ADMIN: [[], ["workspace"], ["posts"], ["comments"], ["categories"], ["tags"], ["authors"], ["authors", "new"]],
   };
-  const allSections = [[], ["workspace"], ["posts"], ["comments"], ["categories"], ["authors"], ["authors", "new"], ["bookmarks"], ["my-comments"], ["avatar"]];
+  const allSections = [[], ["workspace"], ["posts"], ["comments"], ["categories"], ["tags"], ["authors"], ["authors", "new"], ["bookmarks"], ["my-comments"], ["avatar"]];
 
   for (const role of roles) {
     const allowedKeys = new Set(allowed[role].map((section) => section.join("/")));
@@ -58,6 +58,8 @@ test("section metadata is available only after authorization", () => {
   assert.equal(dashboardSectionMeta("AUTHOR", ["bookmarks"]), null);
   assert.equal(dashboardSectionMeta("USER", [])?.title, "پیشخوان");
   assert.equal(dashboardSectionMeta("ADMIN", ["authors", "new"])?.title, "افزودن نویسنده");
+  assert.equal(dashboardSectionMeta("ADMIN", ["tags"])?.title, "تگ‌ها");
+  assert.equal(dashboardSectionMeta("USER", ["tags"]), null);
   assert.equal(dashboardSectionMeta("AUTHOR", ["authors", "new"]), null);
 });
 

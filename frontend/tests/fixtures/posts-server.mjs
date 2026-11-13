@@ -14,16 +14,32 @@ const privatePosts = [
   { ...publishedPosts[0], id: "50000000-0000-4000-8000-000000000001", slug: "draft-post", status: "DRAFT", publishedAt: null, content: "PRIVATE TEST DOUBLE" },
   { ...publishedPosts[0], id: "50000000-0000-4000-8000-000000000002", slug: "deprecated-post", status: "DEPRECATED", content: "PRIVATE TEST DOUBLE" },
 ];
-const categories = [
+const seedCategories = [
   { id: "20000000-0000-4000-8000-000000000001", name: "توسعهٔ وب", slug: "web", createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" },
   // The backend slugifier can produce an empty slug for some names.
   { id: "20000000-0000-4000-8000-000000000002", name: "یادگیری 2026", slug: "", createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" },
 ];
 
-const tags = [
+const seedTags = [
   { id: "30000000-0000-4000-8000-000000000001", name: "ری‌اکت", slug: "react", createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" },
   { id: "30000000-0000-4000-8000-000000000002", name: "نست", slug: "nest", createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" },
 ];
+
+let categories = structuredClone(seedCategories);
+let tags = structuredClone(seedTags);
+// Seeded "referenced by an article" rows prove the DELETE 409 conflict.
+let taxonomyReferences = new Set([`categories:${seedCategories[1].id}`]);
+
+function resetTaxonomy() {
+  categories = structuredClone(seedCategories);
+  tags = structuredClone(seedTags);
+  taxonomyReferences = new Set([`categories:${seedCategories[1].id}`]);
+}
+
+// Mirrors slugify(name, { lower: true, strict: true }); Persian names can yield "".
+function taxonomySlug(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
 
 const editorPosts = new Map();
 const mediaFixtures = new Map([
@@ -407,6 +423,44 @@ createServer(async (request, response) => {
     if (!author.disabledAt) author.disabledAt = "2026-03-01T10:00:00.000Z";
     return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(adminAuthorResponse(author)));
   }
+  const taxonomyWrite = /^\/(categories|tags)$/.exec(url.pathname);
+  if (request.method === "POST" && taxonomyWrite) {
+    if (!requireAdmin(response)) return;
+    const kind = taxonomyWrite[1];
+    const list = kind === "categories" ? categories : tags;
+    const body = await readJson(request);
+    const name = typeof body?.name === "string" ? body.name.trim() : "";
+    const keys = body && typeof body === "object" ? Object.keys(body) : [];
+    if (!name || keys.some((key) => key !== "name"))
+      return response.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Invalid name" }));
+    const slug = taxonomySlug(name);
+    if (list.some((item) => item.name.toLowerCase() === name.toLowerCase() || item.slug === slug))
+      return response.writeHead(409, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Duplicate" }));
+    const prefix = kind === "categories" ? "20000000" : "30000000";
+    const item = {
+      id: `${prefix}-0000-4000-8000-${String(list.length + 1).padStart(12, "0")}`,
+      name,
+      slug,
+      createdAt: "2026-03-19T12:00:00.000Z",
+      updatedAt: "2026-03-19T12:00:00.000Z",
+    };
+    list.push(item);
+    return response.writeHead(201, { "Content-Type": "application/json" }).end(JSON.stringify(item));
+  }
+  const taxonomyDelete = /^\/(categories|tags)\/([^/]+)$/.exec(url.pathname);
+  if (request.method === "DELETE" && taxonomyDelete) {
+    if (!requireAdmin(response)) return;
+    const kind = taxonomyDelete[1];
+    const list = kind === "categories" ? categories : tags;
+    const id = decodeURIComponent(taxonomyDelete[2]);
+    const index = list.findIndex((item) => item.id === id);
+    if (index < 0)
+      return response.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Not found" }));
+    if (taxonomyReferences.has(`${kind}:${id}`))
+      return response.writeHead(409, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Referenced by articles" }));
+    list.splice(index, 1);
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Deleted successfully." }));
+  }
   if (request.method === "GET" && url.pathname === "/tags" && !url.search && !request.headers.authorization) {
     return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(tags));
   }
@@ -502,6 +556,10 @@ createServer(async (request, response) => {
   }
   if (request.method === "POST" && url.pathname === "/__test/authors" && url.searchParams.get("mode") === "reset") {
     resetAdminAuthors();
+    return response.writeHead(204).end();
+  }
+  if (request.method === "POST" && url.pathname === "/__test/taxonomy" && url.searchParams.get("mode") === "reset") {
+    resetTaxonomy();
     return response.writeHead(204).end();
   }
   if (request.method === "POST" && url.pathname === "/__test/articles" && url.searchParams.get("mode") === "reset") {

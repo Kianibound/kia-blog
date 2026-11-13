@@ -15,6 +15,10 @@ import {
   ProductionAuthors,
   ProductionAuthorsLoading,
 } from "@/components/dashboard/production-authors";
+import {
+  ProductionTaxonomy,
+  ProductionTaxonomyLoading,
+} from "@/components/dashboard/production-taxonomy";
 import { Card } from "@/components/ui/card";
 import { dashboardMessages as copy } from "@/i18n/messages/dashboard.fa";
 import { lookupPublicAccount } from "@/lib/auth/current-user";
@@ -77,6 +81,11 @@ export default async function DashboardPage({
     section[2] === "edit"
       ? section[1]
       : undefined;
+  const taxonomyKind =
+    section.length === 1 &&
+    (section[0] === "categories" || section[0] === "tags")
+      ? section[0]
+      : undefined;
 
   return (
     <DashboardShell
@@ -116,6 +125,13 @@ export default async function DashboardPage({
             status={status}
             invalidStatus={invalidStatus}
           />
+        </Suspense>
+      ) : taxonomyKind ? (
+        <Suspense
+          key={taxonomyKind}
+          fallback={<ProductionTaxonomyLoading />}
+        >
+          <ProductionTaxonomy kind={taxonomyKind} account={account} />
         </Suspense>
       ) : section.length === 1 && section[0] === "authors" ? (
         <Suspense fallback={<ProductionAuthorsLoading />}>

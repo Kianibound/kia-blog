@@ -45,6 +45,10 @@ const sections: Record<
     roles: new Set(["ADMIN"]),
     meta: copy.sections.categories,
   },
+  tags: {
+    roles: new Set(["ADMIN"]),
+    meta: copy.sections.tags,
+  },
   authors: {
     roles: new Set(["ADMIN"]),
     meta: copy.sections.authors,
