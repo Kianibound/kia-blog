@@ -10,6 +10,7 @@ async function resetFixture(request: APIRequestContext) {
   await request.post(`${fixture}/__test/media?mode=success`);
   await request.post(`${fixture}/__test/authors?mode=reset`);
   await request.post(`${fixture}/__test/taxonomy?mode=reset`);
+  await request.post(`${fixture}/__test/comments?mode=reset`);
 }
 
 async function login(page: Page, email: string, next = "/dashboard") {
@@ -555,5 +556,79 @@ test("non-admin roles cannot open taxonomy management routes", async ({ page }) 
     await expect(page.locator("main h1")).toBeVisible();
     await expect(page.getByRole("button", { name: "افزودن", exact: true })).toHaveCount(0);
     await expect(page.getByLabel("نام دسته‌بندی")).toHaveCount(0);
+  }
+});
+
+test("public article shows only approved comments and asks signed-out readers to sign in", async ({ page }) => {
+  await page.goto("/posts/test-post-1");
+  await expect(page.getByRole("heading", { name: "دیدگاه‌ها", exact: true })).toBeVisible();
+  await expect(page.getByText("دیدگاه تأییدشده برای همه", { exact: false })).toBeVisible();
+  await expect(page.getByText("پاسخ تأییدشده", { exact: false })).toBeVisible();
+  await expect(page.getByText("دیدگاه در انتظار نیما", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("پاسخ در انتظار", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("برای ثبت دیدگاه وارد حساب کاربری خود شوید.", { exact: false })).toBeVisible();
+});
+
+test("signed-in reader submits a comment that stays hidden until approval", async ({ page }) => {
+  await login(page, "user@example.test", "/posts/test-post-1");
+  await page.getByLabel("متن دیدگاه", { exact: true }).fill("متن تازه برای بررسی");
+  await page.getByRole("button", { name: "ثبت دیدگاه", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "دیدگاه شما ثبت شد و در انتظار تأیید است." })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("متن تازه برای بررسی", { exact: false })).toHaveCount(0);
+});
+
+test("USER edits an approved comment back to pending and deletes a pending one after confirmation", async ({ page }) => {
+  await login(page, "user@example.test", "/dashboard/my-comments");
+  const approved = page.getByRole("listitem").filter({ hasText: "دیدگاه تأییدشدهٔ من" });
+  await expect(approved.getByText("تأییدشده", { exact: true })).toBeVisible();
+  await approved.getByRole("button", { name: "ویرایش", exact: true }).click();
+  await page.getByLabel("متن دیدگاه", { exact: true }).fill("ویرایش‌شدهٔ من");
+  await page.getByRole("button", { name: "ثبت تغییرات", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "ویرایش ثبت شد و دیدگاه در انتظار تأیید است." })).toBeVisible();
+  const edited = page.getByRole("listitem").filter({ hasText: "ویرایش‌شدهٔ من" });
+  await expect(edited.getByText("در انتظار تأیید", { exact: true })).toBeVisible();
+
+  const pending = page.getByRole("listitem").filter({ hasText: "دیدگاه در انتظار من" });
+  await pending.getByRole("button", { name: "حذف", exact: true }).click();
+  await expect(page.getByRole("alertdialog")).toContainText("پاسخ‌های آن نیز حذف خواهند شد");
+  await page.getByRole("alertdialog").getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "دیدگاه حذف شد." })).toBeVisible();
+  await expect(page.getByText("دیدگاه در انتظار من", { exact: false })).toHaveCount(0);
+});
+
+test("ADMIN approval is version-safe: a stale 409 never approves, and reloading lets the admin decide again", async ({ page, request }) => {
+  await login(page, "admin@example.test", "/dashboard/comments");
+  const row = page.getByRole("listitem").filter({ hasText: "دیدگاه در انتظار نیما" });
+  await expect(row.getByText("در انتظار تأیید", { exact: true })).toBeVisible();
+
+  await request.post(`${fixture}/__test/comments?mode=bump&id=c0000000-0000-4000-8000-000000000004`);
+  await row.getByRole("button", { name: "تأیید دیدگاه", exact: true }).click();
+  await expect(row.getByRole("alert")).toContainText("تأیید انجام نشد");
+  await expect(row.getByText("در انتظار تأیید", { exact: true })).toBeVisible();
+  await expect(row.getByRole("button", { name: "تأیید دیدگاه", exact: true })).toBeDisabled();
+
+  await row.getByRole("button", { name: "بارگذاری دوباره فهرست", exact: true }).click();
+  const refreshed = page.getByRole("listitem").filter({ hasText: "دیدگاه در انتظار نیما" });
+  await refreshed.getByRole("button", { name: "تأیید دیدگاه", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "دیدگاه تأیید شد." })).toBeVisible();
+  await expect(refreshed.getByText("تأییدشده", { exact: true })).toBeVisible();
+});
+
+test("ADMIN deletes a comment only after confirmation", async ({ page }) => {
+  await login(page, "admin@example.test", "/dashboard/comments");
+  const row = page.getByRole("listitem").filter({ hasText: "دیدگاه تأییدشدهٔ من" });
+  await row.getByRole("button", { name: "حذف دیدگاه", exact: true }).click();
+  await expect(page.getByRole("alertdialog")).toContainText("این دیدگاه و پاسخ‌های آن حذف می‌شوند");
+  await page.getByRole("alertdialog").getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "دیدگاه حذف شد." })).toBeVisible();
+  await expect(page.getByText("دیدگاه تأییدشدهٔ من", { exact: false })).toHaveCount(0);
+});
+
+test("AUTHOR cannot open admin comment moderation or the USER comments list", async ({ page }) => {
+  await login(page, "author@example.test");
+  for (const path of ["/dashboard/comments", "/dashboard/my-comments"]) {
+    await page.goto(path);
+    await expectNotFound(page);
   }
 });

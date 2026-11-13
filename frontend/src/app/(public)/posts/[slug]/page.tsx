@@ -2,8 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ProductionArticleComments } from "@/components/comments/production-article-comments";
 import { RichContent } from "@/components/posts/rich-content";
 import { messages } from "@/i18n/messages/fa";
+import { lookupPublicAccount } from "@/lib/auth/current-user";
+import { loadArticleComments } from "@/lib/comments";
 import { getPublishedPost } from "@/lib/posts";
 import { formatPublicationDate } from "@/lib/publication-date";
 import { fa } from "@/lib/utils";
@@ -28,8 +31,13 @@ export default async function ArticleDetail({ params, bookmark }: { params: Prom
   }
   // Resolve availability before rendering: no streamed success shell before a 404.
   if (!post) notFound();
+  const [comments, account] = await Promise.all([
+    loadArticleComments(post.id),
+    lookupPublicAccount(),
+  ]);
 
   return (
+    <>
     <article className="mx-auto max-w-3xl space-y-6" aria-labelledby="article-title">
       <Link href="/" className="inline-flex min-h-12 items-center rounded-md px-4 font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">{messages.article.backToFeed}</Link>
       <Card className="relative">
@@ -80,5 +88,12 @@ export default async function ArticleDetail({ params, bookmark }: { params: Prom
         </section>
       </Card>
     </article>
+    <ProductionArticleComments
+      postId={post.id}
+      slug={post.slug}
+      comments={comments}
+      account={account}
+    />
+    </>
   );
 }

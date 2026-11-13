@@ -79,6 +79,69 @@ function resetAdminAuthors() {
 }
 resetAdminAuthors();
 
+// Test-only comment double mirroring the live Nest rules: public reads show only
+// APPROVED roots and direct replies; edits return to PENDING; approval is version-conditional.
+const FIXTURE_USER_ID = "90000000-0000-4000-8000-000000000001";
+const FIXTURE_READER_ID = "90000000-0000-4000-8000-000000000003";
+const FIXTURE_NIMA_ID = "90000000-0000-4000-8000-000000000002";
+const fixtureCommentAuthors = {
+  [FIXTURE_USER_ID]: { id: FIXTURE_USER_ID, username: "user_fixture", name: null, avatarUrl: null },
+  [FIXTURE_READER_ID]: { id: FIXTURE_READER_ID, username: "sara", name: "سارا", avatarUrl: null },
+  [FIXTURE_NIMA_ID]: { id: FIXTURE_NIMA_ID, username: "user_nima", name: null, avatarUrl: null },
+};
+let comments = [];
+let commentSeq = 0;
+
+function seedComments() {
+  const at = "2026-02-01T10:00:00.000Z";
+  const postId = publishedPosts[0].id;
+  const row = (id, fields) => ({ id, postId, parentId: null, version: 1, createdAt: at, updatedAt: at, ...fields });
+  const root = "c0000000-0000-4000-8000-000000000001";
+  comments = [
+    row(root, { content: "دیدگاه تأییدشده برای همه", status: "APPROVED", authorId: FIXTURE_READER_ID }),
+    row("c0000000-0000-4000-8000-000000000002", { content: "دیدگاه در انتظار من", status: "PENDING", authorId: FIXTURE_USER_ID }),
+    row("c0000000-0000-4000-8000-000000000003", { content: "دیدگاه تأییدشدهٔ من", status: "APPROVED", authorId: FIXTURE_USER_ID }),
+    row("c0000000-0000-4000-8000-000000000004", { content: "دیدگاه در انتظار نیما", status: "PENDING", authorId: FIXTURE_NIMA_ID }),
+    row("c0000000-0000-4000-8000-000000000005", { content: "پاسخ تأییدشده", status: "APPROVED", parentId: root, authorId: FIXTURE_NIMA_ID }),
+    row("c0000000-0000-4000-8000-000000000006", { content: "پاسخ در انتظار", status: "PENDING", parentId: root, authorId: FIXTURE_NIMA_ID }),
+  ];
+  commentSeq = comments.length;
+}
+seedComments();
+
+function commentRecord(comment) {
+  const { id, content, status, version, postId, authorId, parentId, createdAt, updatedAt } = comment;
+  return { id, content, status, version, postId, authorId, parentId, createdAt, updatedAt };
+}
+
+function adminCommentRow(comment) {
+  return { id: comment.id, status: comment.status, content: comment.content, version: comment.version, author: fixtureCommentAuthors[comment.authorId], createdAt: comment.createdAt, updatedAt: comment.updatedAt };
+}
+
+function publicCommentRow(comment) {
+  return { ...commentRecord(comment), author: fixtureCommentAuthors[comment.authorId] };
+}
+
+function requireUser(response) {
+  if (authMode === "unavailable") {
+    response.writeHead(503, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unavailable" }));
+    return false;
+  }
+  if (authMode === "revoke" || !lastAuthUser) {
+    response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unauthorized" }));
+    return false;
+  }
+  return true;
+}
+
+function paginateComments(rows, url) {
+  const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+  const limit = Math.max(1, Number(url.searchParams.get("limit")) || 10);
+  const sorted = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const start = (page - 1) * limit;
+  return { data: sorted.slice(start, start + limit), meta: inventoryMeta(page, limit, sorted.length) };
+}
+
 function adminAuthorResponse(author) {
   return {
     ...author,
@@ -422,6 +485,96 @@ createServer(async (request, response) => {
     // Repeats preserve the first disabled timestamp, matching Nest.
     if (!author.disabledAt) author.disabledAt = "2026-03-01T10:00:00.000Z";
     return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(adminAuthorResponse(author)));
+  }
+  if (request.method === "POST" && url.pathname === "/__test/comments" && url.searchParams.get("mode") === "reset") {
+    seedComments();
+    return response.writeHead(204).end();
+  }
+  // Simulates a concurrent revision (same status, new version) for stale-approval checks.
+  if (request.method === "POST" && url.pathname === "/__test/comments" && url.searchParams.get("mode") === "bump") {
+    const target = comments.find((item) => item.id === url.searchParams.get("id"));
+    if (!target) return response.writeHead(404).end();
+    target.version += 1;
+    return response.writeHead(204).end();
+  }
+  const articleComments = /^\/posts\/([^/]+)\/comments$/.exec(url.pathname);
+  if (articleComments && request.method === "GET") {
+    const postId = decodeURIComponent(articleComments[1]);
+    if (!publishedPosts.some((post) => post.id === postId))
+      return response.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Post not found." }));
+    const roots = comments.filter((item) => item.postId === postId && item.parentId === null && item.status === "APPROVED");
+    const body = roots.map((root) => ({
+      ...publicCommentRow(root),
+      replies: comments.filter((reply) => reply.parentId === root.id && reply.status === "APPROVED").map(publicCommentRow),
+    }));
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(body));
+  }
+  if (articleComments && request.method === "POST") {
+    if (!requireUser(response)) return;
+    const postId = decodeURIComponent(articleComments[1]);
+    if (!publishedPosts.some((post) => post.id === postId))
+      return response.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Post not found." }));
+    const body = await readJson(request);
+    const content = typeof body?.content === "string" ? body.content.trim() : "";
+    if (!content) return response.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Comment content cannot be blank." }));
+    const at = new Date().toISOString();
+    const created = { id: `c0000000-0000-4000-8000-${String(++commentSeq).padStart(12, "0")}`, content, status: "PENDING", version: 1, postId, authorId: lastAuthUser.id, parentId: null, createdAt: at, updatedAt: at };
+    comments.push(created);
+    return response.writeHead(201, { "Content-Type": "application/json" }).end(JSON.stringify(publicCommentRow(created)));
+  }
+  if (request.method === "GET" && url.pathname === "/comments/mine") {
+    if (!requireUser(response)) return;
+    const rows = comments.filter((item) => item.authorId === lastAuthUser.id).map(commentRecord);
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(paginateComments(rows, url)));
+  }
+  const commentItem = /^\/comments\/([^/]+)$/.exec(url.pathname);
+  if (commentItem && (request.method === "PATCH" || request.method === "DELETE")) {
+    if (!requireUser(response)) return;
+    const target = comments.find((item) => item.id === decodeURIComponent(commentItem[1]));
+    if (!target) return response.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Comment not found." }));
+    if (target.authorId !== lastAuthUser.id && lastAuthUser.role.name !== "ADMIN")
+      return response.writeHead(403, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Forbidden" }));
+    if (request.method === "DELETE") {
+      // Nest cascades replies through the parent relation.
+      const removed = new Set([target.id]);
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const item of comments) {
+          if (item.parentId && removed.has(item.parentId) && !removed.has(item.id)) {
+            removed.add(item.id);
+            grew = true;
+          }
+        }
+      }
+      comments = comments.filter((item) => !removed.has(item.id));
+      return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Comment deleted successfully." }));
+    }
+    const body = await readJson(request);
+    if (body && body.content !== undefined) {
+      const content = typeof body.content === "string" ? body.content.trim() : "";
+      if (!content) return response.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Comment content cannot be blank." }));
+      // Any content edit returns the comment to PENDING and bumps the approval version.
+      Object.assign(target, { content, status: "PENDING", version: target.version + 1, updatedAt: new Date().toISOString() });
+    }
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(commentRecord(target)));
+  }
+  if (request.method === "GET" && url.pathname === "/admin/comments") {
+    if (!requireAdmin(response)) return;
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(paginateComments(comments.map(adminCommentRow), url)));
+  }
+  const approveComment = /^\/admin\/comments\/([^/]+)\/approve$/.exec(url.pathname);
+  if (approveComment && request.method === "PATCH") {
+    if (!requireAdmin(response)) return;
+    const body = await readJson(request);
+    if (!Number.isSafeInteger(body?.version) || body.version < 1)
+      return response.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Invalid version" }));
+    const target = comments.find((item) => item.id === decodeURIComponent(approveComment[1]));
+    if (!target) return response.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Comment not found." }));
+    if (target.status !== "PENDING" || target.version !== body.version)
+      return response.writeHead(409, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Comment changed since it was loaded; reload and retry." }));
+    Object.assign(target, { status: "APPROVED", version: target.version + 1, updatedAt: new Date().toISOString() });
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(adminCommentRow(target)));
   }
   const taxonomyWrite = /^\/(categories|tags)$/.exec(url.pathname);
   if (request.method === "POST" && taxonomyWrite) {
