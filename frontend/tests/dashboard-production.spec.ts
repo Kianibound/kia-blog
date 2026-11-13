@@ -11,6 +11,7 @@ async function resetFixture(request: APIRequestContext) {
   await request.post(`${fixture}/__test/authors?mode=reset`);
   await request.post(`${fixture}/__test/taxonomy?mode=reset`);
   await request.post(`${fixture}/__test/comments?mode=reset`);
+  await request.post(`${fixture}/__test/bookmarks?mode=reset`);
 }
 
 async function login(page: Page, email: string, next = "/dashboard") {
@@ -631,4 +632,26 @@ test("AUTHOR cannot open admin comment moderation or the USER comments list", as
     await page.goto(path);
     await expectNotFound(page);
   }
+});
+
+test("signed-out readers see no bookmark control on the article", async ({ page }) => {
+  await page.goto("/posts/test-post-1");
+  await expect(page.getByRole("article").getByRole("button", { name: "ذخیره مقاله", exact: true })).toHaveCount(0);
+});
+
+test("USER saves a published article and removes it from the saved list", async ({ page }) => {
+  await login(page, "user@example.test", "/posts/test-post-1");
+  const save = page.getByRole("button", { name: "ذخیره مقاله", exact: true });
+  await expect(save).toHaveAttribute("aria-pressed", "false");
+  await save.click();
+  const unsave = page.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true });
+  await expect(unsave).toHaveAttribute("aria-pressed", "true");
+
+  await page.goto("/dashboard/bookmarks");
+  await expect(page.getByRole("heading", { level: 2, name: "مقالات ذخیره‌شده", exact: true })).toBeVisible();
+  await expect(page.locator('a[href="/posts/test-post-1"]')).toBeVisible();
+
+  await page.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "مقاله از ذخیره‌شده‌ها حذف شد." })).toBeVisible();
+  await expect(page.getByText("هنوز مقاله‌ای ذخیره نکرده‌اید.", { exact: false })).toBeVisible();
 });

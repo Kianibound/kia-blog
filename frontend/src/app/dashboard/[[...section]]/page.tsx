@@ -27,6 +27,10 @@ import {
   ProductionAdminComments,
   ProductionAdminCommentsLoading,
 } from "@/components/dashboard/production-admin-comments";
+import {
+  ProductionSavedArticlesPage,
+  ProductionSavedArticlesLoading,
+} from "@/components/dashboard/production-saved-articles-page";
 import { Card } from "@/components/ui/card";
 import { dashboardMessages as copy } from "@/i18n/messages/dashboard.fa";
 import { lookupPublicAccount } from "@/lib/auth/current-user";
@@ -133,6 +137,10 @@ export default async function DashboardPage({
             status={status}
             invalidStatus={invalidStatus}
           />
+        </Suspense>
+      ) : section.length === 1 && section[0] === "bookmarks" ? (
+        <Suspense fallback={<ProductionSavedArticlesLoading />}>
+          <ProductionSavedArticlesPage account={account} />
         </Suspense>
       ) : section.length === 1 && section[0] === "my-comments" ? (
         <Suspense key={page} fallback={<ProductionMyCommentsLoading />}>

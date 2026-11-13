@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ProductionArticleComments } from "@/components/comments/production-article-comments";
+import { ProductionBookmarkButton } from "@/components/posts/production-bookmark-button";
 import { RichContent } from "@/components/posts/rich-content";
+import { loadBookmarkState } from "@/lib/dashboard/bookmarks";
 import { messages } from "@/i18n/messages/fa";
 import { lookupPublicAccount } from "@/lib/auth/current-user";
 import { loadArticleComments } from "@/lib/comments";
@@ -35,6 +37,9 @@ export default async function ArticleDetail({ params, bookmark }: { params: Prom
     loadArticleComments(post.id),
     lookupPublicAccount(),
   ]);
+  // Only signed-in readers get a toggle; an unverifiable state hides it.
+  const saved =
+    account.status === "authenticated" ? await loadBookmarkState(post.id) : null;
 
   return (
     <>
@@ -59,7 +64,16 @@ export default async function ArticleDetail({ params, bookmark }: { params: Prom
           />
         )}
         <header className={bookmark ? "space-y-6 p-6 pe-20 sm:p-8 sm:pe-24" : "space-y-6 p-6 sm:p-8"}>
-          <h1 id="article-title" className="text-3xl leading-tight font-bold wrap-anywhere">{fa(post.title)}</h1>
+          <div className="flex items-start justify-between gap-4">
+            <h1 id="article-title" className="text-3xl leading-tight font-bold wrap-anywhere">{fa(post.title)}</h1>
+            {saved !== null && account.status === "authenticated" && (
+              <ProductionBookmarkButton
+                postId={post.id}
+                initialSaved={saved}
+                csrfToken={account.account.csrfToken}
+              />
+            )}
+          </div>
           <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground">
             <p className="wrap-anywhere">{fa(post.authorName)}</p>
             {post.publishedAt !== null && <time dateTime={post.publishedAt}>{formatPublicationDate(post.publishedAt)}</time>}

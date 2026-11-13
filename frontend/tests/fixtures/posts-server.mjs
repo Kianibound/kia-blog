@@ -91,6 +91,15 @@ const fixtureCommentAuthors = {
 };
 let comments = [];
 let commentSeq = 0;
+// Test-only bookmark double: Nest scopes rows by the authenticated user and
+// exposes only PUBLISHED posts. No fixture userId ever reaches the browser.
+let bookmarks = new Map();
+let bookmarkSeq = 0;
+
+function resetBookmarks() {
+  bookmarks = new Map();
+  bookmarkSeq = 0;
+}
 
 function seedComments() {
   const at = "2026-02-01T10:00:00.000Z";
@@ -575,6 +584,37 @@ createServer(async (request, response) => {
       return response.writeHead(409, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Comment changed since it was loaded; reload and retry." }));
     Object.assign(target, { status: "APPROVED", version: target.version + 1, updatedAt: new Date().toISOString() });
     return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(adminCommentRow(target)));
+  }
+  if (request.method === "POST" && url.pathname === "/__test/bookmarks" && url.searchParams.get("mode") === "reset") {
+    resetBookmarks();
+    return response.writeHead(204).end();
+  }
+  const bookmarkRoute = /^\/posts\/([^/]+)\/bookmark$/.exec(url.pathname);
+  if (bookmarkRoute && (request.method === "POST" || request.method === "DELETE")) {
+    if (!requireUser(response)) return;
+    const postId = decodeURIComponent(bookmarkRoute[1]);
+    if (!publishedPosts.some((post) => post.id === postId))
+      return response.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Post not found or not published." }));
+    const key = `${lastAuthUser.id}:${postId}`;
+    if (request.method === "POST") {
+      let bookmark = bookmarks.get(key);
+      if (!bookmark) {
+        bookmark = { id: `b-${++bookmarkSeq}`, userId: lastAuthUser.id, postId, createdAt: new Date().toISOString() };
+        bookmarks.set(key, bookmark);
+      }
+      return response.writeHead(201, { "Content-Type": "application/json" }).end(JSON.stringify(bookmark));
+    }
+    bookmarks.delete(key);
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Bookmark removed successfully." }));
+  }
+  if (request.method === "GET" && url.pathname === "/bookmarks") {
+    if (!requireUser(response)) return;
+    const rows = [...bookmarks.values()]
+      .filter((bookmark) => bookmark.userId === lastAuthUser.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((bookmark) => ({ ...bookmark, post: publishedPosts.find((post) => post.id === bookmark.postId) }))
+      .filter((bookmark) => bookmark.post);
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(rows));
   }
   const taxonomyWrite = /^\/(categories|tags)$/.exec(url.pathname);
   if (request.method === "POST" && taxonomyWrite) {
