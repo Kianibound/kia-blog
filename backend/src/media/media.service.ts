@@ -3,11 +3,14 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ConflictException,
 } from '@nestjs/common';
 
 import { PrismaService } from '../database/prisma.service';
 import { CloudinaryService } from './cloudinary.service';
 import { ROLE, RoleName } from '../roles/constants/role.constants';
+import { Prisma } from '../generated/prisma/client';
+import { avatarUserSelect } from '../users/user.select';
 
 @Injectable()
 export class MediaService {
@@ -64,16 +67,25 @@ export class MediaService {
       );
     }
 
-    // Delete Cloudinary first. If the database delete fails, retrying this
-    // operation is safe because remote deletion is idempotent.
-    await this.cloudinaryService.deleteImage(media.publicId);
-
-    // Remove its metadata from our database
-    await this.prisma.media.delete({
-      where: {
-        id: media.id,
-      },
-    });
+    try {
+      // Delete in an open transaction first: the restrictive FK blocks any
+      // referenced image before remote I/O and serializes concurrent attachment.
+      // Remote failure rolls metadata back; remote deletion is idempotent.
+      await this.prisma.$transaction(async (transaction) => {
+        await transaction.media.delete({ where: { id: media.id } });
+        await this.cloudinaryService.deleteImage(media.publicId);
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2003')
+          throw new ConflictException(
+            'Media is referenced by an article. Remove its image node first.',
+          );
+        if (error.code === 'P2025')
+          throw new NotFoundException('Media not found.');
+      }
+      throw error;
+    }
 
     return {
       message: 'Media deleted successfully.',
@@ -121,20 +133,7 @@ export class MediaService {
             avatarMediaId: newMedia.id,
             avatarUrl: newMedia.url,
           },
-          select: {
-            id: true,
-            email: true,
-            username: true,
-            name: true,
-            avatarUrl: true,
-            createdAt: true,
-            updatedAt: true,
-            role: {
-              select: {
-                name: true,
-              },
-            },
-          },
+          select: avatarUserSelect,
         });
       });
     } catch (error) {
@@ -151,19 +150,106 @@ export class MediaService {
     // error response. Keeping the old row makes cleanup safely retryable.
     if (user.avatarMedia) {
       try {
-        await this.cloudinaryService.deleteImage(user.avatarMedia.publicId);
-
-        await this.prisma.media.delete({
-          where: {
-            id: user.avatarMedia.id,
-          },
-        });
+        await this.remove(user.avatarMedia.id, userId, ROLE.USER);
       } catch (error) {
+        // A shared article image is deliberately retained, not a cleanup error.
+        if (error instanceof ConflictException) return updatedUser;
         this.logger.error(
           `Failed to clean up previous avatar ${user.avatarMedia.id}.`,
           error instanceof Error ? error.stack : undefined,
         );
       }
+    }
+
+    return updatedUser;
+  }
+
+  async removeAvatar(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        id: true,
+        avatarMedia: {
+          select: {
+            id: true,
+            publicId: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found.');
+    }
+
+    // Idempotent when no avatar exists: return the safe projection without any
+    // write, so a concurrent upload can never be clobbered by a no-op removal.
+    if (!user.avatarMedia) {
+      const currentUser = await this.prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
+        select: avatarUserSelect,
+      });
+      if (!currentUser) {
+        throw new NotFoundException('User not found.');
+      }
+      return currentUser;
+    }
+
+    const detachedMedia = user.avatarMedia;
+
+    // Conditional clear: the update only matches while avatarMediaId is still
+    // the value observed above. A concurrent replacement (M1 -> M2) therefore
+    // fails the condition instead of wiping the freshly committed avatar.
+    let updatedUser;
+    try {
+      updatedUser = await this.prisma.user.update({
+        where: {
+          id: userId,
+          avatarMediaId: detachedMedia.id,
+        },
+        data: {
+          avatarMediaId: null,
+          avatarUrl: null,
+        },
+        select: avatarUserSelect,
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        const stillExists = await this.prisma.user.findUnique({
+          where: {
+            id: userId,
+          },
+          select: { id: true },
+        });
+        if (!stillExists) {
+          throw new NotFoundException('User not found.');
+        }
+        throw new ConflictException(
+          'Avatar changed concurrently; reload and retry.',
+        );
+      }
+      throw error;
+    }
+
+    // Only the media actually detached by this request is cleaned up; a
+    // concurrent replacement keeps its own new avatar. Article body/cover media
+    // is retained by the media service (FK RESTRICT -> 409), and a Cloudinary
+    // failure stays best-effort while the avatar is already removed.
+    try {
+      await this.remove(detachedMedia.id, userId, ROLE.USER);
+    } catch (error) {
+      if (error instanceof ConflictException) return updatedUser;
+      this.logger.error(
+        `Failed to clean up removed avatar ${detachedMedia.id}.`,
+        error instanceof Error ? error.stack : undefined,
+      );
     }
 
     return updatedUser;

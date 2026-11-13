@@ -1,4 +1,9 @@
 import {
+  ErrorResponseDto,
+  TaxonomyResponseDto,
+  MessageResponseDto,
+} from '../common/dto/response.dto';
+import {
   Body,
   Controller,
   Delete,
@@ -33,6 +38,7 @@ export class CategoriesController {
 
   @ApiOperation({ summary: 'Get all categories' })
   @ApiResponse({
+    type: [TaxonomyResponseDto],
     status: 200,
     description: 'Categories returned successfully.',
   })
@@ -44,14 +50,36 @@ export class CategoriesController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Create a category (admin only)' })
   @ApiBody({
-    schema: {
-      example: {
-        name: 'Technology',
+    type: CreateCategoryDto,
+    examples: {
+      default: {
+        value: {
+          name: 'Technology',
+        },
       },
     },
   })
-  @ApiResponse({ status: 201, description: 'Category created successfully.' })
-  @ApiResponse({ status: 403, description: 'Admin access required.' })
+  @ApiResponse({
+    type: TaxonomyResponseDto,
+    status: 201,
+    description: 'Category created successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 400,
+    description:
+      'Invalid or blank name; whitespace-only names are rejected after trimming.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'Admin access required.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 409,
+    description: 'A category with this name or generated slug already exists.',
+  })
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)
@@ -62,14 +90,36 @@ export class CategoriesController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update a category (admin only)' })
   @ApiBody({
-    schema: {
-      example: {
-        name: 'Software Engineering',
+    type: UpdateCategoryDto,
+    examples: {
+      default: {
+        value: {
+          name: 'Software Engineering',
+        },
       },
     },
   })
-  @ApiResponse({ status: 200, description: 'Category updated successfully.' })
-  @ApiResponse({ status: 403, description: 'Admin access required.' })
+  @ApiResponse({
+    type: TaxonomyResponseDto,
+    status: 200,
+    description: 'Category updated successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 400,
+    description:
+      'Invalid or blank name; whitespace-only names are rejected after trimming.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'Admin access required.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 409,
+    description: 'A category with this name or generated slug already exists.',
+  })
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)
@@ -79,8 +129,27 @@ export class CategoriesController {
 
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Delete a category (admin only)' })
-  @ApiResponse({ status: 200, description: 'Category deleted successfully.' })
-  @ApiResponse({ status: 403, description: 'Admin access required.' })
+  @ApiResponse({
+    type: MessageResponseDto,
+    status: 200,
+    description: 'Category deleted successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'Admin access required.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 404,
+    description: 'Category not found.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 409,
+    description:
+      'Category is referenced by one or more articles (draft or published) and cannot be deleted.',
+  })
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(ROLE.ADMIN)

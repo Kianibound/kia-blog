@@ -3,7 +3,6 @@ generator client {
   output   = "../src/generated/prisma"
 }
 
-
 datasource db {
   provider = "postgresql"
 }
@@ -21,6 +20,7 @@ model User {
   roleId                  String?
   role                    Role?                    @relation(fields: [roleId], references: [id])
   emailVerified           Boolean                  @default(false)
+  disabledAt              DateTime?
   comments                Comment[]
   bookmarks               Bookmark[]
   postLikes               PostLike[]
@@ -30,6 +30,38 @@ model User {
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
   posts                   Post[]
+  googleIdentity          GoogleIdentity?
+  githubIdentity          GithubIdentity?
+}
+
+model GithubIdentity {
+  subject String @id
+  userId  String @unique
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model GithubOAuthState {
+  stateHash    String    @id
+  verifierHash String
+  expiresAt    DateTime
+  usedAt       DateTime?
+
+  @@index([expiresAt])
+}
+
+model GoogleIdentity {
+  subject String @id
+  userId  String @unique
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model GoogleOAuthState {
+  stateHash    String    @id
+  verifierHash String
+  expiresAt    DateTime
+  usedAt       DateTime?
+
+  @@index([expiresAt])
 }
 
 model Role {
@@ -85,25 +117,36 @@ enum PostStatus {
   DEPRECATED
 }
 
+enum CommentStatus {
+  PENDING
+  APPROVED
+}
+
 model Post {
-  id          String     @id @default(uuid())
-  title       String
-  slug        String     @unique
-  content     String
-  status      PostStatus @default(DRAFT)
-  publishedAt DateTime?
-  authorId    String
-  author      User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  categories  Category[]
-  tags        Tag[]
-  comments    Comment[]
-  bookmarks   Bookmark[]
-  postLikes   PostLike[]
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id              String      @id @default(uuid())
+  title           String
+  slug            String      @unique
+  content         String
+  contentDocument Json?
+  bodyMedia       PostMedia[]
+  coverMediaId    String?
+  coverMedia      Media?      @relation("PostCover", fields: [coverMediaId], references: [id], onDelete: Restrict)
+  coverAlt        String?
+  status          PostStatus  @default(DRAFT)
+  publishedAt     DateTime?
+  authorId        String
+  author          User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  categories      Category[]
+  tags            Tag[]
+  comments        Comment[]
+  bookmarks       Bookmark[]
+  postLikes       PostLike[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   @@index([authorId])
   @@index([status])
+  @@index([coverMediaId])
 }
 
 model Category {
@@ -127,6 +170,8 @@ model Tag {
 model Comment {
   id      String @id @default(uuid())
   content String
+  status  CommentStatus @default(PENDING)
+  version Int           @default(1)
 
   postId String
   post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
@@ -144,6 +189,7 @@ model Comment {
   @@index([postId])
   @@index([authorId])
   @@index([parentId])
+  @@index([status])
 }
 
 model Bookmark {
@@ -175,9 +221,11 @@ model PostLike {
 }
 
 model Media {
-  id           String @id @default(uuid())
+  bodyPosts    PostMedia[]
+  coverOf      Post[]      @relation("PostCover")
+  id           String      @id @default(uuid())
   url          String
-  publicId     String @unique
+  publicId     String      @unique
   resourceType String
   format       String
   bytes        Int
@@ -191,4 +239,14 @@ model Media {
   updatedAt DateTime @updatedAt
 
   @@index([ownerId])
+}
+
+model PostMedia {
+  postId  String
+  mediaId String
+  post    Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  media   Media  @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+
+  @@id([postId, mediaId])
+  @@index([mediaId])
 }

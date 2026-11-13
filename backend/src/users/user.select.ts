@@ -17,3 +17,24 @@ export const userPublicSelect = {
     },
   },
 } satisfies Prisma.UserSelect;
+
+export const userAdminSelect = {
+  ...userPublicSelect,
+  disabledAt: true,
+} satisfies Prisma.UserSelect;
+
+// Avatar responses reuse the public projection without email verification.
+export const avatarUserSelect = {
+  id: true,
+  email: true,
+  username: true,
+  name: true,
+  avatarUrl: true,
+  createdAt: true,
+  updatedAt: true,
+  role: {
+    select: {
+      name: true,
+    },
+  },
+} satisfies Prisma.UserSelect;

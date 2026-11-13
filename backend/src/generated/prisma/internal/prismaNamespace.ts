@@ -398,6 +398,10 @@ type FieldRefInputType<Model, FieldType> = Model extends never ? never : FieldRe
 
 export const ModelName = {
   User: 'User',
+  GithubIdentity: 'GithubIdentity',
+  GithubOAuthState: 'GithubOAuthState',
+  GoogleIdentity: 'GoogleIdentity',
+  GoogleOAuthState: 'GoogleOAuthState',
   Role: 'Role',
   RefreshToken: 'RefreshToken',
   EmailVerificationToken: 'EmailVerificationToken',
@@ -408,7 +412,8 @@ export const ModelName = {
   Comment: 'Comment',
   Bookmark: 'Bookmark',
   PostLike: 'PostLike',
-  Media: 'Media'
+  Media: 'Media',
+  PostMedia: 'PostMedia'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -424,7 +429,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "role" | "refreshToken" | "emailVerificationToken" | "passwordResetToken" | "post" | "category" | "tag" | "comment" | "bookmark" | "postLike" | "media"
+    modelProps: "user" | "githubIdentity" | "githubOAuthState" | "googleIdentity" | "googleOAuthState" | "role" | "refreshToken" | "emailVerificationToken" | "passwordResetToken" | "post" | "category" | "tag" | "comment" | "bookmark" | "postLike" | "media" | "postMedia"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -499,6 +504,302 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.UserCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.UserCountAggregateOutputType> | number
+        }
+      }
+    }
+    GithubIdentity: {
+      payload: Prisma.$GithubIdentityPayload<ExtArgs>
+      fields: Prisma.GithubIdentityFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.GithubIdentityFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.GithubIdentityFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>
+        }
+        findFirst: {
+          args: Prisma.GithubIdentityFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.GithubIdentityFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>
+        }
+        findMany: {
+          args: Prisma.GithubIdentityFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>[]
+        }
+        create: {
+          args: Prisma.GithubIdentityCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>
+        }
+        createMany: {
+          args: Prisma.GithubIdentityCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.GithubIdentityCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>[]
+        }
+        delete: {
+          args: Prisma.GithubIdentityDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>
+        }
+        update: {
+          args: Prisma.GithubIdentityUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>
+        }
+        deleteMany: {
+          args: Prisma.GithubIdentityDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.GithubIdentityUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.GithubIdentityUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>[]
+        }
+        upsert: {
+          args: Prisma.GithubIdentityUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubIdentityPayload>
+        }
+        aggregate: {
+          args: Prisma.GithubIdentityAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateGithubIdentity>
+        }
+        groupBy: {
+          args: Prisma.GithubIdentityGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GithubIdentityGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.GithubIdentityCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GithubIdentityCountAggregateOutputType> | number
+        }
+      }
+    }
+    GithubOAuthState: {
+      payload: Prisma.$GithubOAuthStatePayload<ExtArgs>
+      fields: Prisma.GithubOAuthStateFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.GithubOAuthStateFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.GithubOAuthStateFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>
+        }
+        findFirst: {
+          args: Prisma.GithubOAuthStateFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.GithubOAuthStateFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>
+        }
+        findMany: {
+          args: Prisma.GithubOAuthStateFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>[]
+        }
+        create: {
+          args: Prisma.GithubOAuthStateCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>
+        }
+        createMany: {
+          args: Prisma.GithubOAuthStateCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.GithubOAuthStateCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>[]
+        }
+        delete: {
+          args: Prisma.GithubOAuthStateDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>
+        }
+        update: {
+          args: Prisma.GithubOAuthStateUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>
+        }
+        deleteMany: {
+          args: Prisma.GithubOAuthStateDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.GithubOAuthStateUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.GithubOAuthStateUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>[]
+        }
+        upsert: {
+          args: Prisma.GithubOAuthStateUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GithubOAuthStatePayload>
+        }
+        aggregate: {
+          args: Prisma.GithubOAuthStateAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateGithubOAuthState>
+        }
+        groupBy: {
+          args: Prisma.GithubOAuthStateGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GithubOAuthStateGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.GithubOAuthStateCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GithubOAuthStateCountAggregateOutputType> | number
+        }
+      }
+    }
+    GoogleIdentity: {
+      payload: Prisma.$GoogleIdentityPayload<ExtArgs>
+      fields: Prisma.GoogleIdentityFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.GoogleIdentityFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleIdentityPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.GoogleIdentityFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleIdentityPayload>
+        }
+        findFirst: {
+          args: Prisma.GoogleIdentityFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleIdentityPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.GoogleIdentityFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleIdentityPayload>
+        }
+        findMany: {
+          args: Prisma.GoogleIdentityFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleIdentityPayload>[]
+        }
+        create: {
+          args: Prisma.GoogleIdentityCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleIdentityPayload>
+        }
+        createMany: {
+          args: Prisma.GoogleIdentityCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.GoogleIdentityCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleIdentityPayload>[]
+        }
+        delete: {
+          args: Prisma.GoogleIdentityDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleIdentityPayload>
+        }
+        update: {
+          args: Prisma.GoogleIdentityUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleIdentityPayload>
+        }
+        deleteMany: {
+          args: Prisma.GoogleIdentityDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.GoogleIdentityUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.GoogleIdentityUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleIdentityPayload>[]
+        }
+        upsert: {
+          args: Prisma.GoogleIdentityUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleIdentityPayload>
+        }
+        aggregate: {
+          args: Prisma.GoogleIdentityAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateGoogleIdentity>
+        }
+        groupBy: {
+          args: Prisma.GoogleIdentityGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GoogleIdentityGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.GoogleIdentityCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GoogleIdentityCountAggregateOutputType> | number
+        }
+      }
+    }
+    GoogleOAuthState: {
+      payload: Prisma.$GoogleOAuthStatePayload<ExtArgs>
+      fields: Prisma.GoogleOAuthStateFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.GoogleOAuthStateFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleOAuthStatePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.GoogleOAuthStateFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleOAuthStatePayload>
+        }
+        findFirst: {
+          args: Prisma.GoogleOAuthStateFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleOAuthStatePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.GoogleOAuthStateFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleOAuthStatePayload>
+        }
+        findMany: {
+          args: Prisma.GoogleOAuthStateFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleOAuthStatePayload>[]
+        }
+        create: {
+          args: Prisma.GoogleOAuthStateCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleOAuthStatePayload>
+        }
+        createMany: {
+          args: Prisma.GoogleOAuthStateCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.GoogleOAuthStateCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleOAuthStatePayload>[]
+        }
+        delete: {
+          args: Prisma.GoogleOAuthStateDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleOAuthStatePayload>
+        }
+        update: {
+          args: Prisma.GoogleOAuthStateUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleOAuthStatePayload>
+        }
+        deleteMany: {
+          args: Prisma.GoogleOAuthStateDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.GoogleOAuthStateUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.GoogleOAuthStateUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleOAuthStatePayload>[]
+        }
+        upsert: {
+          args: Prisma.GoogleOAuthStateUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GoogleOAuthStatePayload>
+        }
+        aggregate: {
+          args: Prisma.GoogleOAuthStateAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateGoogleOAuthState>
+        }
+        groupBy: {
+          args: Prisma.GoogleOAuthStateGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GoogleOAuthStateGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.GoogleOAuthStateCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GoogleOAuthStateCountAggregateOutputType> | number
         }
       }
     }
@@ -1316,6 +1617,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    PostMedia: {
+      payload: Prisma.$PostMediaPayload<ExtArgs>
+      fields: Prisma.PostMediaFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.PostMediaFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.PostMediaFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>
+        }
+        findFirst: {
+          args: Prisma.PostMediaFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.PostMediaFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>
+        }
+        findMany: {
+          args: Prisma.PostMediaFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>[]
+        }
+        create: {
+          args: Prisma.PostMediaCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>
+        }
+        createMany: {
+          args: Prisma.PostMediaCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.PostMediaCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>[]
+        }
+        delete: {
+          args: Prisma.PostMediaDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>
+        }
+        update: {
+          args: Prisma.PostMediaUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>
+        }
+        deleteMany: {
+          args: Prisma.PostMediaDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.PostMediaUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.PostMediaUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>[]
+        }
+        upsert: {
+          args: Prisma.PostMediaUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$PostMediaPayload>
+        }
+        aggregate: {
+          args: Prisma.PostMediaAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregatePostMedia>
+        }
+        groupBy: {
+          args: Prisma.PostMediaGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PostMediaGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.PostMediaCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.PostMediaCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -1364,12 +1739,49 @@ export const UserScalarFieldEnum = {
   passwordHash: 'passwordHash',
   roleId: 'roleId',
   emailVerified: 'emailVerified',
+  disabledAt: 'disabledAt',
   avatarMediaId: 'avatarMediaId',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
 
 export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]
+
+
+export const GithubIdentityScalarFieldEnum = {
+  subject: 'subject',
+  userId: 'userId'
+} as const
+
+export type GithubIdentityScalarFieldEnum = (typeof GithubIdentityScalarFieldEnum)[keyof typeof GithubIdentityScalarFieldEnum]
+
+
+export const GithubOAuthStateScalarFieldEnum = {
+  stateHash: 'stateHash',
+  verifierHash: 'verifierHash',
+  expiresAt: 'expiresAt',
+  usedAt: 'usedAt'
+} as const
+
+export type GithubOAuthStateScalarFieldEnum = (typeof GithubOAuthStateScalarFieldEnum)[keyof typeof GithubOAuthStateScalarFieldEnum]
+
+
+export const GoogleIdentityScalarFieldEnum = {
+  subject: 'subject',
+  userId: 'userId'
+} as const
+
+export type GoogleIdentityScalarFieldEnum = (typeof GoogleIdentityScalarFieldEnum)[keyof typeof GoogleIdentityScalarFieldEnum]
+
+
+export const GoogleOAuthStateScalarFieldEnum = {
+  stateHash: 'stateHash',
+  verifierHash: 'verifierHash',
+  expiresAt: 'expiresAt',
+  usedAt: 'usedAt'
+} as const
+
+export type GoogleOAuthStateScalarFieldEnum = (typeof GoogleOAuthStateScalarFieldEnum)[keyof typeof GoogleOAuthStateScalarFieldEnum]
 
 
 export const RoleScalarFieldEnum = {
@@ -1423,6 +1835,9 @@ export const PostScalarFieldEnum = {
   title: 'title',
   slug: 'slug',
   content: 'content',
+  contentDocument: 'contentDocument',
+  coverMediaId: 'coverMediaId',
+  coverAlt: 'coverAlt',
   status: 'status',
   publishedAt: 'publishedAt',
   authorId: 'authorId',
@@ -1458,6 +1873,8 @@ export type TagScalarFieldEnum = (typeof TagScalarFieldEnum)[keyof typeof TagSca
 export const CommentScalarFieldEnum = {
   id: 'id',
   content: 'content',
+  status: 'status',
+  version: 'version',
   postId: 'postId',
   authorId: 'authorId',
   parentId: 'parentId',
@@ -1505,12 +1922,28 @@ export const MediaScalarFieldEnum = {
 export type MediaScalarFieldEnum = (typeof MediaScalarFieldEnum)[keyof typeof MediaScalarFieldEnum]
 
 
+export const PostMediaScalarFieldEnum = {
+  postId: 'postId',
+  mediaId: 'mediaId'
+} as const
+
+export type PostMediaScalarFieldEnum = (typeof PostMediaScalarFieldEnum)[keyof typeof PostMediaScalarFieldEnum]
+
+
 export const SortOrder = {
   asc: 'asc',
   desc: 'desc'
 } as const
 
 export type SortOrder = (typeof SortOrder)[keyof typeof SortOrder]
+
+
+export const NullableJsonNullValueInput = {
+  DbNull: DbNull,
+  JsonNull: JsonNull
+} as const
+
+export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
 
 
 export const QueryMode = {
@@ -1527,6 +1960,15 @@ export const NullsOrder = {
 } as const
 
 export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
+
+
+export const JsonNullValueFilter = {
+  DbNull: DbNull,
+  JsonNull: JsonNull,
+  AnyNull: AnyNull
+} as const
+
+export type JsonNullValueFilter = (typeof JsonNullValueFilter)[keyof typeof JsonNullValueFilter]
 
 
 
@@ -1571,6 +2013,20 @@ export type ListDateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaM
 
 
 /**
+ * Reference to a field of type 'Json'
+ */
+export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
+    
+
+
+/**
+ * Reference to a field of type 'QueryMode'
+ */
+export type EnumQueryModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'QueryMode'>
+    
+
+
+/**
  * Reference to a field of type 'PostStatus'
  */
 export type EnumPostStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'PostStatus'>
@@ -1581,6 +2037,20 @@ export type EnumPostStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$Prism
  * Reference to a field of type 'PostStatus[]'
  */
 export type ListEnumPostStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'PostStatus[]'>
+    
+
+
+/**
+ * Reference to a field of type 'CommentStatus'
+ */
+export type EnumCommentStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'CommentStatus'>
+    
+
+
+/**
+ * Reference to a field of type 'CommentStatus[]'
+ */
+export type ListEnumCommentStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'CommentStatus[]'>
     
 
 
@@ -1763,6 +2233,10 @@ export interface PrismaClientOptionsWithAdapter extends PrismaClientBaseOptions 
 export type PrismaClientOptions = PrismaClientOptionsWithAccelerateUrl | PrismaClientOptionsWithAdapter
 export type GlobalOmitConfig = {
   user?: Prisma.UserOmit
+  githubIdentity?: Prisma.GithubIdentityOmit
+  githubOAuthState?: Prisma.GithubOAuthStateOmit
+  googleIdentity?: Prisma.GoogleIdentityOmit
+  googleOAuthState?: Prisma.GoogleOAuthStateOmit
   role?: Prisma.RoleOmit
   refreshToken?: Prisma.RefreshTokenOmit
   emailVerificationToken?: Prisma.EmailVerificationTokenOmit
@@ -1774,6 +2248,7 @@ export type GlobalOmitConfig = {
   bookmark?: Prisma.BookmarkOmit
   postLike?: Prisma.PostLikeOmit
   media?: Prisma.MediaOmit
+  postMedia?: Prisma.PostMediaOmit
 }
 
 /* Types for Logging */

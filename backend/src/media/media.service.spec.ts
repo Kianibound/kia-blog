@@ -21,6 +21,7 @@ describe('MediaService', () => {
     const transaction = {
       media: {
         create: jest.fn(),
+        delete: jest.fn(),
       },
       user: {
         update: jest.fn(),
@@ -116,12 +117,20 @@ describe('MediaService', () => {
       url: uploaded.secure_url,
     });
     transaction.user.update.mockResolvedValue(updatedUser);
+    prisma.media.findUnique.mockResolvedValue({
+      id: 'old-media-id',
+      publicId: 'old-public-id',
+      ownerId: 'user-id',
+    });
 
     await expect(service.updateAvatar('user-id', file)).resolves.toBe(
       updatedUser,
     );
     expect(cloudinary.deleteImage).toHaveBeenCalledWith('old-public-id');
     expect(prisma.media.delete).not.toHaveBeenCalled();
+    expect(transaction.media.delete).toHaveBeenCalledWith({
+      where: { id: 'old-media-id' },
+    });
     loggerError.mockRestore();
   });
 });

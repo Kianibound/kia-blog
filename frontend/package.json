@@ -1,0 +1,41 @@
+{
+  "name": "kia-blog-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3001",
+    "build": "next build",
+    "start": "next start --port 3001",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run test:contract && playwright test && npm run test:dashboard",
+    "test:dashboard": "playwright test --config playwright.dashboard.config.ts",
+    "test:contract": "node --experimental-strip-types --test tests/posts-contract.test.mjs tests/session.test.mjs tests/auth-contract.test.mjs tests/dashboard-access.test.mjs tests/inventory-contract.test.mjs tests/article-write.test.mjs tests/media-upload.test.mjs tests/admin-authors-contract.test.mjs tests/taxonomy-contract.test.mjs tests/comments-contract.test.mjs tests/bookmarks-contract.test.mjs tests/oauth-flow.test.mjs tests/oauth-server.test.mjs tests/profile-contract.test.mjs tests/discovery-contract.test.mjs",
+    "test:home": "playwright test tests/home.spec.ts"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@tiptap/extension-image": "^3.32.2",
+    "@tiptap/pm": "^3.32.2",
+    "@tiptap/react": "^3.32.2",
+    "@tiptap/starter-kit": "^3.32.2",
+    "lucide-react": "^1.63.0",
+    "next": "16.4.2",
+    "next-themes": "^0.4.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.4.2",
+    "tailwindcss": "^4",
+    "typescript": "^5.9"
+  }
+}

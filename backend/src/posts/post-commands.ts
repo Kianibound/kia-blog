@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import type { RoleName } from '../roles/constants/role.constants';
 import { PostStatus } from '../generated/prisma/client';
@@ -6,53 +11,107 @@ import { assertPostAccess } from './post-access.policy';
 import type { CreatePostDto } from './dto/create-post.dto';
 import type { UpdatePostDto } from './dto/update-post.dto';
 import slugify from 'slugify';
+import { preparePostContent } from './rich-document';
+import {
+  documentMediaIds,
+  resolveDocumentMedia,
+  resolveCoverImage,
+  rethrowMediaReferenceError,
+} from '../media/body-image';
+import { ROLE } from '../roles/constants/role.constants';
+
+// A PUBLISHED article always carries at least one ADMIN-managed category: the
+// resulting state is checked on creation and every update, including removing
+// the last category while staying published. The sole exception is a legacy
+// post that was already PUBLISHED without categories before this rule existed:
+// it stays editable so existing data is preserved, but any real publication
+// transition still requires a category.
+export function assertPublishedCategories(
+  resultingStatus: PostStatus,
+  resultingCategoryIds: readonly string[],
+  legacyCategorylessPublished = false,
+): void {
+  if (resultingStatus !== PostStatus.PUBLISHED) return;
+  if (resultingCategoryIds.length) return;
+  if (legacyCategorylessPublished) return;
+  throw new BadRequestException(
+    'A published article requires at least one category.',
+  );
+}
 
 // Internal to PostsModule: writes own lifecycle, relation changes, and slug allocation.
 @Injectable()
 export class PostCommands {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(authorId: string, dto: CreatePostDto) {
+  async create(
+    authorId: string,
+    dto: CreatePostDto,
+    role: RoleName = ROLE.AUTHOR,
+  ) {
+    const contentFields = preparePostContent(dto);
+    if (!contentFields)
+      throw new BadRequestException('Supply content or contentDocument.');
+    const media = await resolveDocumentMedia(this.prisma, dto.contentDocument, {
+      authorId,
+      role,
+    });
+    const cover = await this.prepareCover(dto, { authorId, role });
+    assertPublishedCategories(
+      dto.status ?? PostStatus.DRAFT,
+      dto.categoryIds ?? [],
+    );
     // Generate a unique public URL slug from the title
     const slug = await this.generateUniqueSlug(dto.title);
 
     // Set publication time only when the post starts as published
     const publishedAt = dto.status === PostStatus.PUBLISHED ? new Date() : null;
 
-    return this.prisma.post.create({
-      data: {
-        title: dto.title,
-        slug,
-        content: dto.content,
-        status: dto.status,
-        publishedAt,
-        authorId,
+    return this.prisma.post
+      .create({
+        data: {
+          title: dto.title,
+          slug,
+          ...contentFields,
+          status: dto.status,
+          publishedAt,
+          authorId,
+          ...cover,
+          ...(media.length
+            ? {
+                bodyMedia: { create: media.map(({ id }) => ({ mediaId: id })) },
+              }
+            : {}),
 
-        // Connect existing categories by id
-        categories: dto.categoryIds
-          ? {
-              connect: dto.categoryIds.map((id) => ({
-                id,
-              })),
-            }
-          : undefined,
+          // Connect existing categories by id
+          categories: dto.categoryIds
+            ? {
+                connect: dto.categoryIds.map((id) => ({
+                  id,
+                })),
+              }
+            : undefined,
 
-        // Connect existing tags by id
-        tags: dto.tagIds
-          ? {
-              connect: dto.tagIds.map((id) => ({
-                id,
-              })),
-            }
-          : undefined,
-      },
+          // Connect existing tags by id
+          tags: dto.tagIds
+            ? {
+                connect: dto.tagIds.map((id) => ({
+                  id,
+                })),
+              }
+            : undefined,
+        },
 
-      // Return attached categories and tags in the response
-      include: {
-        categories: true,
-        tags: true,
-      },
-    });
+        // Return attached categories and tags in the response
+        include: {
+          categories: true,
+          tags: true,
+        },
+      })
+      .catch((error: unknown) => {
+        if (media.length || cover.coverMediaId) rethrowMediaReferenceError(error);
+        throw error;
+      });
   }
 
   async update(
@@ -61,10 +120,13 @@ export class PostCommands {
     currentUserRole: RoleName,
     dto: UpdatePostDto,
   ) {
-    // Load the post first so we can verify ownership
+    // Load the post first so we can verify ownership and the resulting state
     const post = await this.prisma.post.findUnique({
       where: {
         id: postId,
+      },
+      include: {
+        categories: { select: { id: true } },
       },
     });
 
@@ -80,7 +142,30 @@ export class PostCommands {
     let publishedAt = post.publishedAt;
 
     // Separate relation ids from regular post fields
-    const { categoryIds, tagIds, ...postData } = dto;
+    const {
+      categoryIds,
+      tagIds,
+      content: _content,
+      contentDocument: _document,
+      coverMediaId: _coverMediaId,
+      coverAlt: _coverAlt,
+      ...postData
+    } = dto;
+    const contentFields = preparePostContent(dto);
+    if (contentFields)
+      await resolveDocumentMedia(this.prisma, dto.contentDocument, {
+        authorId: post.authorId,
+        role: currentUserRole,
+      });
+    const cover = await this.prepareCover(dto, {
+      authorId: post.authorId,
+      role: currentUserRole,
+    });
+    assertPublishedCategories(
+      dto.status ?? post.status,
+      categoryIds ?? post.categories.map(({ id }) => id),
+      post.status === PostStatus.PUBLISHED && post.categories.length === 0,
+    );
 
     if (
       dto.status === PostStatus.PUBLISHED &&
@@ -96,41 +181,62 @@ export class PostCommands {
     }
 
     // Update only the fields provided by the client
-    return this.prisma.post.update({
-      where: {
-        id: postId,
-      },
-      data: {
-        ...postData,
-        publishedAt,
-
-        // Replace categories only when categoryIds is provided
-        categories:
-          categoryIds !== undefined
+    return this.prisma.post
+      .update({
+        where: {
+          id: postId,
+        },
+        data: {
+          ...postData,
+          ...contentFields,
+          ...cover,
+          ...(contentFields
             ? {
-                set: categoryIds.map((id) => ({
-                  id,
-                })),
+                bodyMedia: {
+                  deleteMany: {},
+                  create: documentMediaIds(dto.contentDocument).map(
+                    (mediaId) => ({ mediaId }),
+                  ),
+                },
               }
-            : undefined,
+            : {}),
+          publishedAt,
 
-        // Replace tags only when tagIds is provided
-        tags:
-          tagIds !== undefined
-            ? {
-                set: tagIds.map((id) => ({
-                  id,
-                })),
-              }
-            : undefined,
-      },
+          // Replace categories only when categoryIds is provided
+          categories:
+            categoryIds !== undefined
+              ? {
+                  set: categoryIds.map((id) => ({
+                    id,
+                  })),
+                }
+              : undefined,
 
-      // Return updated relations in the response
-      include: {
-        categories: true,
-        tags: true,
-      },
-    });
+          // Replace tags only when tagIds is provided
+          tags:
+            tagIds !== undefined
+              ? {
+                  set: tagIds.map((id) => ({
+                    id,
+                  })),
+                }
+              : undefined,
+        },
+
+        // Return updated relations in the response
+        include: {
+          categories: true,
+          tags: true,
+        },
+      })
+      .catch((error: unknown) => {
+        if (
+          documentMediaIds(dto.contentDocument).length ||
+          cover.coverMediaId
+        )
+          rethrowMediaReferenceError(error);
+        throw error;
+      });
   }
 
   private async generateUniqueSlug(title: string): Promise<string> {
@@ -158,6 +264,29 @@ export class PostCommands {
     return slug;
   }
 
+  private async prepareCover(
+    dto: { coverMediaId?: string | null; coverAlt?: string },
+    authorization: { authorId: string; role: RoleName },
+  ): Promise<{ coverMediaId?: string | null; coverAlt?: string | null }> {
+    const { coverMediaId, coverAlt } = dto;
+    if (coverMediaId === undefined) {
+      if (coverAlt !== undefined)
+        throw new BadRequestException('coverAlt requires coverMediaId.');
+      return {};
+    }
+    if (coverMediaId === null) {
+      if (coverAlt !== undefined)
+        throw new BadRequestException(
+          'coverAlt cannot accompany cover removal.',
+        );
+      return { coverMediaId: null, coverAlt: null };
+    }
+    if (!coverAlt || !coverAlt.trim())
+      throw new BadRequestException('coverAlt is required with coverMediaId.');
+    await resolveCoverImage(this.prisma, coverMediaId, authorization);
+    return { coverMediaId, coverAlt };
+  }
+
   async remove(
     postId: string,
     currentUserId: string,
@@ -174,9 +303,12 @@ export class PostCommands {
       throw new NotFoundException('Post not found.');
     }
 
-    // Authors can only delete their own posts.
-    // Admins can delete any post.
-    assertPostAccess(post.authorId, currentUserId, currentUserRole, 'delete');
+    // Permanent deletion is ADMIN-only; authors unpublish their own posts instead.
+    if (currentUserRole !== ROLE.ADMIN) {
+      throw new ForbiddenException(
+        'Only administrators can permanently delete posts.',
+      );
+    }
 
     // Delete the post after authorization checks pass
     await this.prisma.post.delete({

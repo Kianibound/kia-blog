@@ -1,0 +1,32 @@
+/** Transient UI state only. This is not the blog's canonical storage contract. */
+export type EditorDocument = {
+  type: string;
+  attrs?: Record<string, unknown>;
+  text?: string;
+  content?: EditorDocument[];
+  marks?: { type: string; attrs?: Record<string, unknown> }[];
+};
+
+export type UploadedEditorImage = {
+  id: string;
+  url: string;
+  width?: number | null;
+  height?: number | null;
+};
+
+export type RichEditorProps = {
+  id: string;
+  label: string;
+  initialDocument: EditorDocument;
+  editable: boolean;
+  readOnly?: boolean;
+  error?: string;
+  uploadImage?: (file: File, signal: AbortSignal) => Promise<string | UploadedEditorImage>;
+  onImagePending?: (pending: boolean) => void;
+  onChange: (value: { document: EditorDocument; plainText: string }) => void;
+};
+
+/** Treat existing string content literally, including HTML-looking text and digits. */
+export function documentFromText(text: string): EditorDocument {
+  return { type: "doc", content: text.split("\n").map(line => ({ type: "paragraph", ...(line ? { content: [{ type: "text", text: line }] } : {}) })) };
+}

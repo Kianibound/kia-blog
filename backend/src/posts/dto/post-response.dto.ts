@@ -1,0 +1,136 @@
+import { ApiProperty, PickType } from '@nestjs/swagger';
+import { PostStatus, type Prisma } from '../../generated/prisma/client';
+import { TiptapDocumentDto } from './tiptap-document.dto';
+import {
+  AuthorResponseDto,
+  TaxonomyResponseDto,
+  TaxonomySummaryResponseDto,
+} from '../../common/dto/response.dto';
+
+export class ContentMediaResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id: string;
+  @ApiProperty({
+    format: 'uri',
+    description:
+      'HTTPS Cloudinary delivery URL resolved server-side; never supplied in document JSON.',
+  })
+  url: string;
+  @ApiProperty({ type: 'integer', nullable: true })
+  width: number | null;
+  @ApiProperty({ type: 'integer', nullable: true })
+  height: number | null;
+}
+
+export class CoverImageResponseDto extends ContentMediaResponseDto {
+  @ApiProperty({ description: 'Cover alternative text.' })
+  alt: string;
+}
+
+export class PostResponseDto {
+  @ApiProperty({
+    type: [ContentMediaResponseDto],
+    description:
+      'Unique body image references in document order; empty for legacy or text-only documents. Contains no owner/provider IDs.',
+  })
+  contentMedia: ContentMediaResponseDto[];
+  @ApiProperty({
+    type: CoverImageResponseDto,
+    nullable: true,
+    description:
+      'Resolved optional cover image with alt text; null when the article has no cover.',
+  })
+  coverImage: CoverImageResponseDto | null;
+  @ApiProperty({ format: 'uuid' })
+  id: string;
+  @ApiProperty()
+  title: string;
+  @ApiProperty()
+  slug: string;
+  @ApiProperty({
+    description:
+      'Literal legacy string or server-derived plain-text projection of contentDocument. Never HTML.',
+  })
+  content: string;
+  @ApiProperty({
+    type: TiptapDocumentDto,
+    nullable: true,
+    description:
+      'Validated canonical document for rich posts; null for legacy text. Treat as untrusted data and render with an allowlisted schema, not raw HTML.',
+  })
+  contentDocument: Prisma.JsonValue | null;
+  @ApiProperty({ enum: PostStatus })
+  status: PostStatus;
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  publishedAt: Date | null;
+  @ApiProperty({ format: 'uuid' })
+  authorId: string;
+  @ApiProperty({ type: String, format: 'date-time' })
+  createdAt: Date;
+  @ApiProperty({ type: String, format: 'date-time' })
+  updatedAt: Date;
+}
+
+export class PostDetailResponseDto extends PostResponseDto {
+  @ApiProperty({ type: AuthorResponseDto })
+  author: AuthorResponseDto;
+  @ApiProperty({ type: [TaxonomySummaryResponseDto] })
+  categories: TaxonomySummaryResponseDto[];
+  @ApiProperty({ type: [TaxonomySummaryResponseDto] })
+  tags: TaxonomySummaryResponseDto[];
+}
+
+export class PostWriteResponseDto extends PostResponseDto {
+  @ApiProperty({ type: [TaxonomyResponseDto] })
+  categories: TaxonomyResponseDto[];
+  @ApiProperty({ type: [TaxonomyResponseDto] })
+  tags: TaxonomyResponseDto[];
+}
+
+export class PaginationMetaResponseDto {
+  @ApiProperty({ type: 'integer' })
+  page: number;
+  @ApiProperty({ type: 'integer' })
+  limit: number;
+  @ApiProperty({ type: 'integer' })
+  total: number;
+  @ApiProperty({ type: 'integer' })
+  totalPages: number;
+}
+
+export class MyPostsResponseDto {
+  @ApiProperty({ type: [PostResponseDto] })
+  data: PostResponseDto[];
+  @ApiProperty({ type: PaginationMetaResponseDto })
+  meta: PaginationMetaResponseDto;
+}
+
+export class PostFeedResponseDto {
+  @ApiProperty({ type: [PostDetailResponseDto] })
+  data: PostDetailResponseDto[];
+  @ApiProperty({ type: PaginationMetaResponseDto })
+  meta: PaginationMetaResponseDto;
+}
+
+export class AdminPostSummaryResponseDto extends PickType(
+  PostDetailResponseDto,
+  [
+    'id',
+    'title',
+    'slug',
+    'status',
+    'authorId',
+    'author',
+    'publishedAt',
+    'createdAt',
+    'updatedAt',
+  ] as const,
+) {}
+
+export class AdminPostsResponseDto {
+  @ApiProperty({ type: [AdminPostSummaryResponseDto] })
+  data: AdminPostSummaryResponseDto[];
+
+  @ApiProperty({ type: PaginationMetaResponseDto })
+  meta: PaginationMetaResponseDto;
+}

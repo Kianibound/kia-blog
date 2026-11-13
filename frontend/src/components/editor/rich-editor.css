@@ -1,0 +1,23 @@
+.rich-editor .tiptap {
+  min-height: 16rem;
+  padding: 1rem;
+  border: var(--line-field) solid var(--input);
+  border-radius: var(--shape-field);
+  background: var(--field);
+  overflow-wrap: anywhere;
+}
+.rich-editor .tiptap:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.rich-editor [aria-invalid="true"] { border-color: var(--destructive); }
+.rich-editor p, .rich-editor h2, .rich-editor h3, .rich-editor h4, .rich-editor pre, .rich-editor ul, .rich-editor ol { margin-block: 1rem; }
+.rich-editor h2 { font-size: var(--text-2xl); }
+.rich-editor h3 { font-size: var(--text-xl); }
+.rich-editor h4 { font-size: var(--text-lg); }
+.rich-editor h2, .rich-editor h3, .rich-editor h4 { line-height: 1.2; }
+.rich-editor ul, .rich-editor ol { padding-inline-start: 2rem; }
+.rich-editor ul { list-style-type: disc; }
+.rich-editor ol { list-style-type: persian; }
+.rich-editor a { color: var(--brand); text-decoration: underline; }
+.rich-editor pre { direction: ltr; text-align: start; overflow-x: auto; white-space: pre-wrap; background: var(--muted); padding: 1rem; border-radius: var(--shape-field); }
+.rich-editor code { font-family: monospace; unicode-bidi: plaintext; }
+.rich-editor img { display: block; max-width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: contain; margin-block: 1rem; }
+.rich-editor img.ProseMirror-selectednode { outline: 2px solid var(--ring); }

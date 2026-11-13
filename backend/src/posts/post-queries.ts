@@ -3,7 +3,7 @@ import { PrismaService } from '../database/prisma.service';
 import type { RoleName } from '../roles/constants/role.constants';
 import { PublishedPosts } from '../published-posts/published-posts';
 import { assertPostAccess } from './post-access.policy';
-import type { Prisma } from '../generated/prisma/client';
+import type { PostStatus, Prisma } from '../generated/prisma/client';
 
 const authorProjection = {
   select: { id: true, username: true, name: true, avatarUrl: true },
@@ -16,6 +16,18 @@ const detailProjection = {
   categories: taxonomyProjection,
   tags: taxonomyProjection,
 } satisfies Prisma.PostInclude;
+
+const inventoryProjection = {
+  id: true,
+  title: true,
+  slug: true,
+  status: true,
+  authorId: true,
+  author: authorProjection,
+  publishedAt: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.PostSelect;
 
 export type PostFeedQuery = {
   page: number;
@@ -34,6 +46,23 @@ export class PostQueries {
     private readonly prisma: PrismaService,
     private readonly publishedPosts: PublishedPosts,
   ) {}
+
+  async findAdminInventory(page: number, limit: number) {
+    const [posts, total] = await Promise.all([
+      this.prisma.post.findMany({
+        // No owner or publication predicate: ADMIN sees every stored Post.
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+        select: inventoryProjection,
+      }),
+      this.prisma.post.count(),
+    ]);
+    return {
+      data: posts,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
 
   async findAll({
     page,
@@ -151,15 +180,19 @@ export class PostQueries {
     return post;
   }
 
-  async findMine(authorId: string, page: number, limit: number) {
+  async findMine(
+    authorId: string,
+    page: number,
+    limit: number,
+    status?: PostStatus,
+  ) {
     const skip = (page - 1) * limit;
+    const where = { authorId, ...(status ? { status } : {}) };
 
     // Get the author's posts and total count in parallel
     const [posts, total] = await Promise.all([
       this.prisma.post.findMany({
-        where: {
-          authorId,
-        },
+        where,
         orderBy: {
           createdAt: 'desc',
         },
@@ -168,9 +201,7 @@ export class PostQueries {
       }),
 
       this.prisma.post.count({
-        where: {
-          authorId,
-        },
+        where,
       }),
     ]);
 
@@ -195,7 +226,7 @@ export class PostQueries {
       where: {
         id: postId,
       },
-      include: { author: authorProjection },
+      include: detailProjection,
     });
 
     if (!post) {

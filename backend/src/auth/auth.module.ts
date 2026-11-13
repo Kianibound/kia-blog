@@ -10,6 +10,16 @@ import { PasswordResetService } from './services/password-reset.service';
 import { SessionService } from './services/session.service';
 import { RolesModule } from '../roles/roles.module';
 import { AccessControlModule } from '../access-control/access-control.module';
+import { ConfigService } from '@nestjs/config';
+import { OAuth2Client } from 'google-auth-library';
+import {
+  GITHUB_FETCH,
+  GithubOAuthService,
+} from './services/github-oauth.service';
+import {
+  GOOGLE_OAUTH_CLIENT,
+  GoogleOAuthService,
+} from './services/google-oauth.service';
 
 @Module({
   imports: [
@@ -21,6 +31,19 @@ import { AccessControlModule } from '../access-control/access-control.module';
   ],
   controllers: [AuthController],
   providers: [
+    GithubOAuthService,
+    { provide: GITHUB_FETCH, useValue: globalThis.fetch },
+    GoogleOAuthService,
+    {
+      provide: GOOGLE_OAUTH_CLIENT,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        new OAuth2Client(
+          config.get<string>('GOOGLE_CLIENT_ID'),
+          config.get<string>('GOOGLE_CLIENT_SECRET'),
+          config.get<string>('GOOGLE_REDIRECT_URI'),
+        ),
+    },
     AuthService,
     TokenService,
     SessionService,

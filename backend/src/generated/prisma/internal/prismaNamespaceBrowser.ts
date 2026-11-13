@@ -52,6 +52,10 @@ export const AnyNull = runtime.AnyNull
 
 export const ModelName = {
   User: 'User',
+  GithubIdentity: 'GithubIdentity',
+  GithubOAuthState: 'GithubOAuthState',
+  GoogleIdentity: 'GoogleIdentity',
+  GoogleOAuthState: 'GoogleOAuthState',
   Role: 'Role',
   RefreshToken: 'RefreshToken',
   EmailVerificationToken: 'EmailVerificationToken',
@@ -62,7 +66,8 @@ export const ModelName = {
   Comment: 'Comment',
   Bookmark: 'Bookmark',
   PostLike: 'PostLike',
-  Media: 'Media'
+  Media: 'Media',
+  PostMedia: 'PostMedia'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -90,12 +95,49 @@ export const UserScalarFieldEnum = {
   passwordHash: 'passwordHash',
   roleId: 'roleId',
   emailVerified: 'emailVerified',
+  disabledAt: 'disabledAt',
   avatarMediaId: 'avatarMediaId',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
 
 export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]
+
+
+export const GithubIdentityScalarFieldEnum = {
+  subject: 'subject',
+  userId: 'userId'
+} as const
+
+export type GithubIdentityScalarFieldEnum = (typeof GithubIdentityScalarFieldEnum)[keyof typeof GithubIdentityScalarFieldEnum]
+
+
+export const GithubOAuthStateScalarFieldEnum = {
+  stateHash: 'stateHash',
+  verifierHash: 'verifierHash',
+  expiresAt: 'expiresAt',
+  usedAt: 'usedAt'
+} as const
+
+export type GithubOAuthStateScalarFieldEnum = (typeof GithubOAuthStateScalarFieldEnum)[keyof typeof GithubOAuthStateScalarFieldEnum]
+
+
+export const GoogleIdentityScalarFieldEnum = {
+  subject: 'subject',
+  userId: 'userId'
+} as const
+
+export type GoogleIdentityScalarFieldEnum = (typeof GoogleIdentityScalarFieldEnum)[keyof typeof GoogleIdentityScalarFieldEnum]
+
+
+export const GoogleOAuthStateScalarFieldEnum = {
+  stateHash: 'stateHash',
+  verifierHash: 'verifierHash',
+  expiresAt: 'expiresAt',
+  usedAt: 'usedAt'
+} as const
+
+export type GoogleOAuthStateScalarFieldEnum = (typeof GoogleOAuthStateScalarFieldEnum)[keyof typeof GoogleOAuthStateScalarFieldEnum]
 
 
 export const RoleScalarFieldEnum = {
@@ -149,6 +191,9 @@ export const PostScalarFieldEnum = {
   title: 'title',
   slug: 'slug',
   content: 'content',
+  contentDocument: 'contentDocument',
+  coverMediaId: 'coverMediaId',
+  coverAlt: 'coverAlt',
   status: 'status',
   publishedAt: 'publishedAt',
   authorId: 'authorId',
@@ -184,6 +229,8 @@ export type TagScalarFieldEnum = (typeof TagScalarFieldEnum)[keyof typeof TagSca
 export const CommentScalarFieldEnum = {
   id: 'id',
   content: 'content',
+  status: 'status',
+  version: 'version',
   postId: 'postId',
   authorId: 'authorId',
   parentId: 'parentId',
@@ -231,12 +278,28 @@ export const MediaScalarFieldEnum = {
 export type MediaScalarFieldEnum = (typeof MediaScalarFieldEnum)[keyof typeof MediaScalarFieldEnum]
 
 
+export const PostMediaScalarFieldEnum = {
+  postId: 'postId',
+  mediaId: 'mediaId'
+} as const
+
+export type PostMediaScalarFieldEnum = (typeof PostMediaScalarFieldEnum)[keyof typeof PostMediaScalarFieldEnum]
+
+
 export const SortOrder = {
   asc: 'asc',
   desc: 'desc'
 } as const
 
 export type SortOrder = (typeof SortOrder)[keyof typeof SortOrder]
+
+
+export const NullableJsonNullValueInput = {
+  DbNull: DbNull,
+  JsonNull: JsonNull
+} as const
+
+export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
 
 
 export const QueryMode = {
@@ -253,4 +316,13 @@ export const NullsOrder = {
 } as const
 
 export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
+
+
+export const JsonNullValueFilter = {
+  DbNull: DbNull,
+  JsonNull: JsonNull,
+  AnyNull: AnyNull
+} as const
+
+export type JsonNullValueFilter = (typeof JsonNullValueFilter)[keyof typeof JsonNullValueFilter]
 

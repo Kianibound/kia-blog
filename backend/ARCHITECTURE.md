@@ -196,10 +196,11 @@ flowchart LR
 | Area                         | Public                                                                          | Logged in                        | AUTHOR / ADMIN                         | ADMIN only                        |
 | ---------------------------- | ------------------------------------------------------------------------------- | -------------------------------- | -------------------------------------- | --------------------------------- |
 | **Auth** `/auth`             | register, login, refresh, logout, verify-email, forgot-password, reset-password | me, logout-all                   |                                        |                                   |
-| **Posts** `/posts`           | list, get by slug                                                               |                                  | create, mine, mine/:id, update, delete | by-id/:id                         |
+| **Posts** `/posts`           | list, get by slug                                                               |                                  | create, mine, mine/:id, update | by-id/:id, delete                 |
 | **Categories** `/categories` | list                                                                            |                                  |                                        | create, update, delete            |
 | **Tags** `/tags`             | list                                                                            |                                  |                                        | create, update, delete            |
-| **Comments**                 | list on post                                                                    | create, reply, edit, delete      |                                        |                                   |
+| **Comments**                 | list approved on post                                                           | create, reply, edit, delete, comments/mine |                                        |                                   |
+| **Admin comments** `/admin/comments` |                                                                         |                                  |                                        | list all comments, approve pending comment |
 | **Likes**                    | count on post                                                                   | like, unlike                     |                                        |                                   |
 | **Bookmarks**                |                                                                                 | bookmark, unbookmark, list mine  |                                        |                                   |
 | **Media** `/media`           |                                                                                 | upload image, delete, set avatar |                                        |                                   |
@@ -243,7 +244,12 @@ interfaces or a command bus.
 This depth gives callers leverage without changing routes, arguments, responses,
 or access rules. Publication changes have locality in commands; read-model changes
 have locality in queries. The shared ownership policy keeps owner/admin decisions
-consistent across private reads and mutations.
+consistent across private reads and updates, while permanent deletion is
+ADMIN-only and enforced separately in commands. Publication writes also enforce
+the category invariant as a resulting-state check: a PUBLISHED Post carries at
+least one Category, so publishing or republishing without one is rejected. This
+is a check-then-write rule, not a database constraint; a legacy PUBLISHED Post
+that predates the rule stays editable until a real publication transition.
 
 Behavior tests cross the existing Posts interface and replace only persistence.
 The isolated HTTP contract suite imports the real Posts module and exercises its
@@ -280,8 +286,9 @@ not make eligibility-check/write sequences atomic against concurrent unpublishin
 ## Explicit database dependencies and test surface
 
 The database seam is explicit in Auth, Users, Roles, Posts, Published Posts,
-Categories, Tags, Comments, Bookmarks, Post Likes, and Media. Admin depends on
-Users, not persistence. Access Control and Mail do not import persistence. Prisma
+Categories, Tags, Comments, Bookmarks, Post Likes, Media, Access Control and Admin.
+Access Control checks live session/account state for protected requests. Admin
+imports persistence for the request guard; Mail does not import persistence. Prisma
 is provided only by DatabaseModule, never redeclared in feature providers.
 
 Tests cross real module interfaces for leverage and depth: features initialize

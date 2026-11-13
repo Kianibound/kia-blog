@@ -1,0 +1,107 @@
+"use client";
+
+import { useEffect, useId, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { messages } from "@/i18n/messages/fa";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "./theme-toggle";
+import { CategoryDisclosure } from "./category-disclosure";
+import type { Category } from "@/lib/categories";
+
+const destinations = [
+  { href: "/", label: messages.public.home },
+  { href: "/about", label: messages.public.about },
+  { href: "/contact", label: messages.public.contact },
+];
+
+export function SiteNavigation({ children, categories, accountEntry }: { children: ReactNode; categories: Category[] | null; accountEntry: ReactNode }) {
+  const pathname = usePathname();
+  const [expanded, setExpanded] = useState(false);
+  const linksId = useId();
+  const triggerId = useId();
+  const links = destinations.map(({ href, label }) => (
+    <li key={href}>
+      <Link
+        href={href}
+        aria-current={pathname === href ? "page" : undefined}
+        className={cn(
+          "inline-flex min-h-12 items-center rounded-control px-4 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring",
+          pathname === href
+            ? "bg-secondary text-secondary-foreground"
+            : "text-foreground hover:bg-accent",
+        )}
+      >
+        {label}
+      </Link>
+    </li>
+  ));
+
+  function closeMenu() {
+    setExpanded(false);
+    document.getElementById(triggerId)?.focus();
+  }
+
+  useEffect(() => {
+    if (!expanded) return;
+    const desktop = window.matchMedia("(min-width: 48rem)");
+    function handleDesktopChange() {
+      if (desktop.matches) setExpanded(false);
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setExpanded(false);
+        document.getElementById(triggerId)?.focus();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    desktop.addEventListener("change", handleDesktopChange);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      desktop.removeEventListener("change", handleDesktopChange);
+    };
+  }, [expanded, triggerId]);
+
+  return (
+    <nav
+      aria-label={messages.public.navigation}
+      className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4 xl:grid xl:grid-cols-3"
+      onClick={(event) => {
+        if (expanded && event.target instanceof Element && event.target.closest("a")) closeMenu();
+      }}
+    >
+      <div className="xl:justify-self-start">{children}</div>
+      <ul className="hidden flex-wrap items-center gap-2 md:flex xl:flex-nowrap xl:justify-self-center">
+        {links[0]}<li><CategoryDisclosure categories={categories} mobile={false} /></li>{links.slice(1)}
+      </ul>
+      <div className="contents md:flex md:shrink-0 md:items-center md:gap-4 xl:justify-self-end">
+      <div className="flex items-center gap-2 md:order-last">
+        <ThemeToggle />
+        <Button
+          id={triggerId}
+          variant="outline"
+          size="lg"
+          className="motion-reduce:transition-none md:hidden"
+          aria-expanded={expanded}
+          aria-controls={linksId}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {messages.public.menu}
+        </Button>
+      </div>
+      <div className="flex min-h-12 basis-full flex-wrap items-center justify-end gap-4 md:basis-auto md:flex-nowrap">{accountEntry}</div>
+      </div>
+      <ul
+        id={linksId}
+        className={cn(
+          "basis-full flex-col gap-2 border-t border-border py-4",
+          expanded ? "flex" : "hidden",
+          "md:hidden",
+        )}
+      >
+        {links[0]}<li><CategoryDisclosure categories={categories} mobile /></li>{links.slice(1)}
+      </ul>
+    </nav>
+  );
+}

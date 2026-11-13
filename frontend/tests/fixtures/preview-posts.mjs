@@ -1,0 +1,46 @@
+import { feed } from "./posts.mjs";
+import { articleContent } from "./article-content.mjs";
+
+// Synthetic development-preview articles only; never imported by application code.
+const titles = [
+  "راهنمای Next.js و معماری وب",
+  "طراحی مسیرهای خوانا در یک وبلاگ فارسی",
+  "یادداشت‌هایی دربارهٔ TypeScript",
+  "خواندن کد و یادگیری از تجربه‌ها",
+  "طراحی رابط برای همه",
+  "آشنایی با پایگاه داده",
+  "چرا تست می‌نویسیم؟",
+  "نوشتن مستندات کاربردی",
+  "یادگیری در کنار دیگران",
+  "نگاهی به مسیر توسعهٔ وب",
+  "صفحه‌بندی و تجربهٔ خواندن مقاله‌ها",
+  "مدیریت خطا در درخواست‌های شبکه",
+  "ساخت فرم‌های دسترس‌پذیر",
+  "تفاوت رندر سمت سرور و مرورگر",
+  "انتخاب نام‌های روشن برای متغیرها",
+  "کار با تاریخ و زمان در برنامه‌های فارسی",
+  "طراحی مؤلفه‌های کوچک و کاربردی",
+  "بهبود خوانایی در نمایشگرهای کوچک",
+  "مرور تغییرات پیش از انتشار",
+  "اصول طراحی قراردادهای API",
+  "آشنایی با ذخیره‌سازی موقت داده‌ها",
+  "نوشتن تست برای رفتارهای قابل مشاهده",
+  "بهینه‌سازی تصویر در وب",
+  "ساخت ناوبری مناسب برای صفحه‌کلید",
+  "از نمونهٔ اولیه تا محصول قابل استفاده",
+];
+
+export const previewPosts = titles.map((title, index) => {
+  const publishedAt = new Date(Date.UTC(2026, 9, 31 - index, 9)).toISOString();
+  return {
+    ...feed.data[0],
+    id: `30000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    slug: `preview-article-${index + 1}`,
+    title,
+    content: articleContent[index],
+    tags: index % 3 === 0 ? [{ id: "40000000-0000-4000-8000-000000000001", name: "برنامه‌نویسی", slug: "programming" }] : [],
+    publishedAt,
+    createdAt: publishedAt,
+    updatedAt: publishedAt,
+  };
+});

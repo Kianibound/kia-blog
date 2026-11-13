@@ -1,0 +1,12 @@
+# Local tools and secrets (applications retain their own ignore rules).
+.env*
+!.env.example
+**/node_modules/
+.codebase-memory/
+.cache/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+.scratch/

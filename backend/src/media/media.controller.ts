@@ -1,3 +1,8 @@
+import { MediaResponseDto, AvatarResponseDto } from './dto/media-response.dto';
+import {
+  ErrorResponseDto,
+  MessageResponseDto,
+} from '../common/dto/response.dto';
 import {
   Controller,
   Delete,
@@ -32,7 +37,16 @@ export class MediaController {
   constructor(private readonly mediaService: MediaService) {}
 
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Upload an image' })
+  @ApiOperation({
+    summary: 'Upload an image',
+    description:
+      'JPEG, PNG or WebP detected from file bytes; strictly below 5 MiB. Use the returned Media id in article image attrs.mediaId, never a URL.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 413,
+    description: 'Multipart file exceeds 5 MiB.',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -46,14 +60,21 @@ export class MediaController {
       required: ['file'],
     },
   })
-  @ApiResponse({ status: 201, description: 'Image uploaded successfully.' })
   @ApiResponse({
+    type: MediaResponseDto,
+    status: 201,
+    description: 'Image uploaded successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
     status: 422,
     description: 'Invalid file type or file larger than 5 MB.',
   })
   @Post('images')
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
+  )
   uploadImage(
     @CurrentUser() user: AccessTokenPayload,
     @UploadedFile(
@@ -74,9 +95,61 @@ export class MediaController {
   }
 
   @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Remove the current user avatar',
+    description:
+      'Clears avatarMediaId and avatarUrl atomically and returns the safe user projection. Idempotent when no avatar is set; article-shared media is never deleted.',
+  })
+  @ApiResponse({
+    type: AvatarResponseDto,
+    status: 200,
+    description: 'Avatar removed successfully (idempotent when absent).',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 401,
+    description: 'Valid authenticated session required.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 404,
+    description: 'User not found.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 409,
+    description:
+      'The avatar changed concurrently; reload and retry the removal.',
+  })
+  @Delete('avatar')
+  @UseGuards(JwtAuthGuard)
+  removeAvatar(@CurrentUser() user: AccessTokenPayload) {
+    return this.mediaService.removeAvatar(user.sub);
+  }
+
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Delete an uploaded media item' })
-  @ApiResponse({ status: 200, description: 'Media deleted successfully.' })
-  @ApiResponse({ status: 403, description: 'User cannot delete this media.' })
+  @ApiResponse({
+    type: MessageResponseDto,
+    status: 200,
+    description: 'Media deleted successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 403,
+    description: 'User cannot delete this media.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 409,
+    description:
+      'Referenced by a draft, published or deprecated article; detach first. No remote image is deleted.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 404,
+    description: 'Media not found.',
+  })
   @Delete(':mediaId')
   @UseGuards(JwtAuthGuard)
   remove(
@@ -88,6 +161,11 @@ export class MediaController {
 
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Upload or replace the current user avatar' })
+  @ApiResponse({
+    type: ErrorResponseDto,
+    status: 413,
+    description: 'Multipart file exceeds 5 MiB.',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -101,14 +179,21 @@ export class MediaController {
       required: ['file'],
     },
   })
-  @ApiResponse({ status: 200, description: 'Avatar updated successfully.' })
   @ApiResponse({
+    type: AvatarResponseDto,
+    status: 200,
+    description: 'Avatar updated successfully.',
+  })
+  @ApiResponse({
+    type: ErrorResponseDto,
     status: 422,
     description: 'Invalid file type or file larger than 5 MB.',
   })
   @Patch('avatar')
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
+  )
   updateAvatar(
     @CurrentUser() user: AccessTokenPayload,
     @UploadedFile(

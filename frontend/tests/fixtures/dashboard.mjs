@@ -1,0 +1,521 @@
+import { publishedPosts } from "./posts.mjs";
+import { previewPosts } from "./preview-posts.mjs";
+import { randomUUID } from "node:crypto";
+import { validateRegistrationPasswords } from "../../src/lib/registration-validation.ts";
+import { validateArticleCommentText } from "../../src/lib/comment-moderation-contract.ts";
+
+// Test doubles only. There is no authentication or production account here.
+const identities = {
+  SIGNED_OUT: null,
+  USER: { name: "نرگس رضایی", username: "narges", role: "USER" },
+  AUTHOR: { name: "سارا کیانی", username: "sara", role: "AUTHOR" },
+  ADMIN: { name: "مدیر نمونه", username: "admin", role: "ADMIN" },
+};
+let role = "USER";
+const userIdentities = {
+  narges: { ...identities.USER, id: "user" },
+  mina: { id: "user-mina", name: "مینا احمدی", username: "mina", role: "USER" },
+};
+let user = "narges";
+const currentUser = () => userIdentities[user];
+const bookmarks = new Map(); // USER id -> Set of public article slugs, test process only.
+let bookmarksMode = "success";
+const publicPostStatuses = new Map([...publishedPosts, ...previewPosts].map(post => [post, post.status]));
+let mode = "success";
+let author = "sara";
+let postsMode = "success";
+const authorIds = { sara: "10000000-0000-4000-8000-000000000002", nima: "10000000-0000-4000-8000-000000000001" };
+function postAuthor(post) {
+  const username = post.authorId === authorIds.nima ? "nima" : "sara";
+  return { id: post.authorId, name: username === "nima" ? "نیما کیانی" : identities.AUTHOR.name, username, avatarUrl: null };
+}
+// Reuse existing article records; MyPostsResponseDto has no nested relations.
+const initialPosts = publishedPosts.map(({ author: omittedAuthor, ...post }, index) => {
+  void omittedAuthor;
+  const status = ["DRAFT", "PUBLISHED", "DEPRECATED"][index % 3];
+  return { ...post, authorId: index === 11 ? authorIds.nima : authorIds.sara, status, publishedAt: status === "DRAFT" ? null : post.publishedAt };
+});
+let ownPosts = structuredClone(initialPosts);
+let saveMode = "success";
+let formMode = "success";
+let authors = []; // Test-only Authors; retained until an explicit fixture reset.
+// Shared article/moderation test doubles; intentionally no reply associations.
+const initialComments = [
+  { id: "60000000-0000-4000-8000-000000000001", name: "نرگس رضایی", text: "این دیدگاه در انتظار بررسی است.", status: "PENDING" },
+  // Unbroken user text is intentional: exercise wrapping without adding a fixture mode.
+  { id: "60000000-0000-4000-8000-000000000002", name: "سارا کیانی", text: `این دیدگاه قبلاً تأیید شده است. ${"متنبدونفاصله".repeat(20)}`, status: "APPROVED" },
+].map((comment, index) => ({ ...comment, postId: publishedPosts[1].id, userId: index === 0 ? "user" : authorIds.sara }));
+let comments = structuredClone(initialComments);
+let commentsMode = "success";
+let taxonomy;
+let taxonomyMode = "success";
+let writes = 0;
+let imageMode = "success";
+const images = new Map(); // Selected bytes live only in this resettable test process.
+const avatars = new Map(); // AUTHOR identity -> saved fixture image reference only.
+let avatarMode = "success";
+function validImages(node) {
+  return node && typeof node === "object" && (node.type !== "image" || (typeof node.attrs?.alt === "string" && node.attrs.alt.trim() && images.has(node.attrs?.src))) && (!node.content || (Array.isArray(node.content) && node.content.every(validImages)));
+}
+const scalar = ({ categories, tags, previewDocument, ...post }) => { void categories; void tags; void previewDocument; return post; };
+const json = (response, status, payload) => response.writeHead(status, { "Content-Type": "application/json" }).end(JSON.stringify(payload));
+const fullTaxonomy = item => ({ ...item, createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" });
+function writeResponse(request, response, post, status = 200) {
+  if (saveMode === "uncertain") { request.socket.destroy(); return; }
+  const send = () => json(response, status, { ...post, categories: post.categories.map(fullTaxonomy), tags: post.tags.map(fullTaxonomy) });
+  if (saveMode === "slow") setTimeout(send, 1500); else send();
+}
+
+export function handleDashboardFixture(request, response, url, categoryChoices) {
+  const bookmarkMatch = /^\/article-bookmarks\/([^/]+)$/.exec(url.pathname);
+  if (url.pathname === "/dashboard-bookmarks" || bookmarkMatch) {
+    if (role !== "USER") { response.writeHead(403).end(); return true; }
+    const ownerId = currentUser().id;
+    if (request.headers["x-fixture-user"] && request.headers["x-fixture-user"] !== ownerId) { response.writeHead(403).end(); return true; }
+    const saved = bookmarks.get(ownerId) ?? new Set();
+    const publicPosts = [...publishedPosts, ...previewPosts].filter(post => post.status === "PUBLISHED");
+    let slug;
+    if (bookmarkMatch) { try { slug = decodeURIComponent(bookmarkMatch[1]); } catch { response.writeHead(400).end(); return true; } }
+    if (request.method === "GET") {
+      if (bookmarkMatch && !publicPosts.some(post => post.slug === slug)) { response.writeHead(404).end(); return true; }
+      if (["error", "slow-error"].includes(bookmarksMode)) { const fail = () => response.writeHead(503).end(); if (bookmarksMode === "slow-error") setTimeout(fail, 1500); else fail(); return true; }
+      const payload = bookmarkMatch ? { userId: ownerId, slug, saved: saved.has(slug) } : { userId: ownerId, data: bookmarksMode === "empty" ? [] : publicPosts.filter(post => saved.has(post.slug)) };
+      if (bookmarksMode === "foreign") payload.userId = ownerId === "user" ? "user-mina" : "user";
+      if (bookmarksMode === "invalid") { if (bookmarkMatch) payload.saved = "invalid"; else payload.data = [{}]; }
+      const send = () => json(response, 200, payload);
+      if (bookmarksMode === "slow") setTimeout(send, 1500); else send();
+      return true;
+    }
+    if (!bookmarkMatch || !["PUT", "DELETE"].includes(request.method)) { response.writeHead(405).end(); return true; }
+    if (request.method === "PUT" && !publicPosts.some(post => post.slug === slug)) { response.writeHead(404).end(); return true; }
+    if (saveMode === "error") { response.writeHead(422).end(); return true; }
+    const send = () => {
+      if (role !== "USER" || currentUser().id !== ownerId) { response.writeHead(403).end(); return; }
+      const current = bookmarks.get(ownerId) ?? new Set();
+      if (request.method === "PUT") {
+        if (![...publishedPosts, ...previewPosts].some(post => post.slug === slug && post.status === "PUBLISHED")) { response.writeHead(404).end(); return; }
+        current.add(slug);
+      } else current.delete(slug);
+      bookmarks.set(ownerId, current);
+      if (saveMode === "uncertain") { request.socket.destroy(); return; }
+      response.writeHead(204).end();
+    };
+    if (saveMode === "slow") setTimeout(send, 1500); else send();
+    return true;
+  }
+  const articleCommentsMatch = /^\/article-comments\/([^/]+)$/.exec(url.pathname);
+  if (articleCommentsMatch) {
+    let slug;
+    try { slug = decodeURIComponent(articleCommentsMatch[1]); } catch { response.writeHead(400).end(); return true; }
+    const post = [...publishedPosts, ...previewPosts].find(item => item.slug === slug && item.status === "PUBLISHED");
+    if (!post) { response.writeHead(404).end(); return true; }
+    if (request.method === "GET") {
+      if (commentsMode === "error" || commentsMode === "slow-error") { const fail = () => response.writeHead(503).end(); if (commentsMode === "slow-error") setTimeout(fail, 1500); else fail(); return true; }
+      const visible = comments.filter(comment => comment.postId === post.id && comment.status === "APPROVED").map(({ id, name, text, status }) => ({ id, name, text, status }));
+      const data = commentsMode === "empty" ? [] : commentsMode === "invalid" ? [initialComments[0]] : visible;
+      const send = () => json(response, 200, data);
+      if (commentsMode === "slow") setTimeout(send, 1500); else send();
+      return true;
+    }
+    if (request.method !== "POST") { response.writeHead(405).end(); return true; }
+    if (role !== "USER") { response.writeHead(403).end(); return true; }
+    const commentOwner = currentUser();
+    let body = "";
+    request.on("data", chunk => { body += chunk; });
+    request.on("end", () => {
+      let input;
+      try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 1 || validateArticleCommentText(input.text)) { response.writeHead(400).end(); return; }
+      if (saveMode === "error") { response.writeHead(422).end(); return; }
+      const send = () => {
+        if (role !== "USER" || currentUser().id !== commentOwner.id) { response.writeHead(403).end(); return; }
+        const comment = { id: randomUUID(), postId: post.id, userId: commentOwner.id, name: commentOwner.name, text: input.text.trim(), status: "PENDING" };
+        comments.push(comment);
+        if (saveMode === "uncertain") { request.socket.destroy(); return; }
+        json(response, 201, comment);
+      };
+      if (saveMode === "slow") setTimeout(send, 1500); else send();
+    });
+    return true;
+  }
+  if (request.method === "POST" && url.pathname === "/__test/auth") {
+    let body = "";
+    request.on("data", chunk => { body += chunk; if (body.length > 2048) request.destroy(); });
+    request.on("end", () => {
+      let input;
+      try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
+      if (!input || typeof input !== "object" || !["register", "login", "logout"].includes(input.operation)) { response.writeHead(400).end(); return; }
+      if (input.operation !== "logout" && (!["email", "google", "github"].includes(input.provider) || !["USER", "AUTHOR"].includes(input.role))) { response.writeHead(400).end(); return; }
+      if (input.operation === "register" && input.provider === "email" && Object.values(validateRegistrationPasswords(input.password, input.confirmPassword)).some(Boolean)) { response.writeHead(400).end(); return; }
+      if (saveMode === "error") { response.writeHead(503).end(); return; }
+      const send = () => {
+        // Registration always selects USER, even for a tampered AUTHOR request.
+        role = input.operation === "logout" ? "SIGNED_OUT" : input.operation === "register" ? "USER" : input.role;
+        author = "sara";
+        user = "narges";
+        mode = "success";
+        response.writeHead(204).end();
+      };
+      if (saveMode === "slow") setTimeout(send, 1500); else send();
+    });
+    return true;
+  }
+  // Reuse the existing taxonomy values, isolated from the public fixture dataset.
+  taxonomy ??= { categories: structuredClone(categoryChoices), tags: [...new Map(publishedPosts.flatMap(post => post.tags).map(item => [item.id, fullTaxonomy(item)])).values()] };
+  if (request.method === "POST" && url.pathname === "/__test/dashboard") {
+    const nextRole = url.searchParams.get("role") ?? "USER";
+    const nextMode = url.searchParams.get("mode") ?? "success";
+    const nextAuthor = url.searchParams.get("author") ?? "sara";
+    const nextUser = url.searchParams.get("user") ?? "narges";
+    const nextBookmarksMode = url.searchParams.get("bookmarksMode") ?? "success";
+    const hidePost = url.searchParams.get("hidePost");
+    if (!Object.hasOwn(userIdentities, nextUser) || !["success", "empty", "error", "invalid", "foreign", "slow", "slow-error"].includes(nextBookmarksMode) || (hidePost && ![...publishedPosts, ...previewPosts].some(post => post.slug === hidePost))) { response.writeHead(400).end(); return true; }
+    const nextPostsMode = url.searchParams.get("postsMode") ?? "success";
+    const nextSaveMode = url.searchParams.get("saveMode") ?? "success";
+    const nextFormMode = url.searchParams.get("formMode") ?? "success";
+    const nextImageMode = url.searchParams.get("imageMode") ?? "success";
+    const nextCommentsMode = url.searchParams.get("commentsMode") ?? "success";
+    const nextTaxonomyMode = url.searchParams.get("taxonomyMode") ?? "success";
+    const nextAvatarMode = url.searchParams.get("avatarMode") ?? "success";
+    if (!["success", "error", "invalid", "slow"].includes(nextAvatarMode)) { response.writeHead(400).end(); return true; }
+    if (!["success", "empty", "error", "invalid", "slow"].includes(nextTaxonomyMode)) { response.writeHead(400).end(); return true; }
+    if (!["success", "empty", "error", "invalid", "slow", "slow-error", "foreign"].includes(nextCommentsMode)) { response.writeHead(400).end(); return true; }
+    if (!["success", "error", "slow"].includes(nextImageMode)) { response.writeHead(400).end(); return true; }
+    if (!Object.hasOwn(identities, nextRole) || !Object.hasOwn(authorIds, nextAuthor) || !["success", "empty", "error", "invalid", "slow", "foreign"].includes(nextPostsMode) || !["success", "error", "invalid", "slow"].includes(nextMode) || !["success", "error", "slow", "uncertain"].includes(nextSaveMode) || !["success", "missing", "error", "invalid", "detail-error"].includes(nextFormMode)) {
+      response.writeHead(400).end();
+    } else {
+      role = nextRole;
+      mode = nextMode;
+      author = nextAuthor;
+      user = nextUser;
+      bookmarksMode = nextBookmarksMode;
+      postsMode = nextPostsMode;
+      saveMode = nextSaveMode;
+      formMode = nextFormMode;
+      imageMode = nextImageMode;
+      commentsMode = nextCommentsMode;
+      taxonomyMode = nextTaxonomyMode;
+      avatarMode = nextAvatarMode;
+      if (url.searchParams.get("reset") === "1") { ownPosts = structuredClone(initialPosts); authors = []; comments = structuredClone(initialComments); taxonomy = undefined; writes = 0; images.clear(); avatars.clear(); bookmarks.clear(); for (const [post, status] of publicPostStatuses) post.status = status; }
+      if (hidePost === "") { for (const [post, status] of publicPostStatuses) post.status = status; }
+      else if (hidePost) [...publishedPosts, ...previewPosts].find(post => post.slug === hidePost).status = "DRAFT";
+      response.writeHead(204).end();
+    }
+    return true;
+  }
+  const authorMatch = /^\/dashboard-authors\/([^/]+)$/.exec(url.pathname);
+  if (url.pathname === "/dashboard-avatar") {
+    if (role !== "AUTHOR") { response.writeHead(403).end(); return true; }
+    const ownerId = authorIds[author];
+    if (request.method === "GET") {
+      if (avatarMode === "error") { response.writeHead(503).end(); return true; }
+      const send = () => json(response, 200, { src: avatarMode === "invalid" ? "blob:invalid" : avatars.get(ownerId) ?? null });
+      if (avatarMode === "slow") setTimeout(send, 1500); else send();
+      return true;
+    }
+    const finish = src => {
+      if (saveMode === "uncertain") { request.socket.destroy(); return; }
+      const send = () => json(response, 200, { src });
+      if (saveMode === "slow") setTimeout(send, 1500); else send();
+    };
+    if (request.method === "DELETE") {
+      if (saveMode === "error") { response.writeHead(422).end(); return true; }
+      avatars.delete(ownerId); finish(null); return true;
+    }
+    if (request.method !== "PATCH") { response.writeHead(405).end(); return true; }
+    let body = "";
+    request.on("data", chunk => { body += chunk; });
+    request.on("end", () => {
+      let input;
+      try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 1 || typeof input.src !== "string" || !/^\/fixture-images\/[a-f0-9-]+$/.test(input.src) || !images.has(input.src)) { response.writeHead(400).end(); return; }
+      if (saveMode === "error") { response.writeHead(422).end(); return; }
+      avatars.set(ownerId, input.src); finish(input.src);
+    });
+    return true;
+  }
+  const taxonomyMatch = /^\/dashboard-taxonomies\/(categories|tags)(?:\/([^/]+))?$/.exec(url.pathname);
+  if (taxonomyMatch) {
+    if (role !== "ADMIN") { response.writeHead(403).end(); return true; }
+    const [, kind, id] = taxonomyMatch;
+    const choices = taxonomy[kind];
+    if (!id && request.method === "GET") {
+      if (taxonomyMode === "error") { response.writeHead(503).end(); return true; }
+      const data = taxonomyMode === "empty" ? [] : taxonomyMode === "invalid" ? [{ id: "invalid", name: null }] : choices;
+      const send = () => json(response, 200, data);
+      if (taxonomyMode === "slow") setTimeout(send, 1500); else send();
+      return true;
+    }
+    const finish = (status, item) => {
+      if (saveMode === "uncertain") { request.socket.destroy(); return; }
+      const send = () => item ? json(response, status, item) : response.writeHead(status).end();
+      if (saveMode === "slow") setTimeout(send, 1500); else send();
+    };
+    if (id && request.method === "DELETE") {
+      const index = choices.findIndex(item => item.id === id);
+      if (index === -1) { response.writeHead(404).end(); return true; }
+      if (ownPosts.some(post => post[kind].some(item => item.id === id))) { response.writeHead(409).end(); return true; }
+      if (saveMode === "error") { response.writeHead(422).end(); return true; }
+      choices.splice(index, 1);
+      finish(204);
+      return true;
+    }
+    if (id || request.method !== "POST") { response.writeHead(405).end(); return true; }
+    let body = "";
+    request.on("data", chunk => { body += chunk; });
+    request.on("end", () => {
+      let input;
+      try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 1 || typeof input.name !== "string" || !input.name.trim()) { response.writeHead(400).end(); return; }
+      const name = input.name.trim();
+      if (choices.some(item => item.name.trim().toLowerCase() === name.toLowerCase())) { response.writeHead(409).end(); return; }
+      if (saveMode === "error") { response.writeHead(422).end(); return; }
+      const newId = randomUUID();
+      const item = fullTaxonomy({ id: newId, name, slug: `fixture-${newId}` });
+      choices.push(item);
+      finish(201, item);
+    });
+    return true;
+  }
+  const ownCommentMatch = /^\/dashboard-my-comments\/([^/]+)$/.exec(url.pathname);
+  if (url.pathname === "/dashboard-my-comments" || ownCommentMatch) {
+    if (role !== "USER") { response.writeHead(403).end(); return true; }
+    const ownerId = currentUser().id;
+    if (!ownCommentMatch && request.method === "GET") {
+      if (commentsMode === "error" || commentsMode === "slow-error") { const fail = () => response.writeHead(503).end(); if (commentsMode === "slow-error") setTimeout(fail, 1500); else fail(); return true; }
+      const projection = comment => { const { id, userId, name, text, status } = comment; return { id, userId, name, text, status }; };
+      const data = commentsMode === "empty" ? [] : commentsMode === "invalid" ? [{ ...projection(initialComments[0]), status: "UNKNOWN" }] : commentsMode === "foreign" ? comments.filter(item => item.userId !== ownerId).map(projection) : comments.filter(item => item.userId === ownerId).map(projection);
+      const send = () => json(response, 200, data);
+      if (commentsMode === "slow") setTimeout(send, 1500); else send();
+      return true;
+    }
+    if (!ownCommentMatch || !["PATCH", "DELETE"].includes(request.method)) { response.writeHead(405).end(); return true; }
+    const id = ownCommentMatch[1];
+    if (!comments.some(item => item.id === id && item.userId === ownerId)) { response.writeHead(404).end(); return true; }
+    const mutate = text => {
+      if (saveMode === "error") { response.writeHead(422).end(); return; }
+      const send = () => {
+        if (role !== "USER" || currentUser().id !== ownerId) { response.writeHead(403).end(); return; }
+        const index = comments.findIndex(item => item.id === id && item.userId === ownerId);
+        if (index === -1) { response.writeHead(404).end(); return; }
+        if (request.method === "DELETE") comments.splice(index, 1);
+        else comments[index] = { ...comments[index], text, status: "PENDING" };
+        if (saveMode === "uncertain") { request.socket.destroy(); return; }
+        response.writeHead(204).end();
+      };
+      if (saveMode === "slow") setTimeout(send, 1500); else send();
+    };
+    if (request.method === "DELETE") { mutate(); return true; }
+    let body = "";
+    request.on("data", chunk => { body += chunk; });
+    request.on("end", () => {
+      let input;
+      try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 1 || validateArticleCommentText(input.text)) { response.writeHead(400).end(); return; }
+      mutate(input.text.trim());
+    });
+    return true;
+  }
+  const commentMatch = /^\/dashboard-comments\/([^/]+)$/.exec(url.pathname);
+  if (url.pathname === "/dashboard-comments" || commentMatch) {
+    if (role !== "ADMIN") { response.writeHead(403).end(); return true; }
+    if (!commentMatch && request.method === "GET") {
+      if (commentsMode === "error" || commentsMode === "slow-error") { const fail = () => response.writeHead(503).end(); if (commentsMode === "slow-error") setTimeout(fail, 1500); else fail(); return true; }
+      const data = commentsMode === "empty" ? [] : commentsMode === "invalid" ? [{ ...initialComments[0], status: "UNKNOWN" }] : comments;
+      const send = () => json(response, 200, data);
+      if (commentsMode === "slow") setTimeout(send, 1500); else send();
+      return true;
+    }
+    if (!commentMatch || !["DELETE", "PATCH"].includes(request.method)) { response.writeHead(405).end(); return true; }
+    const index = comments.findIndex(item => item.id === commentMatch[1]);
+    if (index === -1) { response.writeHead(404).end(); return true; }
+    const finish = () => {
+      if (saveMode === "uncertain") { request.socket.destroy(); return; }
+      const send = () => response.writeHead(204).end();
+      if (saveMode === "slow") setTimeout(send, 1500); else send();
+    };
+    if (request.method === "DELETE") {
+      if (saveMode === "error") { response.writeHead(422).end(); return true; }
+      comments.splice(index, 1);
+      finish();
+      return true;
+    }
+    let body = "";
+    request.on("data", chunk => { body += chunk; });
+    request.on("end", () => {
+      let input;
+      try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length !== 1 || input.status !== "APPROVED") { response.writeHead(400).end(); return; }
+      if (comments[index].status !== "PENDING") { response.writeHead(409).end(); return; }
+      if (saveMode === "error") { response.writeHead(422).end(); return; }
+      comments[index] = { ...comments[index], status: "APPROVED" };
+      finish();
+    });
+    return true;
+  }
+  if (authorMatch) {
+    if (role !== "ADMIN") { response.writeHead(403).end(); return true; }
+    if (request.method !== "DELETE") { response.writeHead(405).end(); return true; }
+    const index = authors.findIndex(item => item.id === authorMatch[1]);
+    if (index === -1) { response.writeHead(404).end(); return true; }
+    if (saveMode === "error") { response.writeHead(422).end(); return true; }
+    authors.splice(index, 1); // Only this test list changes; related fixture content is untouched.
+    if (saveMode === "uncertain") { request.socket.destroy(); return true; }
+    const send = () => response.writeHead(204).end();
+    if (saveMode === "slow") setTimeout(send, 1500); else send();
+    return true;
+  }
+  if (url.pathname === "/dashboard-authors") {
+    if (role !== "ADMIN") { response.writeHead(403).end(); return true; }
+    if (request.method === "GET") { json(response, 200, authors); return true; }
+    if (request.method !== "POST") { response.writeHead(405).end(); return true; }
+    let body = "";
+    request.on("data", chunk => { body += chunk; });
+    request.on("end", () => {
+      let input;
+      try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(key => !["name", "email"].includes(key)) || typeof input.name !== "string" || !input.name.trim() || typeof input.email !== "string" || !/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(input.email.trim())) { response.writeHead(400).end(); return; }
+      if (authors.some(item => item.email.toLowerCase() === input.email.trim().toLowerCase())) { response.writeHead(409).end(); return; }
+      if (saveMode === "error") { response.writeHead(422).end(); return; }
+      const saved = { id: randomUUID(), name: input.name.trim(), email: input.email.trim(), role: "AUTHOR" };
+      authors.unshift(saved);
+      if (saveMode === "uncertain") { request.socket.destroy(); return; }
+      const send = () => json(response, 201, saved);
+      if (saveMode === "slow") setTimeout(send, 1500); else send();
+    });
+    return true;
+  }
+  if (request.method === "POST" && url.pathname === "/fixture-images") {
+    if (role !== "AUTHOR" && role !== "ADMIN") { response.writeHead(403).end(); return true; }
+    const type = request.headers["content-type"];
+    if (!["image/png", "image/jpeg", "image/webp"].includes(type)) { response.writeHead(415).end(); return true; }
+    const chunks = [];
+    let size = 0;
+    request.on("data", chunk => {
+      size += chunk.length;
+      if (size <= 5 * 1024 * 1024) chunks.push(chunk);
+    });
+    request.on("end", () => {
+      if (!size || size > 5 * 1024 * 1024) { response.writeHead(413).end(); return; }
+      if (imageMode === "error") { response.writeHead(503).end(); return; }
+      const send = () => {
+        const src = `/fixture-images/${randomUUID()}`;
+        images.set(src, { type, bytes: Buffer.concat(chunks) });
+        json(response, 201, { src });
+      };
+      if (imageMode === "slow") setTimeout(send, 1500); else send();
+    });
+    return true;
+  }
+  if (request.method === "GET" && url.pathname.startsWith("/fixture-images/")) {
+    const image = images.get(url.pathname);
+    if (image) response.writeHead(200, { "Content-Type": image.type, "Cache-Control": "no-store" }).end(image.bytes);
+    else response.writeHead(404).end();
+    return true;
+  }
+  const tags = taxonomy.tags;
+  // Test-host reading only: never used by the production public Posts adapter.
+  if (request.method === "GET" && (url.pathname === "/dashboard-public-posts" || url.pathname.startsWith("/dashboard-public-posts/"))) {
+    const rows = ownPosts.filter(post => post.status === "PUBLISHED");
+    if (url.pathname === "/dashboard-public-posts") json(response, 200, rows.map(scalar));
+    else {
+      let slug;
+      try { slug = decodeURIComponent(url.pathname.slice("/dashboard-public-posts/".length)); }
+      catch { response.writeHead(400).end(); return true; }
+      const post = rows.find(post => post.slug === slug);
+      if (post) json(response, 200, { ...scalar(post), ...(post.previewDocument ? { previewDocument: post.previewDocument } : {}) }); else response.writeHead(404).end();
+    }
+    return true;
+  }
+  if (request.method === "GET" && url.pathname === "/__test/dashboard-writes") { json(response, 200, { writes }); return true; }
+  if (url.pathname === "/dashboard-taxonomy" && request.method === "GET") {
+    if (role !== "AUTHOR" && role !== "ADMIN") response.writeHead(403).end();
+    else if (formMode === "error") response.writeHead(503).end();
+    else json(response, 200, formMode === "invalid" ? { categories: null, tags: [] } : { categories: formMode === "missing" ? [] : taxonomy.categories, tags: formMode === "missing" ? [] : tags });
+    return true;
+  }
+  const match = /^\/dashboard-posts\/([^/]+)$/.exec(url.pathname);
+  if (match || (request.method === "POST" && url.pathname === "/dashboard-posts")) {
+    if ((role !== "AUTHOR" && role !== "ADMIN") || (role === "ADMIN" && !match)) { response.writeHead(403).end(); return true; }
+    const post = match ? ownPosts.find(item => item.id === match[1] && (role === "ADMIN" || item.authorId === authorIds[author])) : undefined;
+    if (match && !post) { response.writeHead(404).end(); return true; }
+    if (request.method === "DELETE") {
+      if (role !== "ADMIN") { response.writeHead(403).end(); return true; }
+      if (saveMode === "error") { response.writeHead(422).end(); return true; }
+      ownPosts.splice(ownPosts.indexOf(post), 1);
+      if (saveMode === "uncertain") { request.socket.destroy(); return true; }
+      const send = () => response.writeHead(204).end();
+      if (saveMode === "slow") setTimeout(send, 1500); else send();
+      return true;
+    }
+    if (request.method === "GET") {
+      if (formMode === "detail-error") response.writeHead(503).end();
+      else {
+        const summary = ({ id, name, slug }) => ({ id, name, slug });
+        json(response, 200, { ...post, categories: post.categories.map(summary), tags: post.tags.map(summary), author: postAuthor(post) });
+      }
+      return true;
+    }
+    if (!["POST", "PATCH"].includes(request.method) || (match && request.method !== "PATCH")) { response.writeHead(405).end(); return true; }
+    let body = "";
+    request.on("data", chunk => { body += chunk; });
+    request.on("end", () => {
+      let input;
+      try { input = JSON.parse(body); } catch { response.writeHead(400).end(); return; }
+      if (post && request.method === "PATCH" && input && typeof input === "object" && !Array.isArray(input) && Object.keys(input).length === 1 && ["DRAFT", "PUBLISHED"].includes(input.status)) {
+        // UI category checks are feedback only. The test double adds no category enforcement.
+        writes++;
+        if (saveMode === "error") { response.writeHead(422).end(); return; }
+        const now = new Date().toISOString();
+        const publishedAt = input.status === "DRAFT" ? null : post.status === "PUBLISHED" ? post.publishedAt : now;
+        const saved = { ...post, status: input.status, publishedAt, updatedAt: now };
+        ownPosts[ownPosts.indexOf(post)] = saved;
+        writeResponse(request, response, saved);
+        return;
+      }
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(key => !["title", "content", "categoryIds", "tagIds", "previewDocument", "coverImage"].includes(key)) || typeof input.title !== "string" || !input.title.trim() || typeof input.content !== "string" || !input.content.trim() || !Array.isArray(input.categoryIds) || !Array.isArray(input.tagIds)) { response.writeHead(400).end(); return; }
+      if (input.coverImage != null && (typeof input.coverImage !== "object" || typeof input.coverImage.alt !== "string" || !input.coverImage.alt.trim() || !images.has(input.coverImage.src))) { response.writeHead(400).end(); return; }
+      // Envelope check for UI review only, not canonical rich-content validation.
+      if (input.previewDocument !== undefined && (input.previewDocument?.format !== "tiptap-ui-proposal-1" || input.previewDocument?.document?.type !== "doc" || !Array.isArray(input.previewDocument?.document?.content))) { response.writeHead(400).end(); return; }
+      if (input.previewDocument && !validImages(input.previewDocument.document)) { response.writeHead(400).end(); return; }
+      const categories = taxonomy.categories;
+      if (input.categoryIds.some(id => !categories.some(item => item.id === id)) || input.tagIds.some(id => !tags.some(item => item.id === id))) { response.writeHead(400).end(); return; }
+      writes++;
+      if (saveMode === "error") { response.writeHead(422).end(); return; }
+      const now = new Date().toISOString();
+      const saved = { ...(post ?? { id: randomUUID(), slug: `fixture-draft-${randomUUID()}`, authorId: authorIds[author], status: "DRAFT", publishedAt: null, createdAt: now }), title: input.title, content: input.content, updatedAt: now, categories: [...new Set(input.categoryIds)].map(id => categories.find(item => item.id === id)), tags: [...new Set(input.tagIds)].map(id => tags.find(item => item.id === id)) };
+      saved.coverImage = input.coverImage === undefined ? (post?.coverImage ?? null) : input.coverImage;
+      if (input.previewDocument !== undefined) saved.previewDocument = input.previewDocument;
+      if (post) ownPosts[ownPosts.indexOf(post)] = saved; else ownPosts.unshift(saved);
+      writeResponse(request, response, saved, post ? 200 : 201);
+    });
+    return true;
+  }
+  if (request.method === "GET" && url.pathname === "/dashboard-posts") {
+    const page = Number(url.searchParams.get("page"));
+    const limit = Number(url.searchParams.get("limit"));
+    const status = url.searchParams.get("status");
+    if (role !== "AUTHOR" && role !== "ADMIN") { response.writeHead(403).end(); return true; }
+    if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(limit) || limit < 1 || limit > 50 || (status !== null && !["DRAFT", "PUBLISHED"].includes(status)) || [...url.searchParams.keys()].some(key => !["page", "limit", "status"].includes(key) || url.searchParams.getAll(key).length !== 1)) { response.writeHead(400).end(); return true; }
+    if (postsMode === "error") { response.writeHead(503).end("TEST DOUBLE: own Posts unavailable"); return true; }
+    const rows = postsMode === "empty" ? [] : ownPosts.filter(post => (role === "ADMIN" || post.authorId === authorIds[author]) && (!status || post.status === status)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const payload = { data: rows.slice((page - 1) * limit, page * limit).map(post => ({ ...scalar(post), ...(role === "ADMIN" ? { author: postAuthor(post) } : {}) })), meta: { page, limit, total: rows.length, totalPages: Math.ceil(rows.length / limit) } };
+    if (postsMode === "invalid") payload.meta.totalPages = -1;
+    if (postsMode === "foreign") payload.data = ownPosts.filter(post => post.authorId !== authorIds[author]).slice(0, 1);
+    const send = () => response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(payload));
+    if (postsMode === "slow") setTimeout(send, 1500); else send();
+    return true;
+  }
+  if (request.method !== "GET" || url.pathname !== "/dashboard-identity") return false;
+  if (role === "SIGNED_OUT") { response.writeHead(401).end(); return true; }
+  if (mode === "error") {
+    response.writeHead(503).end("TEST DOUBLE: dashboard unavailable");
+    return true;
+  }
+  const identity = role === "USER" ? currentUser() : role === "AUTHOR" ? { ...identities.AUTHOR, id: authorIds[author], ...(author === "nima" ? { username: "nima", name: "نیما کیانی" } : {}) } : { ...identities[role], id: role.toLowerCase() };
+  const payload = mode === "invalid" ? { ...identity, role: "UNKNOWN" } : identity;
+  const send = () => response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(payload));
+  if (mode === "slow") setTimeout(send, 1500);
+  else send();
+  return true;
+}

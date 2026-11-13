@@ -1,4 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from '@nestjs/common';
+import { createHash } from 'node:crypto';
+import { Prisma } from '../generated/prisma/client';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
 import * as argon2 from 'argon2';
@@ -26,6 +32,17 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    if (
+      dto.confirmPassword !== undefined &&
+      dto.confirmPassword !== dto.password
+    ) {
+      throw new BadRequestException(
+        'confirmPassword must exactly match password',
+      );
+    }
+    const username =
+      dto.username ??
+      `user_${createHash('sha256').update(dto.email).digest('hex')}`;
     // Hash password before saving
     const passwordHash = await argon2.hash(dto.password);
 
@@ -33,13 +50,25 @@ export class AuthService {
     const defaultRole = await this.rolesService.findRequiredByName('USER');
 
     // Create user
-    const user = await this.usersService.create({
-      email: dto.email,
-      username: dto.username,
-      name: dto.name,
-      passwordHash,
-      roleId: defaultRole.id,
-    });
+    const user = await this.usersService
+      .create({
+        email: dto.email,
+        username,
+        name: dto.name ?? username,
+        passwordHash,
+        roleId: defaultRole.id,
+      })
+      .catch((error: unknown) => {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        ) {
+          throw new ConflictException(
+            'An account with this email or username already exists.',
+          );
+        }
+        throw error;
+      });
 
     // Create and optionally send verification email
     const verificationUrl = await this.emailVerificationService.createAndSend(
@@ -49,7 +78,8 @@ export class AuthService {
 
     return {
       user,
-      message: 'Registration successful. Please verify your email.',
+      message:
+        'Registration successful. Log in with your email and password. No session was created.',
       ...(process.env.NODE_ENV !== 'production' && {
         verificationUrl,
       }),
@@ -62,7 +92,7 @@ export class AuthService {
 
     // Use the same error for unknown email or missing password
     // to avoid leaking whether an email exists
-    if (!user || !user.passwordHash) {
+    if (!user || user.disabledAt || !user.passwordHash) {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
@@ -76,6 +106,18 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
+    return this.createSession(user);
+  }
+
+  async createSession(user: {
+    id: string;
+    email: string;
+    disabledAt: Date | null;
+    role: { name: string } | null;
+  }) {
+    if (user.disabledAt)
+      throw new UnauthorizedException('Account is unavailable.');
+
     // Every authenticated user must have a valid role
     if (!user.role) {
       throw new UnauthorizedException('User role is not available.');
@@ -86,14 +128,6 @@ export class AuthService {
       throw new UnauthorizedException('User role is invalid.');
     }
 
-    // Access token contains the data needed for authenticated
-    // and role-based requests
-    const accessToken = await this.tokenService.createAccessToken({
-      sub: user.id,
-      email: user.email,
-      role: user.role.name,
-    });
-
     // Refresh token only identifies the user/session.
     // Current role will be loaded from the database when refreshing.
     const refreshToken = await this.tokenService.createRefreshToken({
@@ -101,11 +135,17 @@ export class AuthService {
     });
 
     // Store only the hashed refresh token in the database
-    await this.sessionService.storeRefreshToken(
+    const session = await this.sessionService.storeRefreshToken(
       user.id,
       refreshToken,
       new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     );
+    const accessToken = await this.tokenService.createAccessToken({
+      sub: user.id,
+      email: user.email,
+      role: user.role.name,
+      sid: session.id,
+    });
 
     // Load the public/safe user response without passwordHash
     const safeUser = await this.usersService.findById(user.id);

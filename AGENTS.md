@@ -1,0 +1,42 @@
+# Kia Blog agent instructions
+
+Backend and frontend are separate applications in this repository. Read
+`backend/README.md`, `backend/ARCHITECTURE.md` and `backend/GLOSSARY.md` before
+API-related planning. The backend implementation is the source of truth.
+Frontend work also follows `frontend/AGENTS.md`.
+
+Do not implement blog features, edit backend application code, deploy, or touch
+production resources without the user's explicit approval. Planning tickets
+require the relevant specification/planning approval. Do not start `/wayfinder`
+until the current preparation findings have been reported to the user.
+
+## Agent skills
+
+### Issue tracker
+
+Issues/specs live in Kianibound/kia-blog GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the five default triage labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single context; existing backend glossary is authoritative. See `docs/agents/domain.md`.
+
+## Working Style
+
+- Keep tasks small and focused.
+- Complete only the explicitly requested task.
+- Do not automatically start the next phase.
+- Avoid unrelated refactoring.
+- Prefer targeted inspection over reading the entire codebase.
+- Ask before making architectural decisions.
+- Do not push, merge, or deploy without approval.
+- Keep final reports concise.
+- Communicate in English in the terminal.
+
+## Agent response style
+
+Keep final reports concise, ideally under 150 words. Report only the outcome, commit/push status, essential test or review results, and critical blockers or risks. Do not list every changed file, repeat implementation details, or provide long explanations unless the user explicitly requests them. Avoid verbose progress narration; surface only actionable updates.
+

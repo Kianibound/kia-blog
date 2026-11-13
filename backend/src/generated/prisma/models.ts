@@ -9,6 +9,10 @@
  * 🟢 You can import this file directly.
  */
 export type * from './models/User.js'
+export type * from './models/GithubIdentity.js'
+export type * from './models/GithubOAuthState.js'
+export type * from './models/GoogleIdentity.js'
+export type * from './models/GoogleOAuthState.js'
 export type * from './models/Role.js'
 export type * from './models/RefreshToken.js'
 export type * from './models/EmailVerificationToken.js'
@@ -20,4 +24,5 @@ export type * from './models/Comment.js'
 export type * from './models/Bookmark.js'
 export type * from './models/PostLike.js'
 export type * from './models/Media.js'
+export type * from './models/PostMedia.js'
 export type * from './commonInputTypes.js'

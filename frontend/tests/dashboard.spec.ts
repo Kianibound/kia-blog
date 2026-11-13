@@ -1,0 +1,2707 @@
+import { expect, test } from "@playwright/test";
+import { parseArticleDetail, parseArticleWrite } from "../src/lib/article-form-contract";
+
+test.beforeEach(async ({ request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?reset=1");
+});
+
+test("bookmark toggles preserve known state on errors, block pending writes and resolve uncertain removals on reload", async ({ page, request }) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=USER";
+  await page.goto("/posts/test-post-2");
+  const region = page.getByRole("region", { name: "ذخیره‌سازی مقاله", exact: true });
+  const save = region.getByRole("button", { name: "ذخیره مقاله", exact: true });
+  await request.post(`${control}&saveMode=error`);
+  await save.click();
+  await expect(region.getByRole("alert")).toContainText("انجام عملیات ممکن نشد");
+  await expect(save).toHaveAttribute("aria-pressed", "false");
+  await request.post(`${control}&saveMode=slow`);
+  await save.click();
+  await expect(save).toBeDisabled();
+  await expect(region.getByRole("status")).toHaveText("در حال ثبت ذخیره‌سازی…");
+  const remove = region.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true });
+  await expect(remove).toHaveAttribute("aria-pressed", "true");
+  await request.post(`${control}&saveMode=uncertain`);
+  await remove.click();
+  await expect(region.getByRole("alert")).toContainText("نتیجهٔ عملیات مشخص نیست");
+  await expect(remove).toHaveAttribute("aria-pressed", "true");
+  await expect(remove).toBeDisabled();
+  await page.reload();
+  await expect(save).toHaveAttribute("aria-pressed", "false");
+  await request.post(control);
+  await request.put("http://127.0.0.1:4101/article-bookmarks/test-post-2");
+  await page.goto("/dashboard/bookmarks");
+  await request.post(`${control}&saveMode=error`);
+  await page.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("انجام عملیات ممکن نشد");
+  await expect(page.getByRole("main").getByRole("article")).toHaveCount(1);
+  await request.post(`${control}&saveMode=slow`);
+  const listRemove = page.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true });
+  await listRemove.click();
+  await expect(listRemove).toBeDisabled();
+  await expect(page.getByRole("main").getByRole("article")).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("status")).toHaveText("مقاله از ذخیره‌شده‌ها حذف شد.");
+});
+
+test("bookmark reading recovers loading, invalid and foreign states with stable RTL layouts in both themes", async ({ page, request }, testInfo) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=USER";
+  await request.put("http://127.0.0.1:4101/article-bookmarks/test-post-2");
+  await request.put("http://127.0.0.1:4101/article-bookmarks/test-post-1");
+  const list = page.getByRole("region", { name: "فهرست مقالات ذخیره‌شده", exact: true });
+  for (const theme of ["dark", "light"] as const) {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    for (const width of [360, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await request.post(`${control}&bookmarksMode=slow`);
+      await page.goto("/dashboard/bookmarks", { waitUntil: "commit" });
+      await expect(list.getByRole("status")).toHaveText("در حال دریافت مقالات ذخیره‌شده…");
+      await page.evaluate(() => document.fonts.ready);
+      const before = await list.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY);
+      await expect(list.getByRole("article")).toHaveCount(2);
+      expect(Math.abs(await list.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY) - before)).toBeLessThanOrEqual(1);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await expect(page.locator("html")).toHaveCSS("color-scheme", theme);
+      await page.screenshot({ path: testInfo.outputPath(`bookmarks-${theme}-${width}.png`), fullPage: true });
+    }
+  }
+  for (const mode of ["error", "invalid", "foreign", "slow-error"]) {
+    await request.post(`${control}&bookmarksMode=${mode}`);
+    await page.reload({ waitUntil: mode === "slow-error" ? "commit" : "load" });
+    let before = 0;
+    if (mode === "slow-error") { await expect(list.getByRole("status")).toHaveText("در حال دریافت مقالات ذخیره‌شده…"); before = await list.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY); }
+    await expect(list.getByRole("alert")).toContainText("دریافت مقالات ذخیره‌شده ممکن نشد");
+    await expect(list.getByRole("article")).toHaveCount(0);
+    if (mode === "slow-error") expect(Math.abs(await list.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY) - before)).toBeLessThanOrEqual(1);
+  }
+  await request.post(`${control}&bookmarksMode=empty`);
+  await list.getByRole("button", { name: "تلاش دوباره", exact: true }).click();
+  await expect(list).toContainText("هنوز مقاله‌ای ذخیره نکرده‌اید.");
+  const state = page.getByRole("region", { name: "ذخیره‌سازی مقاله", exact: true });
+  for (const mode of ["slow", "error", "foreign", "invalid", "slow-error"]) {
+    await request.post(`${control}&bookmarksMode=${mode}`);
+    await page.goto("/posts/test-post-2", { waitUntil: ["slow", "slow-error"].includes(mode) ? "commit" : "load" });
+    let before = 0;
+    if (["slow", "slow-error"].includes(mode)) { await expect(state.getByRole("status")).toHaveText("در حال دریافت وضعیت ذخیره…"); await page.evaluate(() => document.fonts.ready); before = await state.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY); }
+    if (mode === "slow") await expect(state.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true })).toHaveAttribute("aria-pressed", "true");
+    else { await expect(state.getByRole("alert")).toContainText("دریافت وضعیت ذخیره ممکن نشد"); await expect(state.getByRole("button", { name: "ذخیره مقاله", exact: true })).toHaveCount(0); }
+    if (["slow", "slow-error"].includes(mode)) expect(Math.abs(await state.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY) - before)).toBeLessThanOrEqual(1);
+  }
+  await request.post(control);
+  await state.getByRole("button", { name: "تلاش دوباره", exact: true }).click();
+  await expect(state.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "فهرست پیشخوان", exact: true }).click();
+  const nav = page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true });
+  await expect(nav.getByRole("link", { name: "فضای خواندن", exact: true })).toHaveCount(0);
+  await nav.getByRole("link", { name: "مقالات ذخیره‌شده", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/dashboard\/bookmarks$/);
+  await expect(list.getByRole("article")).toHaveCount(2);
+});
+
+test("bookmark fixture writes are idempotent, concurrent saves are retained and unpublished articles stay hidden", async ({ request, page }) => {
+  const base = "http://127.0.0.1:4101";
+  for (const role of ["SIGNED_OUT", "AUTHOR", "ADMIN"]) {
+    await request.post(`${base}/__test/dashboard?role=${role}`);
+    for (const path of ["/dashboard-bookmarks", "/article-bookmarks/test-post-2"]) expect((await request.get(`${base}${path}`)).status()).toBe(403);
+    expect((await request.put(`${base}/article-bookmarks/test-post-2`)).status()).toBe(403);
+    expect((await request.delete(`${base}/article-bookmarks/test-post-2`)).status()).toBe(403);
+    expect((await page.goto("/posts/test-post-2"))?.status()).toBe(200);
+    await expect(page.getByRole("button", { name: "ذخیره مقاله", exact: true })).toHaveCount(0);
+  }
+  await request.post(`${base}/__test/dashboard?role=USER&saveMode=slow`);
+  const writes = await Promise.all([request.put(`${base}/article-bookmarks/test-post-1`), request.put(`${base}/article-bookmarks/test-post-2`)]);
+  expect(writes.map(response => response.status())).toEqual([204, 204]);
+  expect((await (await request.get(`${base}/dashboard-bookmarks`)).json()).data).toHaveLength(2);
+  await request.post(`${base}/__test/dashboard?role=USER`);
+  await request.put(`${base}/article-bookmarks/test-post-2`);
+  expect((await (await request.get(`${base}/dashboard-bookmarks`)).json()).data).toHaveLength(2);
+  await request.post(`${base}/__test/dashboard?role=USER&hidePost=test-post-2`);
+  expect((await request.get(`${base}/article-bookmarks/test-post-2`)).status()).toBe(404);
+  expect((await request.put(`${base}/article-bookmarks/test-post-2`)).status()).toBe(404);
+  expect((await page.goto("/posts/test-post-2"))?.status()).toBe(404);
+  await page.goto("/dashboard/bookmarks");
+  await expect(page.getByRole("main").getByRole("article")).toHaveCount(1);
+  await expect(page.getByRole("main").getByRole("article").getByRole("link")).toHaveAttribute("href", "/posts/test-post-1");
+  expect((await request.delete(`${base}/article-bookmarks/test-post-2`)).status()).toBe(204);
+  await request.post(`${base}/__test/dashboard?role=USER&hidePost=`);
+  expect((await (await request.get(`${base}/article-bookmarks/test-post-2`)).json()).saved).toBe(false);
+  for (const slug of ["missing-post", "draft-post", "deprecated-post"]) {
+    expect((await request.put(`${base}/article-bookmarks/${slug}`)).status()).toBe(404);
+    expect((await page.goto(`/posts/${slug}`))?.status()).toBe(404);
+  }
+});
+
+test("bookmarks and existing comment ownership stay isolated between fixture USER identities", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  await request.put(`${base}/article-bookmarks/test-post-2`);
+  await request.post(`${base}/__test/dashboard?role=USER&user=mina`);
+  expect((await (await request.get(`${base}/dashboard-identity`)).json()).id).toBe("user-mina");
+  await page.goto("/dashboard/bookmarks");
+  await expect(page.getByRole("main")).toContainText("هنوز مقاله‌ای ذخیره نکرده‌اید.");
+  expect((await request.put(`${base}/article-bookmarks/test-post-2`, { headers: { "X-Fixture-User": "user" } })).status()).toBe(403);
+  await page.goto("/posts/test-post-2");
+  await page.getByRole("button", { name: "ذخیره مقاله", exact: true }).click();
+  await expect(page.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.goto("/dashboard/bookmarks");
+  await page.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("article")).toHaveCount(0);
+  await request.put(`${base}/article-bookmarks/test-post-1`);
+  expect(await (await request.get(`${base}/dashboard-my-comments`)).json()).toEqual([]);
+  expect((await request.patch(`${base}/dashboard-my-comments/60000000-0000-4000-8000-000000000001`, { data: { text: "نباید ذخیره شود" } })).status()).toBe(404);
+  const own = await request.post(`${base}/article-comments/test-post-1`, { data: { text: "دیدگاه کاربر دوم" } });
+  expect((await own.json()).userId).toBe("user-mina");
+  await request.post(`${base}/__test/dashboard?role=USER&user=narges`);
+  await page.goto("/dashboard/bookmarks");
+  await expect(page.getByRole("main").getByRole("article").getByRole("link")).toHaveAttribute("href", "/posts/test-post-2");
+  expect((await (await request.get(`${base}/dashboard-my-comments`)).json()).map((item: { userId: string }) => item.userId)).toEqual(["user"]);
+  await page.reload();
+  await expect(page.getByRole("main").getByRole("article")).toHaveCount(1);
+  await request.post(`${base}/__test/dashboard?role=USER&user=mina`);
+  await page.reload();
+  await expect(page.getByRole("main").getByRole("article").getByRole("link")).toHaveAttribute("href", "/posts/test-post-1");
+});
+
+test("USER bookmarks published articles, opens the saved list and removes bookmarks with reload persistence", async ({ page }) => {
+  await page.goto("/posts/test-post-2");
+  const toggle = page.getByRole("button", { name: "ذخیره مقاله", exact: true });
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await toggle.click();
+  const remove = page.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true });
+  await expect(remove).toHaveAttribute("aria-pressed", "true");
+  await page.reload();
+  await expect(remove).toHaveAttribute("aria-pressed", "true");
+  await page.goto("/dashboard");
+  const nav = page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true });
+  await expect(nav.getByRole("link", { name: "فضای خواندن", exact: true })).toHaveCount(0);
+  await nav.getByRole("link", { name: "مقالات ذخیره‌شده", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/bookmarks$/);
+  const article = page.getByRole("main").getByRole("article");
+  await expect(article).toHaveCount(1);
+  await expect(article.getByRole("link")).toHaveAttribute("href", "/posts/test-post-2");
+  await article.getByRole("link").click();
+  await expect(remove).toHaveAttribute("aria-pressed", "true");
+  await remove.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await page.reload();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await toggle.click();
+  await expect(remove).toHaveAttribute("aria-pressed", "true");
+  await page.goto("/dashboard/bookmarks");
+  await page.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact: true }).click();
+  await expect(article).toHaveCount(0);
+  await expect(page.getByRole("main")).toContainText("هنوز مقاله‌ای ذخیره نکرده‌اید.");
+  await page.reload();
+  await expect(article).toHaveCount(0);
+});
+
+test("My Comments rejects non-USER access, foreign ownership and forged moderation or association fields", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  const own = `${base}/dashboard-my-comments/60000000-0000-4000-8000-000000000001`;
+  const foreign = `${base}/dashboard-my-comments/60000000-0000-4000-8000-000000000002`;
+  for (const role of ["SIGNED_OUT", "AUTHOR", "ADMIN"]) {
+    await request.post(`${base}/__test/dashboard?role=${role}`);
+    expect((await request.get(`${base}/dashboard-my-comments`)).status()).toBe(403);
+    expect((await request.patch(own, { data: { text: "نباید ذخیره شود" } })).status()).toBe(403);
+    expect((await request.delete(own)).status()).toBe(403);
+    await page.goto("/dashboard/my-comments");
+    await expect(page.getByRole("link", { name: "کامنت‌های من", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("main").getByRole("button", { name: "ویرایش", exact: true })).toHaveCount(0);
+  }
+  await request.post(`${base}/__test/dashboard?role=USER`);
+  const comments = await (await request.get(`${base}/dashboard-my-comments`)).json();
+  expect(comments).toHaveLength(1);
+  expect(comments[0].userId).toBe("user");
+  expect(comments[0]).not.toHaveProperty("postId");
+  expect((await request.patch(foreign, { data: { text: "نباید ذخیره شود" } })).status()).toBe(404);
+  expect((await request.delete(foreign)).status()).toBe(404);
+  for (const data of [{ text: " " }, { text: 4 }, { text: "متن", status: "APPROVED" }, { text: "متن", userId: "other" }, { text: "متن", postId: "other" }, { text: "متن", parentId: "other" }]) {
+    expect((await request.patch(own, { data })).status()).toBe(400);
+  }
+  expect((await request.post(`${base}/dashboard-my-comments`, { data: { text: "متن" } })).status()).toBe(405);
+  expect(await (await request.get(`${base}/dashboard-my-comments`)).json()).toEqual(comments);
+});
+
+test("My Comments validates edits, preserves failed writes and disables pending edit/delete confirmations", async ({ page, request }) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=USER";
+  await page.goto("/dashboard/my-comments");
+  const row = page.getByRole("main").getByRole("listitem");
+  await row.getByRole("button", { name: "ویرایش", exact: true }).click();
+  const edit = page.getByRole("dialog", { name: "ویرایش کامنت", exact: true });
+  const input = edit.getByLabel("متن کامنت", { exact: true });
+  const save = edit.getByRole("button", { name: "ثبت تغییرات", exact: true });
+  await expect(input).toBeFocused();
+  await input.fill("  ");
+  await save.click();
+  await expect(input).toHaveAccessibleDescription("متن دیدگاه را وارد کنید.");
+  await expect(input).toBeFocused();
+  const text = "ویرایش کامنت در انتظار تأیید";
+  await input.fill(text);
+  await request.post(`${control}&saveMode=error`);
+  await save.click();
+  await expect(edit.getByRole("alert")).toContainText("انجام عملیات ممکن نشد");
+  await expect(input).toHaveValue(text);
+  await request.post(`${control}&saveMode=slow`);
+  await save.click();
+  await expect(edit.getByRole("status")).toHaveText("در حال ثبت تغییرات…");
+  await expect(save).toBeDisabled();
+  await expect(input).toBeDisabled();
+  await expect(edit.getByRole("button", { name: "انصراف", exact: true })).toBeDisabled();
+  await expect(edit).not.toBeVisible();
+  await expect(row).toContainText(text);
+  await expect(row).toContainText("در انتظار تأیید");
+  await page.reload();
+  await expect(row).toContainText(text);
+  await request.post(`${control}&saveMode=error`);
+  await row.getByRole("button", { name: "حذف کامنت", exact: true }).click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("انجام عملیات ممکن نشد");
+  await expect(row).toHaveCount(1);
+  await request.post(`${control}&saveMode=slow`);
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog.getByRole("status")).toHaveText("در حال حذف کامنت…");
+  await expect(dialog.getByRole("button", { name: "تأیید حذف", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeDisabled();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByRole("main").getByRole("status")).toHaveText("کامنت حذف شد.");
+});
+
+test("My Comments reload resolves uncertain edit and deletion results without repeat actions", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER&saveMode=uncertain");
+  await page.goto("/dashboard/my-comments");
+  const row = page.getByRole("main").getByRole("listitem");
+  await row.getByRole("button", { name: "ویرایش", exact: true }).click();
+  const edit = page.getByRole("dialog", { name: "ویرایش کامنت", exact: true });
+  const text = "نتیجهٔ نامشخص ویرایش";
+  await edit.getByLabel("متن کامنت", { exact: true }).fill(text);
+  await edit.getByRole("button", { name: "ثبت تغییرات", exact: true }).click();
+  await expect(edit.getByRole("alert")).toContainText("نتیجهٔ عملیات مشخص نیست");
+  await expect(edit.getByLabel("متن کامنت", { exact: true })).toHaveValue(text);
+  await expect(edit.getByRole("button", { name: "ثبت تغییرات", exact: true })).toBeDisabled();
+  await edit.getByRole("button", { name: "انصراف", exact: true }).click();
+  await expect(row.getByRole("button", { name: "ویرایش", exact: true })).toBeDisabled();
+  await page.reload();
+  await expect(row).toContainText(text);
+  await expect(row).toContainText("در انتظار تأیید");
+  await row.getByRole("button", { name: "حذف کامنت", exact: true }).click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("نتیجهٔ عملیات مشخص نیست");
+  await expect(dialog.getByRole("button", { name: "تأیید حذف", exact: true })).toBeDisabled();
+  await page.reload();
+  await expect(row).toHaveCount(0);
+});
+
+test("My Comments loading, empty and rejected foreign/error states recover with stable mobile and desktop layout", async ({ page, request }, testInfo) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=USER";
+  const list = page.getByRole("region", { name: "فهرست کامنت‌های من", exact: true });
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await request.post(`${control}&commentsMode=slow`);
+    await page.goto("/dashboard/my-comments", { waitUntil: "commit" });
+    await expect(list.getByRole("status")).toHaveText("در حال دریافت کامنت‌های من…");
+    await page.evaluate(() => document.fonts.ready);
+    const before = await list.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY);
+    await expect(list.getByRole("button", { name: "ویرایش", exact: true })).toBeVisible();
+    const after = await list.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY);
+    expect(Math.abs(after - before)).toBeLessThanOrEqual(1);
+    await list.getByRole("button", { name: "حذف کامنت", exact: true }).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeFocused();
+    const bounds = await dialog.boundingBox();
+    expect(Math.abs(bounds!.x + bounds!.width / 2 - width / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(bounds!.y + bounds!.height / 2 - 450)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: testInfo.outputPath(`own-comments-modal-${width}.png`), fullPage: true });
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`own-comments-${width}.png`), fullPage: true });
+  }
+  for (const mode of ["error", "invalid", "foreign", "slow-error"]) {
+    await request.post(`${control}&commentsMode=${mode}`);
+    await page.reload({ waitUntil: mode === "slow-error" ? "commit" : "load" });
+    let before = 0;
+    if (mode === "slow-error") {
+      await expect(list.getByRole("status")).toHaveText("در حال دریافت کامنت‌های من…");
+      before = await list.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY);
+    }
+    await expect(list.getByRole("alert")).toContainText("دریافت کامنت‌های شما ممکن نشد");
+    await expect(list.getByRole("button", { name: "ویرایش", exact: true })).toHaveCount(0);
+    if (mode === "slow-error") expect(Math.abs(await list.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY) - before)).toBeLessThanOrEqual(1);
+  }
+  await request.post(`${control}&commentsMode=empty`);
+  await list.getByRole("button", { name: "تلاش دوباره", exact: true }).click();
+  await expect(list).toContainText("هنوز کامنتی ثبت نکرده‌اید.");
+  await request.post(control);
+  await page.reload();
+  await expect(list.getByRole("button", { name: "ویرایش", exact: true })).toBeVisible();
+});
+
+test("USER opens My Comments, edits approved content back to pending and deletes only after confirmation", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  const id = "60000000-0000-4000-8000-000000000001";
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  await request.patch(`${base}/dashboard-comments/${id}`, { data: { status: "APPROVED" } });
+  await request.post(`${base}/__test/dashboard?role=USER`);
+  await page.goto("/dashboard/workspace");
+  await page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true }).getByRole("link", { name: "کامنت‌های من", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/my-comments$/);
+  const row = page.getByRole("main").getByRole("listitem");
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText("تأییدشده");
+  await expect(page.getByRole("main")).not.toContainText("این دیدگاه قبلاً تأیید شده است.");
+  await row.getByRole("button", { name: "ویرایش", exact: true }).click();
+  const edit = page.getByRole("dialog", { name: "ویرایش کامنت", exact: true });
+  const text = "دیدگاه ویرایش‌شدهٔ خودم";
+  await edit.getByLabel("متن کامنت", { exact: true }).fill(text);
+  await edit.getByRole("button", { name: "ثبت تغییرات", exact: true }).click();
+  await expect(edit).not.toBeVisible();
+  await expect(row).toContainText(text);
+  await expect(row).toContainText("در انتظار تأیید");
+  await page.reload();
+  await expect(row).toContainText(text);
+  await expect(row).toContainText("در انتظار تأیید");
+  await page.goto("/posts/test-post-2");
+  await expect(page.getByRole("region", { name: "دیدگاه‌های مقاله", exact: true })).not.toContainText(text);
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  await page.goto("/dashboard/comments");
+  await page.getByRole("main").getByRole("listitem").filter({ hasText: text }).getByRole("button", { name: "تأیید", exact: true }).click();
+  await page.goto("/posts/test-post-2");
+  await expect(page.getByRole("region", { name: "دیدگاه‌های مقاله", exact: true })).toContainText(text);
+  await request.post(`${base}/__test/dashboard?role=USER`);
+  await page.goto("/dashboard/my-comments");
+  await row.getByRole("button", { name: "حذف کامنت", exact: true }).click();
+  const dialog = page.getByRole("alertdialog", { name: "حذف کامنت", exact: true });
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeFocused();
+  await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+  await expect(row).toHaveCount(1);
+  await page.reload();
+  await expect(row).toHaveCount(1);
+  await row.getByRole("button", { name: "حذف کامنت", exact: true }).click();
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(row).toHaveCount(0);
+  await expect(page.getByRole("main")).toContainText("هنوز کامنتی ثبت نکرده‌اید.");
+  await page.reload();
+  await expect(row).toHaveCount(0);
+  await page.goto("/posts/test-post-2");
+  await expect(page.getByRole("region", { name: "دیدگاه‌های مقاله", exact: true })).not.toContainText(text);
+});
+
+test("article comment validation, failed and uncertain submissions preserve input and pending actions cannot repeat", async ({ page, request }) => {
+  await page.goto("/posts/test-post-2");
+  const comments = page.getByRole("region", { name: "دیدگاه‌های مقاله", exact: true });
+  const input = page.getByLabel("متن دیدگاه", { exact: true });
+  const submit = page.getByRole("button", { name: "ارسال دیدگاه", exact: true });
+  await input.fill("   ");
+  await submit.click();
+  await expect(input).toBeFocused();
+  await expect(input).toHaveAccessibleDescription("متن دیدگاه را وارد کنید.");
+  const text = "دیدگاهی که هنگام خطا حفظ می‌شود";
+  await input.fill(text);
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER&saveMode=error");
+  await submit.click();
+  await expect(comments.getByRole("alert")).toContainText("ارسال دیدگاه انجام نشد");
+  await expect(input).toHaveValue(text);
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER&saveMode=slow");
+  await submit.click();
+  await expect(comments.getByRole("status")).toHaveText("در حال ارسال دیدگاه…");
+  await expect(submit).toBeDisabled();
+  await expect(input).toBeDisabled();
+  await expect(comments.getByRole("status")).toContainText("در انتظار تأیید");
+  await expect(input).toHaveValue("");
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER&saveMode=uncertain");
+  const uncertain = "دیدگاه با نتیجهٔ نامشخص";
+  await input.fill(uncertain);
+  await submit.click();
+  await expect(comments.getByRole("alert")).toContainText("نتیجهٔ ارسال مشخص نیست");
+  await expect(input).toHaveValue(uncertain);
+  await expect(submit).toBeDisabled();
+  await page.reload();
+  await expect(comments).not.toContainText(uncertain);
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
+  const queue = await (await request.get("http://127.0.0.1:4101/dashboard-comments")).json();
+  expect(queue.filter((item: { text: string }) => item.text === text)).toHaveLength(1);
+  expect(queue.filter((item: { text: string }) => item.text === uncertain)).toHaveLength(1);
+});
+
+test("article comments show loading, empty and safe retry states on mobile and desktop", async ({ page, request }, testInfo) => {
+  const comments = page.getByRole("region", { name: "دیدگاه‌های مقاله", exact: true });
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER&commentsMode=slow");
+    await page.goto("/posts/test-post-2", { waitUntil: "commit" });
+    await expect(comments.getByRole("status")).toHaveText("در حال دریافت دیدگاه‌ها…");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    const before = await comments.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY);
+    await expect(page.getByLabel("متن دیدگاه", { exact: true })).toBeVisible();
+    const after = await comments.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY);
+    const cards = await comments.locator(":scope > div").evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height));
+    expect(Math.abs(after - before), JSON.stringify({ before, after, cards })).toBeLessThanOrEqual(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`article-comments-${width}.png`), fullPage: true });
+  }
+  for (const mode of ["error", "invalid", "slow-error"]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=USER&commentsMode=${mode}`);
+    if (mode === "slow-error") await page.setViewportSize({ width: 360, height: 900 });
+    await page.reload({ waitUntil: mode === "slow-error" ? "commit" : "load" });
+    let beforeError = 0;
+    if (mode === "slow-error") {
+      await expect(comments.getByRole("status")).toHaveText("در حال دریافت دیدگاه‌ها…");
+      await page.evaluate(() => document.fonts.ready);
+      beforeError = await comments.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY);
+    }
+    await expect(comments.getByRole("alert")).toContainText("دریافت دیدگاه‌ها ممکن نشد");
+    if (mode === "slow-error") {
+      const afterError = await comments.evaluate(element => element.getBoundingClientRect().bottom + window.scrollY);
+      expect(Math.abs(afterError - beforeError)).toBeLessThanOrEqual(1);
+    }
+    await expect(comments).not.toContainText("این دیدگاه در انتظار بررسی است.");
+    await expect(page.getByLabel("متن دیدگاه", { exact: true })).toHaveCount(0);
+  }
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER&commentsMode=empty");
+  await comments.getByRole("button", { name: "تلاش دوباره", exact: true }).click();
+  await expect(comments).toContainText("هنوز دیدگاه تأییدشده‌ای برای این مقاله وجود ندارد.");
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER");
+  await page.reload();
+  await expect(comments).toContainText("این دیدگاه قبلاً تأیید شده است.");
+});
+
+test("article comment fixtures enforce USER submission, server associations, pending visibility and published-only paths", async ({ request, page }) => {
+  const base = "http://127.0.0.1:4101";
+  const path = `${base}/article-comments/test-post-2`;
+  for (const role of ["SIGNED_OUT", "AUTHOR", "ADMIN"]) {
+    await request.post(`${base}/__test/dashboard?role=${role}`);
+    expect((await request.post(path, { data: { text: "نباید ثبت شود" } })).status()).toBe(403);
+    expect((await request.get(path)).status()).toBe(200);
+    await page.goto("/posts/test-post-2");
+    await expect(page.getByLabel("متن دیدگاه", { exact: true })).toHaveCount(0);
+  }
+  await request.post(`${base}/__test/dashboard?role=USER`);
+  for (const body of [{ text: " " }, { text: "دیدگاه", status: "APPROVED" }, { text: "دیدگاه", userId: "admin" }, { text: "دیدگاه", postId: "other" }, { text: "دیدگاه", parentId: "comment-1" }]) {
+    expect((await request.post(path, { data: body })).status()).toBe(400);
+  }
+  for (const slug of ["missing-post", "draft-post", "deprecated-post"]) {
+    expect((await request.get(`${base}/article-comments/${slug}`)).status()).toBe(404);
+    expect((await request.post(`${base}/article-comments/${slug}`, { data: { text: "دیدگاه" } })).status()).toBe(404);
+  }
+  const response = await request.post(path, { data: { text: "  دیدگاه آزمایشی  " } });
+  expect(response.status()).toBe(201);
+  const saved = await response.json();
+  expect(saved).toMatchObject({ postId: "00000000-0000-4000-8000-000000000002", userId: "user", name: "نرگس رضایی", text: "دیدگاه آزمایشی", status: "PENDING" });
+  expect((await (await request.get(path)).json()).some((item: { id: string }) => item.id === saved.id)).toBe(false);
+  expect((await request.delete(path)).status()).toBe(405);
+});
+
+test("article comment submission stays disabled without JavaScript", async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    await page.goto("http://127.0.0.1:3102/posts/test-post-2");
+    await expect(page.getByLabel("متن دیدگاه", { exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "ارسال دیدگاه", exact: true, includeHidden: true })).toBeDisabled();
+  } finally { await context.close(); }
+});
+
+test("USER article comments stay pending until existing ADMIN moderation approves them and deletion removes visibility", async ({ page, request }) => {
+  await page.goto("/posts/test-post-2");
+  const comments = page.getByRole("region", { name: "دیدگاه‌های مقاله", exact: true });
+  await expect(comments).toContainText("این دیدگاه قبلاً تأیید شده است.");
+  await expect(comments).not.toContainText("این دیدگاه در انتظار بررسی است.");
+  const text = "دیدگاه تازهٔ کاربر برای مقالهٔ دوم";
+  await page.getByLabel("متن دیدگاه", { exact: true }).fill(text);
+  await page.getByRole("button", { name: "ارسال دیدگاه", exact: true }).click();
+  await expect(comments.getByRole("status")).toContainText("در انتظار تأیید");
+  await expect(comments.getByRole("list")).not.toContainText(text);
+  await page.reload();
+  await expect(comments).not.toContainText(text);
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
+  await page.goto("/dashboard/comments");
+  const row = page.getByRole("main").getByRole("listitem").filter({ hasText: text });
+  await expect(row).toContainText("در انتظار تأیید");
+  await row.getByRole("button", { name: "تأیید", exact: true }).click();
+  await expect(row).toContainText("تأییدشده");
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT");
+  await page.goto("/posts/test-post-2");
+  await expect(comments).toContainText(text);
+  await expect(page.getByLabel("متن دیدگاه", { exact: true })).toHaveCount(0);
+  await page.reload();
+  await expect(comments).toContainText(text);
+  await page.goto("/posts/test-post-1");
+  await expect(comments).not.toContainText(text);
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
+  await page.goto("/dashboard/comments");
+  await row.getByRole("button", { name: "حذف کامنت", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(row).toHaveCount(0);
+  await page.goto("/posts/test-post-2");
+  await expect(comments).not.toContainText(text);
+});
+
+test("published article cards open the shared public detail route for USER and signed-out readers", async ({ page, request }) => {
+  for (const role of ["USER", "SIGNED_OUT"]) {
+    await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT");
+    if (role === "USER") {
+      await page.goto("/login");
+      await page.getByLabel("ایمیل", { exact: true }).fill("reader@example.test");
+      await page.getByLabel("گذرواژه", { exact: true }).fill("a");
+      await page.getByRole("button", { name: "ورود با ایمیل", exact: true }).click();
+      await expect(page).toHaveURL(/:3102\/$/);
+    } else await page.goto("/");
+    const card = page.getByRole("article").first().getByRole("link");
+    await expect(card).toHaveAttribute("href", "/posts/test-post-2");
+    await card.click();
+    await expect(page).toHaveURL(/\/posts\/test-post-2$/);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("عنوان <strong>مقاله</strong> باید متن بماند");
+    expect((await page.reload())?.status()).toBe(200);
+    for (const slug of ["missing-post", "draft-post", "deprecated-post"]) {
+      expect((await page.goto(`/posts/${slug}`))?.status()).toBe(404);
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText("مقاله پیدا نشد");
+    }
+  }
+});
+
+for (const [role, label, validPassword] of [["USER", "کاربر", "a"], ["AUTHOR", "نویسنده", "123"]]) {
+  test(`${role} login rejects non-ASCII and whitespace while allowing simple ASCII passwords`, async ({ page, request }) => {
+    await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT");
+    await page.goto("/login");
+    await page.getByRole("radio", { name: label, exact: true }).check();
+    await page.getByLabel("ایمیل", { exact: true }).fill("reader@example.test");
+    const password = page.getByLabel("گذرواژه", { exact: true });
+    for (const value of ["فارسی123!", "abcé", "abc۱", "abc😀", " abc", "abc ", "a b", "a\tb", "a\u00a0b"]) {
+      await password.fill(value);
+      await page.getByRole("button", { name: "ورود با ایمیل", exact: true }).click();
+      await expect(password).toHaveAttribute("aria-invalid", "true");
+      await expect(password).toHaveAccessibleDescription(/فاصله و نویسه‌های فارسی یا غیرانگلیسی مجاز نیستند/);
+      await expect(password).toBeFocused();
+      await expect(page.getByRole("radio", { name: label, exact: true })).toBeChecked();
+      expect((await request.get("http://127.0.0.1:4101/dashboard-identity")).status()).toBe(401);
+    }
+    await password.fill(validPassword);
+    await page.getByRole("button", { name: "ورود با ایمیل", exact: true }).click();
+    await expect(page).toHaveURL(/:3102\/$/);
+    await page.reload();
+    expect((await (await request.get("http://127.0.0.1:4101/dashboard-identity")).json()).role).toBe(role);
+    await expect(page.locator("header")).toContainText(label);
+  });
+}
+
+for (const role of ["USER", "AUTHOR"]) {
+  test(`${role} sidebar logout recovers errors, disables pending actions and persists signed-out state`, async ({ page, request }, testInfo) => {
+    await page.setViewportSize({ width: 360, height: 900 });
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=${role}&saveMode=error`);
+    await page.goto("/dashboard/workspace");
+    const logout = page.locator("aside").getByRole("button", { name: "خروج", exact: true });
+    await expect(logout).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    const beforeError = await page.getByRole("main").evaluate(element => element.getBoundingClientRect().top + window.scrollY);
+    await logout.click();
+    await expect(page.locator("aside").getByRole("alert")).toContainText("خروج انجام نشد");
+    const afterError = await page.getByRole("main").evaluate(element => element.getBoundingClientRect().top + window.scrollY);
+    expect(Math.abs(afterError - beforeError)).toBeLessThanOrEqual(1);
+    expect((await (await request.get("http://127.0.0.1:4101/dashboard-identity")).json()).role).toBe(role);
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=${role}&saveMode=slow`);
+    await logout.click();
+    await expect(page.locator("aside").getByRole("button", { name: "در حال خروج…", exact: true })).toBeDisabled();
+    await expect(page).toHaveURL(/:3102\/$/);
+    await page.reload();
+    await expect(page.getByRole("link", { name: "ورود / ثبت‌نام", exact: true })).toBeVisible();
+    await page.goto("/dashboard");
+    await expect(page.locator("aside").getByRole("button", { name: "خروج", exact: true })).toHaveCount(0);
+    for (const width of [360, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await request.post(`http://127.0.0.1:4101/__test/dashboard?role=${role}`);
+      await page.goto("/dashboard/workspace");
+      await expect(logout).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`sidebar-logout-${role}-${width}.png`), fullPage: true });
+      await logout.focus();
+      await page.keyboard.press("Enter");
+      await expect(page).toHaveURL(/:3102\/$/);
+      await expect(page.getByRole("link", { name: "ورود / ثبت‌نام", exact: true })).toBeVisible();
+    }
+  });
+}
+
+test("email registration fixture rejects invalid passwords and confirmations without changing identity", async ({ request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT");
+  for (const [password, confirmPassword] of [["Ab1!xyz", "Ab1!xyz"], ["1234567!", "1234567!"], ["abcdefgh!", "abcdefgh!"], ["abcdef12", "abcdef12"], ["Abcdef1! ", "Abcdef1! "], ["Abcdef1!فارسی", "Abcdef1!فارسی"], ["abcdef1!", "Abcdef1!"], ["abcdef1!", ""], [undefined, undefined]]) {
+    expect((await request.post("http://127.0.0.1:4101/__test/auth", { data: { operation: "register", provider: "email", role: "USER", password, confirmPassword } })).status()).toBe(400);
+    expect((await request.get("http://127.0.0.1:4101/dashboard-identity")).status()).toBe(401);
+  }
+  expect((await request.post("http://127.0.0.1:4101/__test/auth", { data: { operation: "register", provider: "email", role: "AUTHOR", password: "abcdef1!", confirmPassword: "abcdef1!" } })).status()).toBe(204);
+  expect((await (await request.get("http://127.0.0.1:4101/dashboard-identity")).json()).role).toBe("USER");
+});
+
+test("registration validates password rules and exact confirmation before fixture writes", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT");
+  await page.goto("/register");
+  await page.getByLabel("ایمیل", { exact: true }).fill("reader@example.test");
+  const password = page.getByLabel("گذرواژه", { exact: true });
+  const confirmation = page.getByLabel("تکرار گذرواژه", { exact: true });
+  await expect(confirmation).toBeVisible();
+  for (const [value, message] of [["Ab1!xyz", /۸ نویسه/], ["1234567!", /حرف انگلیسی/], ["abcdefgh!", /رقم انگلیسی/], ["abcdef12", /نماد/], ["Abcdef1! ", /فاصله/], ["Abcdef1!فارسی", /فارسی/]]) {
+    await password.fill(String(value));
+    await confirmation.fill(String(value));
+    await page.getByRole("button", { name: "ثبت‌نام با ایمیل", exact: true }).click();
+    await expect(password).toHaveAttribute("aria-invalid", "true");
+    await expect(password).toHaveAccessibleDescription(message);
+    await expect(password).toBeFocused();
+    expect((await request.get("http://127.0.0.1:4101/dashboard-identity")).status()).toBe(401);
+  }
+  await password.fill("abcdef1!");
+  await confirmation.fill("Abcdef1!");
+  await page.getByRole("button", { name: "ثبت‌نام با ایمیل", exact: true }).click();
+  await expect(confirmation).toHaveAccessibleDescription("تکرار گذرواژه باید دقیقاً با گذرواژه یکسان باشد.");
+  await expect(confirmation).toBeFocused();
+  await confirmation.fill("abcdef1!");
+  await page.getByRole("button", { name: "ثبت‌نام با ایمیل", exact: true }).click();
+  await expect(page).toHaveURL(/:3102\/$/);
+  await page.reload();
+  await expect(page.locator("header")).toContainText("کاربر");
+});
+
+test("fixture auth controls remain disabled without JavaScript", async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    for (const [route, title] of [["login", "ورود"], ["register", "ثبت‌نام"]]) {
+      await page.goto(`http://127.0.0.1:3102/${route}`);
+      await expect(page.getByLabel("ایمیل", { exact: true })).toBeDisabled();
+      await expect(page.getByLabel("گذرواژه", { exact: true })).toBeDisabled();
+      if (route === "register") await expect(page.getByLabel("تکرار گذرواژه", { exact: true })).toBeDisabled();
+      for (const provider of ["ایمیل", "گوگل", "گیت‌هاب"]) {
+        await expect(page.getByRole("button", { name: `${title} با ${provider}`, exact: true })).toBeDisabled();
+      }
+    }
+  } finally { await context.close(); }
+});
+
+test("registration creates only USER and fixture header persists until logout", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT");
+  await page.goto("/");
+  await page.getByRole("link", { name: "ورود / ثبت‌نام", exact: true }).click();
+  await page.getByRole("link", { name: "ثبت‌نام", exact: true }).click();
+  await expect(page.getByRole("radio")).toHaveCount(0);
+  await page.getByLabel("ایمیل", { exact: true }).fill("reader@example.test");
+  await page.getByLabel("گذرواژه", { exact: true }).fill("Fixture-only-1!");
+  await page.getByLabel("تکرار گذرواژه", { exact: true }).fill("Fixture-only-1!");
+  await page.getByRole("button", { name: "ثبت‌نام با ایمیل", exact: true }).click();
+  await expect(page).toHaveURL(/:3102\/$/);
+  await expect(page.locator("header")).toContainText("کاربر");
+  await page.reload();
+  await expect(page.locator("header")).toContainText("کاربر");
+  await page.getByRole("button", { name: "خروج", exact: true }).click();
+  await page.reload();
+  await expect(page.getByRole("link", { name: "ورود / ثبت‌نام", exact: true })).toBeVisible();
+});
+
+test("email simulation validates locally, reports failures and blocks repeated pending actions", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT&saveMode=error");
+  await page.goto("/login");
+  await page.getByRole("button", { name: "ورود با ایمیل", exact: true }).click();
+  await expect(page.getByLabel("ایمیل", { exact: true })).toBeFocused();
+  await expect(page.getByText("یک ایمیل معتبر وارد کنید.", { exact: true })).toBeVisible();
+  await page.getByLabel("ایمیل", { exact: true }).fill("reader@example.test");
+  await page.getByLabel("گذرواژه", { exact: true }).fill("fixture-only-password");
+  await page.getByRole("button", { name: "ورود با ایمیل", exact: true }).click();
+  await expect(page.locator("main").getByRole("alert")).toContainText("شبیه‌سازی انجام نشد");
+  await expect(page.getByLabel("ایمیل", { exact: true })).toHaveValue("reader@example.test");
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT&saveMode=slow");
+  await page.getByRole("radio", { name: "نویسنده", exact: true }).check();
+  await page.getByRole("button", { name: "ورود با ایمیل", exact: true }).click();
+  await expect(page.locator("main").getByRole("status")).toContainText("در حال شبیه‌سازی");
+  await expect(page.getByRole("button", { name: "ورود با گوگل", exact: true })).toBeDisabled();
+  await expect(page).toHaveURL(/:3102\/$/);
+  await expect(page.locator("header")).toContainText("نویسنده");
+  await page.reload();
+  await expect(page.locator("header")).toContainText("نویسنده");
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const route of ["/", "/register", "/login"]) {
+      await page.goto(route);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`auth-${route.replaceAll("/", "") || "home"}-${width}.png`), fullPage: true });
+    }
+  }
+});
+
+for (const provider of ["گوگل", "گیت‌هاب"]) {
+  test(`${provider} fixture registration and USER/AUTHOR login have simulated persistent outcomes`, async ({ page, request }) => {
+    await request.post("http://127.0.0.1:4101/__test/dashboard?role=SIGNED_OUT");
+    for (const [route, action, role, label] of [["register", "ثبت‌نام", "USER", "کاربر"], ["login", "ورود", "USER", "کاربر"], ["login", "ورود", "AUTHOR", "نویسنده"]]) {
+      await page.goto(`/${route}`);
+      if (route === "login") await page.getByRole("radio", { name: label, exact: true }).check();
+      await page.getByRole("button", { name: `${action} با ${provider}`, exact: true }).click();
+      await expect(page).toHaveURL(/:3102\/$/);
+      await page.reload();
+      await expect(page.locator("header")).toContainText(label);
+      await expect(page.getByRole("link", { name: /حساب آزمایشی/ })).toHaveAttribute("href", "/dashboard");
+      const identity = await (await request.get("http://127.0.0.1:4101/dashboard-identity")).json();
+      expect(identity.role).toBe(role);
+      await page.getByRole("button", { name: "خروج", exact: true }).click();
+      await expect(page.getByRole("link", { name: "ورود / ثبت‌نام", exact: true })).toBeVisible();
+    }
+  });
+}
+
+test("fixture registration cannot assign AUTHOR or ADMIN and separate ADMIN preview remains", async ({ request }) => {
+  for (const provider of ["email", "google", "github"]) {
+    expect((await request.post("http://127.0.0.1:4101/__test/auth", { data: { operation: "register", provider, role: "AUTHOR", ...(provider === "email" ? { password: "abcdef1!", confirmPassword: "abcdef1!" } : {}) } })).status()).toBe(204);
+    expect((await (await request.get("http://127.0.0.1:4101/dashboard-identity")).json()).role).toBe("USER");
+    expect((await request.post("http://127.0.0.1:4101/__test/auth", { data: { operation: "login", provider, role: "ADMIN" } })).status()).toBe(400);
+  }
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
+  expect((await (await request.get("http://127.0.0.1:4101/dashboard-identity")).json()).role).toBe("ADMIN");
+});
+
+test("AUTHOR previews, saves and removes an avatar with reload persistence and isolated identities", async ({ page, request }, testInfo) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=AUTHOR";
+  await request.post(control);
+  await page.goto("/dashboard/workspace");
+  const link = page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true }).getByRole("link", { name: "عکس پروفایل", exact: true });
+  await expect(link).toBeVisible();
+  await link.click();
+  await expect(page).toHaveURL(/\/dashboard\/avatar$/);
+  await expect(page.getByRole("img", { name: "بدون عکس پروفایل", exact: true })).toBeVisible();
+  await page.getByLabel("فایل عکس پروفایل", { exact: true }).setInputFiles("public/social/linkedin.png");
+  await expect(page.getByRole("img", { name: "پیش‌نمایش عکس پروفایل", exact: true })).toHaveAttribute("src", /^blob:/);
+  await page.getByRole("button", { name: "ذخیرهٔ عکس", exact: true }).click();
+  const saved = page.getByRole("img", { name: "عکس پروفایل", exact: true });
+  await expect(saved).toHaveAttribute("src", /^\/fixture-images\/[a-f0-9-]+$/);
+  const src = await saved.getAttribute("src");
+  await page.reload();
+  await expect(saved).toHaveAttribute("src", src!);
+  await request.post(`${control}&author=nima`);
+  await page.reload();
+  await expect(page.getByRole("img", { name: "بدون عکس پروفایل", exact: true })).toBeVisible();
+  await request.post(control);
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.reload();
+    await expect(saved).toHaveAttribute("src", src!);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`avatar-${width}.png`), fullPage: true });
+  }
+  await page.getByRole("button", { name: "حذف عکس", exact: true }).click();
+  await expect(page.getByRole("img", { name: "بدون عکس پروفایل", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("img", { name: "بدون عکس پروفایل", exact: true })).toBeVisible();
+});
+
+test("avatar action buttons stay in place during a pending upload on mobile and desktop", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&imageMode=slow");
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/dashboard/avatar");
+    await page.getByLabel("فایل عکس پروفایل", { exact: true }).setInputFiles("public/social/linkedin.png");
+    const save = page.getByRole("button", { name: "ذخیرهٔ عکس", exact: true });
+    await page.evaluate(() => document.fonts.ready);
+    await save.scrollIntoViewIfNeeded();
+    const before = await save.evaluate(element => element.getBoundingClientRect().top + window.scrollY);
+    await save.click();
+    await expect(page.getByRole("status")).toContainText("در حال ذخیرهٔ تغییرات عکس…");
+    const during = await save.evaluate(element => element.getBoundingClientRect().top + window.scrollY);
+    expect(Math.abs(during - before)).toBeLessThanOrEqual(1);
+    await expect(page.getByRole("img", { name: "عکس پروفایل", exact: true })).toBeVisible();
+  }
+});
+
+test("avatar validates files and preserves saved state across upload and removal failures", async ({ page, request }) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=AUTHOR";
+  await request.post(control);
+  await page.goto("/dashboard/avatar");
+  const file = page.getByLabel("فایل عکس پروفایل", { exact: true });
+  const save = page.getByRole("button", { name: "ذخیرهٔ عکس", exact: true });
+  for (const input of [{ name: "invalid.txt", mimeType: "text/plain", buffer: Buffer.from("TEST DOUBLE") }, { name: "empty.png", mimeType: "image/png", buffer: Buffer.alloc(0) }, { name: "large.png", mimeType: "image/png", buffer: Buffer.alloc(5 * 1024 * 1024 + 1) }]) {
+    await file.setInputFiles(input);
+    await expect(file).toHaveAttribute("aria-invalid", "true");
+    await expect(save).toBeDisabled();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("۵ مگابایت");
+  }
+  await file.setInputFiles("public/social/linkedin.png");
+  await request.post(`${control}&imageMode=error`);
+  await save.click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("ذخیرهٔ تغییرات عکس انجام نشد.");
+  await request.post(`${control}&saveMode=error`);
+  await save.click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("ذخیرهٔ تغییرات عکس انجام نشد.");
+  expect(await (await request.get("http://127.0.0.1:4101/dashboard-avatar")).json()).toEqual({ src: null });
+  await request.post(`${control}&imageMode=slow`);
+  await save.click();
+  await expect(save).toBeDisabled();
+  await expect(page.getByRole("status")).toContainText("در حال ذخیرهٔ تغییرات عکس…");
+  const saved = page.getByRole("img", { name: "عکس پروفایل", exact: true });
+  await expect(saved).toBeVisible();
+  const src = await saved.getAttribute("src");
+  await request.post(`${control}&saveMode=error`);
+  await page.getByRole("button", { name: "حذف عکس", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("ذخیرهٔ تغییرات عکس انجام نشد.");
+  await page.reload();
+  await expect(saved).toHaveAttribute("src", src!);
+  await request.post(`${control}&saveMode=slow`);
+  await page.getByRole("button", { name: "حذف عکس", exact: true }).click();
+  await expect(page.getByRole("button", { name: "حذف عکس", exact: true })).toBeDisabled();
+  await expect(page.getByRole("img", { name: "بدون عکس پروفایل", exact: true })).toBeVisible();
+});
+
+test("avatar loading and failures recover and USER or ADMIN cannot access avatar settings", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  await request.post(`${base}/__test/dashboard?role=AUTHOR&avatarMode=slow`);
+  await page.goto("/dashboard/avatar", { waitUntil: "commit" });
+  await expect(page.getByRole("status")).toHaveText("در حال دریافت عکس پروفایل…");
+  await expect(page.getByLabel("فایل عکس پروفایل", { exact: true })).toBeVisible();
+  for (const mode of ["error", "invalid"]) {
+    await request.post(`${base}/__test/dashboard?role=AUTHOR&avatarMode=${mode}`);
+    await page.reload();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("دریافت عکس پروفایل ممکن نشد.");
+  }
+  await request.post(`${base}/__test/dashboard?role=AUTHOR`);
+  await page.getByRole("button", { name: "تلاش دوباره", exact: true }).click();
+  await expect(page.getByLabel("فایل عکس پروفایل", { exact: true })).toBeVisible();
+  for (const src of ["blob:http://127.0.0.1/image", "data:image/png;base64,AAAA", "https://example.test/avatar.png", "/fixture-images/00000000-0000-4000-8000-000000000099"]) {
+    expect((await request.patch(`${base}/dashboard-avatar`, { data: { src } })).status()).toBe(400);
+  }
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/dashboard/workspace");
+  await page.getByRole("button", { name: "فهرست پیشخوان", exact: true }).click();
+  await page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true }).getByRole("link", { name: "عکس پروفایل", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/avatar$/);
+  for (const role of ["USER", "ADMIN"]) {
+    await request.post(`${base}/__test/dashboard?role=${role}`);
+    expect((await request.get(`${base}/dashboard-avatar`)).status()).toBe(403);
+    expect((await request.patch(`${base}/dashboard-avatar`, { data: { src: "/fixture-images/1234" } })).status()).toBe(403);
+    expect((await request.delete(`${base}/dashboard-avatar`)).status()).toBe(403);
+    await page.goto("/dashboard/avatar");
+    await expect(page.getByRole("link", { name: "عکس پروفایل", exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("فایل عکس پروفایل", { exact: true })).toHaveCount(0);
+  }
+});
+
+test("ADMIN creates and deletes Categories and Tags with validation and reload persistence", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
+  await page.goto("/dashboard/workspace");
+  const nav = page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true });
+  await expect(nav.getByRole("link", { name: "دسته‌بندی‌ها و تگ‌ها", exact: true })).toBeVisible();
+  await nav.getByRole("link", { name: "دسته‌بندی‌ها و تگ‌ها", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/categories$/);
+  for (const [kind, label, name] of [["categories", "دسته‌بندی", "دستهٔ تازه"], ["tags", "تگ", "تگ تازه"]]) {
+    await page.goto(`/dashboard/${kind}`);
+    const input = page.getByLabel(`نام ${label}`, { exact: true });
+    await page.getByRole("button", { name: "افزودن", exact: true }).click();
+    await expect(input).toHaveAttribute("aria-invalid", "true");
+    await input.fill(name);
+    await page.getByRole("button", { name: "افزودن", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("ایجاد شد.");
+    await page.reload();
+    const row = page.getByRole("main").getByRole("listitem").filter({ hasText: name });
+    await expect(row).toBeVisible();
+    await input.fill(` ${name} `);
+    await page.getByRole("button", { name: "افزودن", exact: true }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("این نام قبلاً ثبت شده است.");
+    await row.getByRole("button", { name: "حذف", exact: true }).click();
+    const dialog = page.getByRole("alertdialog", { name: `حذف ${label}`, exact: true });
+    await expect(dialog).toContainText(name);
+    await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeFocused();
+    await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+    await page.reload();
+    await expect(row).toBeVisible();
+    await row.getByRole("button", { name: "حذف", exact: true }).click();
+    await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+    await expect(row).toHaveCount(0);
+    await page.reload();
+    await expect(row).toHaveCount(0);
+  }
+});
+
+test("taxonomy fixture choices are shared with the editor and referenced Categories and Tags cannot be deleted", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  const createdCategory = await request.post(`${base}/dashboard-taxonomies/categories`, { data: { name: "دستهٔ مشترک" } });
+  const createdTag = await request.post(`${base}/dashboard-taxonomies/tags`, { data: { name: "تگ مشترک" } });
+  expect(createdCategory.status()).toBe(201);
+  expect(createdTag.status()).toBe(201);
+  const category = await createdCategory.json();
+  const tag = await createdTag.json();
+  expect(category.id).toBeTruthy();
+  expect(category.slug).toBeTruthy();
+  await request.post(`${base}/__test/dashboard?role=AUTHOR`);
+  await page.goto("/dashboard/posts/00000000-0000-4000-8000-000000000001/edit");
+  await page.getByRole("checkbox", { name: "دستهٔ مشترک", exact: true }).check();
+  await page.getByRole("checkbox", { name: "تگ مشترک", exact: true }).check();
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "مقاله در داده‌های آزمایشی ذخیره شد." })).toBeVisible();
+  const before = await (await request.get(`${base}/dashboard-posts/00000000-0000-4000-8000-000000000001`)).json();
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  for (const [kind, name] of [["categories", category.name], ["tags", tag.name]]) {
+    await page.goto(`/dashboard/${kind}`);
+    const row = page.getByRole("main").getByRole("listitem").filter({ hasText: name });
+    await row.getByRole("button", { name: "حذف", exact: true }).click();
+    const dialog = page.getByRole("alertdialog");
+    await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toHaveText("این مورد در مقاله‌ای استفاده شده است و حذف نمی‌شود.");
+    await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+    await page.reload();
+    await expect(row).toBeVisible();
+  }
+  expect(await (await request.get(`${base}/dashboard-posts/00000000-0000-4000-8000-000000000001`)).json()).toEqual(before);
+});
+
+test("taxonomy management recovers loading, empty, failed writes and pending deletion on mobile", async ({ page, request }, testInfo) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=ADMIN";
+  await request.post(`${control}&taxonomyMode=slow`);
+  await page.goto("/dashboard/categories", { waitUntil: "commit" });
+  await expect(page.getByRole("status")).toHaveText("در حال دریافت فهرست…");
+  await expect(page.getByLabel("نام دسته‌بندی", { exact: true })).toBeVisible();
+  for (const mode of ["error", "invalid"]) {
+    await request.post(`${control}&taxonomyMode=${mode}`);
+    await page.reload();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("دریافت فهرست ممکن نشد.");
+  }
+  await request.post(`${control}&taxonomyMode=empty`);
+  await page.getByRole("button", { name: "تلاش دوباره", exact: true }).click();
+  await expect(page.getByText("موردی برای نمایش وجود ندارد.", { exact: true })).toBeVisible();
+  await request.post(`${control}&saveMode=error`);
+  await page.reload();
+  await page.getByLabel("نام دسته‌بندی", { exact: true }).fill("نمونهٔ حذف");
+  await page.getByRole("button", { name: "افزودن", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("انجام عملیات ممکن نشد.");
+  await expect(page.getByLabel("نام دسته‌بندی", { exact: true })).toHaveValue("نمونهٔ حذف");
+  await request.post(control);
+  await page.getByRole("button", { name: "افزودن", exact: true }).click();
+  const row = page.getByRole("main").getByRole("listitem").filter({ hasText: "نمونهٔ حذف" });
+  await expect(row).toBeVisible();
+  await request.post(`${control}&saveMode=error`);
+  await row.getByRole("button", { name: "حذف", exact: true }).click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("انجام عملیات ممکن نشد.");
+  await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+  await request.post(`${control}&saveMode=slow`);
+  await page.setViewportSize({ width: 360, height: 900 });
+  await row.getByRole("button", { name: "حذف", exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath("taxonomy-confirmation-mobile.png") });
+  expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "تأیید حذف", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("status")).toHaveText("در حال ذخیرهٔ تغییرات…");
+  await expect(row).toHaveCount(0);
+  await page.goto("/dashboard/workspace");
+  await page.getByRole("button", { name: "فهرست پیشخوان", exact: true }).click();
+  await page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true }).getByRole("link", { name: "دسته‌بندی‌ها و تگ‌ها", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/categories$/);
+  for (const kind of ["categories", "tags"]) {
+    await page.goto(`/dashboard/${kind}`);
+    await expect(page.getByRole("main").getByRole("textbox")).toHaveCount(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`taxonomy-${kind}-mobile.png`), fullPage: true });
+  }
+});
+
+test("taxonomy fixture rejects non-ADMIN mutations, renaming and manual slug input", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  for (const role of ["USER", "AUTHOR"]) {
+    await request.post(`${base}/__test/dashboard?role=${role}`);
+    for (const kind of ["categories", "tags"]) {
+      const url = `${base}/dashboard-taxonomies/${kind}`;
+      expect((await request.get(url)).status()).toBe(403);
+      expect((await request.post(url, { data: { name: "مورد جدید" } })).status()).toBe(403);
+      expect((await request.delete(`${url}/unavailable`)).status()).toBe(403);
+      await page.goto(`/dashboard/${kind}`);
+      await expect(page.getByRole("button", { name: "افزودن", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "حذف", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "دسته‌بندی‌ها و تگ‌ها", exact: true })).toHaveCount(0);
+    }
+  }
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  for (const kind of ["categories", "tags"]) {
+    const url = `${base}/dashboard-taxonomies/${kind}`;
+    expect((await request.post(url, { data: { name: " " } })).status()).toBe(400);
+    expect((await request.post(url, { data: { name: "نام", slug: "manual" } })).status()).toBe(400);
+    const items = await (await request.get(url)).json();
+    expect((await request.patch(`${url}/${items[0].id}`, { data: { name: "نام دیگر" } })).status()).toBe(405);
+  }
+});
+
+test("ADMIN approves and confirms comment deletion with reload persistence and direct navigation", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
+  await page.goto("/dashboard/workspace");
+  const nav = page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true });
+  await expect(nav.getByRole("link", { name: "کامنت‌ها", exact: true })).toBeVisible();
+  await nav.getByRole("link", { name: "کامنت‌ها", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/comments$/);
+  const pending = page.getByRole("main").getByRole("listitem").filter({ hasText: "این دیدگاه در انتظار بررسی است." });
+  await expect(pending).toContainText("در انتظار تأیید");
+  await pending.getByRole("button", { name: "تأیید", exact: true }).click();
+  await expect(pending).toContainText("تأییدشده");
+  await expect(pending.getByRole("button", { name: "تأیید", exact: true })).toHaveCount(0);
+  await page.reload();
+  await expect(pending).toContainText("تأییدشده");
+  await pending.getByRole("button", { name: "حذف کامنت", exact: true }).click();
+  const dialog = page.getByRole("alertdialog", { name: "حذف کامنت", exact: true });
+  await expect(dialog).toContainText("این دیدگاه در انتظار بررسی است.");
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeFocused();
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    const bounds = await dialog.boundingBox();
+    expect(Math.abs(bounds!.x + bounds!.width / 2 - width / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(bounds!.y + bounds!.height / 2 - 450)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: testInfo.outputPath(`comment-delete-${width}.png`) });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+  await page.reload();
+  await expect(pending).toBeVisible();
+  await pending.getByRole("button", { name: "حذف کامنت", exact: true }).click();
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("کامنت از داده‌های آزمایشی حذف شد.");
+  await expect(pending).toHaveCount(0);
+  await page.reload();
+  await expect(pending).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("listitem")).toHaveCount(1);
+  await expect(page.getByRole("main").getByRole("link")).toHaveCount(1); // Existing browse action only; no article associations.
+});
+
+test("long comment text wraps in the mobile list and deletion modal", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/dashboard/comments");
+  const row = page.getByRole("main").getByRole("listitem").filter({ hasText: "این دیدگاه قبلاً تأیید شده است." });
+  await expect(row).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await row.getByRole("button", { name: "حذف کامنت", exact: true }).click();
+  const dialog = page.getByRole("alertdialog", { name: "حذف کامنت", exact: true });
+  await expect(dialog).toBeVisible();
+  expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("long-comment-mobile.png") });
+  await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+  await expect(row).toBeVisible();
+});
+
+test("comment moderation handles failed and pending writes, loading, empty and invalid reads", async ({ page, request }) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=ADMIN";
+  await request.post(`${control}&commentsMode=slow`);
+  await page.goto("/dashboard/comments", { waitUntil: "commit" });
+  await expect(page.getByRole("status")).toHaveText("در حال دریافت کامنت‌ها…");
+  const row = page.getByRole("main").getByRole("listitem").filter({ hasText: "این دیدگاه در انتظار بررسی است." });
+  await expect(row).toBeVisible();
+  await request.post(`${control}&saveMode=error`);
+  await row.getByRole("button", { name: "تأیید", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("انجام عملیات ممکن نشد.");
+  await page.reload();
+  await expect(row).toContainText("در انتظار تأیید");
+  await row.getByRole("button", { name: "حذف کامنت", exact: true }).click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("انجام عملیات ممکن نشد.");
+  await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+  await request.post(`${control}&saveMode=slow`);
+  await row.getByRole("button", { name: "تأیید", exact: true }).click();
+  await expect(row.getByRole("button", { name: "تأیید", exact: true })).toBeDisabled();
+  await expect(page.getByRole("status")).toHaveText("در حال تأیید کامنت…");
+  await expect(row).toContainText("تأییدشده");
+  await row.getByRole("button", { name: "حذف کامنت", exact: true }).click();
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog.getByRole("status")).toHaveText("در حال حذف کامنت…");
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "تأیید حذف", exact: true })).toBeDisabled();
+  await expect(dialog).not.toBeVisible();
+  await page.reload();
+  await expect(row).toHaveCount(0);
+  for (const mode of ["error", "invalid"]) {
+    await request.post(`${control}&commentsMode=${mode}`);
+    await page.reload();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("دریافت کامنت‌ها ممکن نشد.");
+  }
+  await request.post(`${control}&commentsMode=empty`);
+  await page.getByRole("button", { name: "تلاش دوباره", exact: true }).click();
+  await expect(page.getByText("کامنتی برای نمایش وجود ندارد.", { exact: true })).toBeVisible();
+  await request.post(`${control}&reset=1`);
+  await page.reload();
+  await expect(page.getByRole("main").getByRole("listitem")).toHaveCount(2);
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/dashboard/workspace");
+  await page.getByRole("button", { name: "فهرست پیشخوان", exact: true }).click();
+  await page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true }).getByRole("link", { name: "کامنت‌ها", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/comments$/);
+});
+
+test("comment moderation fixture is ADMIN-only and accepts no editing or rejection operations", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  const path = `${base}/dashboard-comments/60000000-0000-4000-8000-000000000001`;
+  for (const role of ["USER", "AUTHOR"]) {
+    await request.post(`${base}/__test/dashboard?role=${role}`);
+    expect((await request.get(`${base}/dashboard-comments`)).status()).toBe(403);
+    expect((await request.patch(path, { data: { status: "APPROVED" } })).status()).toBe(403);
+    expect((await request.delete(path)).status()).toBe(403);
+    await page.goto("/dashboard/comments");
+    await expect(page.getByRole("link", { name: "کامنت‌ها", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "تأیید", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "حذف کامنت", exact: true })).toHaveCount(0);
+  }
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  for (const data of [{ status: "REJECTED" }, { text: "ویرایش" }, { status: "APPROVED", articleId: "unwanted" }]) {
+    expect((await request.patch(path, { data })).status()).toBe(400);
+  }
+});
+
+test("ADMIN cancels or permanently deletes an article and updates the list and reading views", async ({ page, request }, testInfo) => {
+  const base = "http://127.0.0.1:4101";
+  const id = "00000000-0000-4000-8000-000000000005";
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  const original = await (await request.get(`${base}/dashboard-posts/${id}`)).json();
+  await page.goto("/dashboard/posts");
+  const row = page.getByRole("main").getByRole("listitem").filter({ hasText: original.title });
+  const remove = row.getByRole("button", { name: "حذف مقاله", exact: true });
+  await expect(remove).toBeVisible();
+  await remove.click();
+  const dialog = page.getByRole("alertdialog", { name: "حذف مقاله", exact: true });
+  await expect(dialog).toContainText(original.title);
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeFocused();
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    const bounds = await dialog.boundingBox();
+    expect(Math.abs(bounds!.x + bounds!.width / 2 - width / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(bounds!.y + bounds!.height / 2 - 450)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: testInfo.outputPath(`article-delete-${width}.png`), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+  await expect(remove).toBeFocused();
+  expect(await (await request.get(`${base}/dashboard-posts/${id}`)).json()).toEqual(original);
+  await page.reload();
+  await remove.click();
+  await dialog.getByRole("button", { name: "تأیید حذف مقاله", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "مقاله از داده‌های آزمایشی حذف شد." })).toBeVisible();
+  await expect(row).toHaveCount(0);
+  await page.reload();
+  await expect(row).toHaveCount(0);
+  expect((await request.get(`${base}/dashboard-posts/${id}`)).status()).toBe(404);
+  await page.goto("/preview/posts");
+  await expect(page.getByRole("article").filter({ hasText: original.title })).toHaveCount(0);
+  expect((await page.goto(`/preview/posts/${original.slug}`))?.status()).toBe(404);
+});
+
+test("article deletion preserves failures, blocks duplicate confirmation, rejects non-ADMIN roles and resets", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  const id = "00000000-0000-4000-8000-000000000005";
+  for (const role of ["AUTHOR", "USER"]) {
+    await request.post(`${base}/__test/dashboard?role=${role}`);
+    expect((await request.delete(`${base}/dashboard-posts/${id}`)).status()).toBe(403);
+    for (const path of ["/dashboard/posts", `/dashboard/posts/${id}/edit`]) {
+      await page.goto(path);
+      await expect(page.getByRole("button", { name: "حذف مقاله", exact: true })).toHaveCount(0);
+    }
+  }
+  await request.post(`${base}/__test/dashboard?role=ADMIN&saveMode=error`);
+  const original = await (await request.get(`${base}/dashboard-posts/${id}`)).json();
+  await page.goto("/dashboard/posts");
+  const row = page.getByRole("main").getByRole("listitem").filter({ hasText: original.title });
+  await row.getByRole("button", { name: "حذف مقاله", exact: true }).click();
+  const dialog = page.getByRole("alertdialog", { name: "حذف مقاله", exact: true });
+  await dialog.getByRole("button", { name: "تأیید حذف مقاله", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("حذف مقاله انجام نشد.");
+  expect(await (await request.get(`${base}/dashboard-posts/${id}`)).json()).toEqual(original);
+  await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+  await request.post(`${base}/__test/dashboard?role=ADMIN&saveMode=slow`);
+  await row.getByRole("button", { name: "حذف مقاله", exact: true }).click();
+  await dialog.getByRole("button", { name: "تأیید حذف مقاله", exact: true }).click();
+  await expect(dialog.getByRole("status")).toContainText("در حال حذف مقاله…");
+  await expect(dialog.getByRole("button", { name: "تأیید حذف مقاله", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).not.toBeVisible();
+  await expect(row).toHaveCount(0);
+  await request.post(`${base}/__test/dashboard?role=ADMIN&reset=1`);
+  expect((await request.get(`${base}/dashboard-posts/${id}`)).status()).toBe(200);
+});
+
+test("ADMIN can recover a categoryless article and repeatedly republish saved drafts without an extra save", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  const id = "00000000-0000-4000-8000-000000000002";
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  const original = await (await request.get(`${base}/dashboard-posts/${id}`)).json();
+  expect(original.status).toBe("PUBLISHED");
+  expect(original.categories).toEqual([]);
+  await page.goto(`/dashboard/posts/${id}/edit`);
+  const publish = page.getByRole("button", { name: "انتشار مقاله", exact: true });
+  const unpublish = page.getByRole("button", { name: "بازگشت به پیش‌نویس", exact: true });
+  await unpublish.click();
+  await page.getByRole("button", { name: "تأیید لغو انتشار آزمایشی", exact: true }).click();
+  await expect(publish).toBeDisabled();
+  await expect(page.getByText("برای انتشار، دست‌کم یک دسته‌بندی انتخاب و مقاله را ذخیره کنید. برچسب اختیاری است.", { exact: true })).toBeVisible();
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("مقالهٔ بازنشر مدیر");
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "مقاله در داده‌های آزمایشی ذخیره شد." })).toBeVisible();
+  await expect(publish).toBeDisabled();
+  await page.getByRole("checkbox", { name: "توسعهٔ وب", exact: true }).check();
+  await expect(publish).toBeDisabled();
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(publish).toBeEnabled();
+  await page.reload();
+  await expect(publish).toBeEnabled();
+  await publish.click();
+  await page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
+  await expect(unpublish).toBeEnabled();
+  for (let cycle = 0; cycle < 2; cycle++) {
+    await expect(unpublish).toBeEnabled();
+    await unpublish.click();
+    await page.getByRole("button", { name: "تأیید لغو انتشار آزمایشی", exact: true }).click();
+    await expect(publish).toBeEnabled();
+    await page.reload();
+    await expect(publish).toBeEnabled();
+    await publish.click();
+    await page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
+    await expect(unpublish).toBeEnabled();
+    await page.reload();
+    await expect(unpublish).toBeEnabled();
+  }
+  const saved = await (await request.get(`${base}/dashboard-posts/${id}`)).json();
+  expect(saved.status).toBe("PUBLISHED");
+  expect(saved.authorId).toBe(original.authorId);
+});
+
+test("ADMIN inventories all authors and edits, publishes and unpublishes without changing ownership", async ({ page, request }, testInfo) => {
+  const base = "http://127.0.0.1:4101";
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  await page.goto("/dashboard/workspace");
+  const nav = page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true });
+  await expect(nav.getByRole("link", { name: "مقاله‌ها", exact: true })).toBeVisible();
+  await nav.getByRole("link", { name: "مقاله‌ها", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/posts$/);
+  await expect(page.getByRole("main").getByRole("heading", { level: 1 })).toHaveText("مقاله‌ها");
+  await expect(page.getByRole("main")).toContainText("سارا کیانی");
+  await expect(page.getByRole("main").getByRole("link", { name: "مقالهٔ جدید", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "وضعیت مقاله‌ها", exact: true })).toHaveCount(0);
+  await page.getByRole("link", { name: "صفحهٔ بعد", exact: true }).click();
+  await expect(page).toHaveURL(/page=2/);
+  const other = page.getByRole("main").getByRole("listitem").filter({ hasText: "نیما کیانی" });
+  await expect(other).toBeVisible();
+  await other.getByRole("link", { name: "ویرایش مقاله", exact: true }).click();
+  await expect(page).toHaveURL(/\/edit$/);
+  const editUrl = page.url();
+  const id = editUrl.split("/").at(-2)!;
+  const original = await (await request.get(`${base}/dashboard-posts/${id}`)).json();
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("ویرایش مدیر برای نویسندهٔ اصلی");
+  await page.getByRole("textbox", { name: "متن مقاله", exact: true }).fill("متن ویرایش‌شده توسط مدیر");
+  await page.getByRole("checkbox", { name: "توسعهٔ وب" }).check();
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "مقاله در داده‌های آزمایشی ذخیره شد." })).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("عنوان مقاله", { exact: true })).toHaveValue("ویرایش مدیر برای نویسندهٔ اصلی");
+  await expect(page.getByRole("textbox", { name: "متن مقاله", exact: true })).toContainText("متن ویرایش‌شده توسط مدیر");
+  // The existing DEPRECATED fixture can be edited, but has no publication action.
+  const draftId = "00000000-0000-4000-8000-000000000001";
+  await page.goto(`/dashboard/posts/${draftId}/edit`);
+  await page.getByRole("checkbox", { name: "توسعهٔ وب" }).check();
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "مقاله در داده‌های آزمایشی ذخیره شد." })).toBeVisible();
+  await page.getByRole("button", { name: "انتشار مقاله", exact: true }).click();
+  await page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
+  await expect(page.getByRole("link", { name: "مشاهده در خواندن آزمایشی", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "بازگشت به پیش‌نویس", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "بازگشت به پیش‌نویس", exact: true }).click();
+  await page.getByRole("button", { name: "تأیید لغو انتشار آزمایشی", exact: true }).click();
+  await expect(page.getByRole("button", { name: "انتشار مقاله", exact: true })).toBeVisible();
+  await page.reload();
+  expect((await (await request.get(`${base}/dashboard-posts/${draftId}`)).json()).status).toBe("DRAFT");
+  const saved = await (await request.get(`${base}/dashboard-posts/${id}`)).json();
+  expect(saved.authorId).toBe(original.authorId);
+  expect(saved.author).toEqual(original.author);
+  await page.getByRole("link", { name: "بازگشت به فهرست مقاله‌ها", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/posts$/);
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/dashboard/posts?page=2");
+    await expect(page.getByRole("main")).toContainText("ویرایش مدیر برای نویسندهٔ اصلی");
+    await page.screenshot({ path: testInfo.outputPath(`admin-articles-${width}.png`), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.goto(editUrl);
+    await expect(page.getByLabel("عنوان مقاله", { exact: true })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath(`admin-editor-${width}.png`), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+});
+
+test("ADMIN article inventory handles loading, empty and failed reads and keeps direct mobile navigation", async ({ page, request }) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=ADMIN";
+  await request.post(`${control}&postsMode=slow`);
+  await page.goto("/dashboard/posts", { waitUntil: "commit" });
+  await expect(page.getByRole("status")).toHaveText("در حال دریافت مقاله‌ها…");
+  await expect(page.getByRole("list", { name: "مقاله‌ها", exact: true }).getByRole("listitem")).toHaveCount(10);
+  for (const mode of ["error", "invalid", "foreign"]) {
+    await request.post(`${control}&postsMode=${mode}`);
+    await page.goto("/dashboard/posts?page=2");
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("دریافت مقاله‌ها ممکن نشد.");
+  }
+  await request.post(control);
+  await page.getByRole("button", { name: "تلاش دوباره", exact: true }).click();
+  await expect(page).toHaveURL(/page=2$/);
+  await expect(page.getByRole("list", { name: "مقاله‌ها", exact: true }).getByRole("listitem")).toHaveCount(2);
+  await request.post(`${control}&postsMode=empty`);
+  await page.goto("/dashboard/posts");
+  await expect(page.getByRole("status")).toHaveText("هنوز مقاله‌ای وجود ندارد.");
+  await request.post(control);
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/dashboard/workspace");
+  await page.getByRole("button", { name: "فهرست پیشخوان", exact: true }).click();
+  await page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true }).getByRole("link", { name: "مقاله‌ها", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/posts$/);
+  await expect(page.getByRole("main").getByRole("heading", { level: 1 })).toHaveText("مقاله‌ها");
+});
+
+test("ADMIN edits preserve ownership and AUTHOR and USER article boundaries remain intact", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  const id = "00000000-0000-4000-8000-000000000012";
+  await request.post(`${base}/__test/dashboard?role=AUTHOR&author=sara`);
+  expect((await request.get(`${base}/dashboard-posts/${id}`)).status()).toBe(404);
+  expect((await request.patch(`${base}/dashboard-posts/${id}`, { data: { status: "DRAFT" } })).status()).toBe(404);
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  expect((await request.post(`${base}/dashboard-posts`, { data: { title: "ساخت غیرمجاز", content: "متن", categoryIds: [], tagIds: [] } })).status()).toBe(403);
+  const before = await (await request.get(`${base}/dashboard-posts/${id}`)).json();
+  expect((await request.patch(`${base}/dashboard-posts/${id}`, { data: { authorId: "admin", status: "DRAFT" } })).status()).toBe(400);
+  await request.patch(`${base}/dashboard-posts/${id}`, { data: { status: "DRAFT" } });
+  await request.post(`${base}/__test/dashboard?role=AUTHOR&author=nima`);
+  const after = await (await request.get(`${base}/dashboard-posts/${id}`)).json();
+  expect(after.authorId).toBe(before.authorId);
+  expect(after.author).toEqual(before.author);
+  expect(after.status).toBe("DRAFT");
+  const owned = await (await request.get(`${base}/dashboard-posts?page=1&limit=10`)).json();
+  expect(owned.meta.total).toBe(1);
+  await request.post(`${base}/__test/dashboard?role=USER`);
+  expect((await request.get(`${base}/dashboard-posts?page=1&limit=10`)).status()).toBe(403);
+  expect((await request.get(`${base}/dashboard-posts/${id}`)).status()).toBe(403);
+  expect((await request.patch(`${base}/dashboard-posts/${id}`, { data: { status: "PUBLISHED" } })).status()).toBe(403);
+  await page.goto(`/dashboard/posts/${id}/edit`);
+  await expect(page.getByLabel("عنوان مقاله", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "مقاله‌ها", exact: true })).toHaveCount(0);
+});
+
+test("ADMIN cancels or confirms Author deletion in a centered modal and the list persists", async ({ page, request }, testInfo) => {
+  const base = "http://127.0.0.1:4101";
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  await request.post(`${base}/dashboard-authors`, { data: { name: "نویسندهٔ حذف‌شدنی", email: "delete@example.test" } });
+  await request.post(`${base}/dashboard-authors`, { data: { name: "نویسندهٔ باقی‌مانده", email: "keep@example.test" } });
+  const articlesBefore = await (await request.get(`${base}/dashboard-public-posts`)).json();
+  await page.goto("/dashboard/workspace");
+  const row = page.getByRole("main").getByRole("listitem").filter({ hasText: "delete@example.test" });
+  const remove = row.getByRole("button", { name: "حذف", exact: true });
+  await expect(remove).toBeVisible();
+  await remove.click();
+  const dialog = page.getByRole("alertdialog", { name: "حذف نویسنده", exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("نویسندهٔ حذف‌شدنی");
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "تأیید حذف", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeFocused();
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    const bounds = await dialog.boundingBox();
+    expect(Math.abs(bounds!.x + bounds!.width / 2 - width / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(bounds!.y + bounds!.height / 2 - 450)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: testInfo.outputPath(`author-delete-modal-${width}.png`), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(remove).toBeFocused();
+  await page.reload();
+  await expect(row).toBeVisible();
+  await remove.click();
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(row).toBeVisible();
+  await remove.click();
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "نویسنده از داده‌های آزمایشی حذف شد." })).toBeVisible();
+  await expect(row).toHaveCount(0);
+  await page.reload();
+  await expect(row).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("listitem")).toHaveCount(1);
+  expect(await (await request.get(`${base}/dashboard-public-posts`)).json()).toEqual(articlesBefore);
+});
+
+test("Author deletion reports failure, blocks pending confirmation and preserves role boundaries", async ({ page, request }) => {
+  const base = "http://127.0.0.1:4101";
+  await request.post(`${base}/__test/dashboard?role=ADMIN`);
+  const author = await (await request.post(`${base}/dashboard-authors`, { data: { name: "نویسندهٔ آزمون حذف", email: "retry-delete@example.test" } })).json();
+  await page.goto("/dashboard/workspace");
+  const row = page.getByRole("main").getByRole("listitem").filter({ hasText: author.email });
+  await row.getByRole("button", { name: "حذف", exact: true }).click();
+  const dialog = page.getByRole("alertdialog");
+  await request.post(`${base}/__test/dashboard?role=ADMIN&saveMode=error`);
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("حذف نویسنده انجام نشد.");
+  await dialog.getByRole("button", { name: "انصراف", exact: true }).click();
+  await page.reload();
+  await expect(row).toBeVisible();
+  for (const role of ["USER", "AUTHOR"]) {
+    await request.post(`${base}/__test/dashboard?role=${role}`);
+    expect((await request.delete(`${base}/dashboard-authors/${author.id}`)).status()).toBe(403);
+  }
+  await request.post(`${base}/__test/dashboard?role=ADMIN&saveMode=slow`);
+  await row.getByRole("button", { name: "حذف", exact: true }).click();
+  await dialog.getByRole("button", { name: "تأیید حذف", exact: true }).click();
+  await expect(dialog.getByRole("status")).toContainText("در حال حذف نویسنده…");
+  await expect(dialog.getByRole("button", { name: "تأیید حذف", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "انصراف", exact: true })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).not.toBeVisible();
+  await expect(row).toHaveCount(0);
+  await page.reload();
+  await expect(row).toHaveCount(0);
+});
+
+test("ADMIN author-list sidebar entry reuses the workspace on desktop and mobile", async ({ page, request }) => {
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
+    await page.goto("/dashboard/authors/new");
+    if (width === 360) await page.getByRole("button", { name: "فهرست پیشخوان", exact: true }).click();
+    const link = page.getByRole("navigation", { name: "راهبری پیشخوان", exact: true }).getByRole("link", { name: "لیست نویسندگان", exact: true });
+    await expect(link).toHaveAttribute("href", "/dashboard/workspace#authors");
+    await link.click();
+    await expect(page).toHaveURL(/\/dashboard\/workspace#authors$/);
+    await expect(page.getByRole("main").getByRole("heading", { name: "نویسندگان", exact: true })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  for (const role of ["USER", "AUTHOR"]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=${role}`);
+    await page.goto("/dashboard/workspace");
+    await expect(page.getByRole("link", { name: "لیست نویسندگان", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "حذف", exact: true })).toHaveCount(0);
+  }
+});
+
+test("ADMIN creates an Author with name and email and sees it in the workspace after reload", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=ADMIN");
+  await page.goto("/dashboard/workspace");
+  await page.getByRole("main").getByRole("link", { name: "افزودن نویسنده", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/authors\/new$/);
+  await expect(page.getByRole("main").getByRole("textbox")).toHaveCount(2);
+  await page.getByLabel("نام", { exact: true }).fill("نویسندهٔ تازه");
+  await page.getByLabel("ایمیل", { exact: true }).fill("new.author@example.test");
+  await page.getByRole("button", { name: "افزودن نویسنده", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "نویسنده در داده‌های آزمایشی ایجاد شد." })).toBeVisible();
+  await page.getByRole("main").getByRole("link", { name: "مشاهدهٔ نویسندگان", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/workspace$/);
+  await page.reload();
+  await expect(page.getByRole("main")).toContainText("نویسندهٔ تازه");
+  await expect(page.getByRole("main")).toContainText("new.author@example.test");
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.screenshot({ path: testInfo.outputPath(`admin-authors-${width}.png`), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.goto("/dashboard/authors/new");
+    await expect(page.getByLabel("ایمیل", { exact: true })).toHaveAttribute("dir", "ltr");
+    await page.screenshot({ path: testInfo.outputPath(`admin-author-form-${width}.png`), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.goto("/dashboard/workspace");
+  }
+});
+
+test("Author creation validates fields, reports duplicates and preserves input on failed writes", async ({ page, request }) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=ADMIN";
+  await request.post(control);
+  await page.goto("/dashboard/authors/new");
+  const name = page.getByLabel("نام", { exact: true });
+  const email = page.getByLabel("ایمیل", { exact: true });
+  const create = page.getByRole("button", { name: "افزودن نویسنده", exact: true });
+  await create.click();
+  await expect(name).toBeFocused();
+  await expect(name).toHaveAttribute("aria-invalid", "true");
+  await expect(email).toHaveAttribute("aria-invalid", "true");
+  await name.fill("نویسندهٔ آزمون");
+  await email.fill("invalid-email");
+  await create.click();
+  await expect(email).toBeFocused();
+  await expect(page.getByRole("main")).toContainText("یک ایمیل معتبر وارد کنید.");
+  await email.fill("same@example.test");
+  await request.post(`${control}&saveMode=error`);
+  await create.click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("ایجاد نویسنده انجام نشد.");
+  await expect(name).toHaveValue("نویسندهٔ آزمون");
+  await expect(email).toHaveValue("same@example.test");
+  await request.post(`${control}&saveMode=slow`);
+  await create.click();
+  await expect(page.getByRole("button", { name: "در حال ایجاد نویسنده…", exact: true })).toBeDisabled();
+  await expect(page.getByRole("status").filter({ hasText: "نویسنده در داده‌های آزمایشی ایجاد شد." })).toBeVisible();
+  await page.reload();
+  await name.fill("نویسندهٔ تکراری");
+  await email.fill(" SAME@EXAMPLE.TEST ");
+  await request.post(control);
+  await create.click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("این ایمیل قبلاً ثبت شده است.");
+  await expect(name).toHaveValue("نویسندهٔ تکراری");
+  await expect(email).toHaveValue("SAME@EXAMPLE.TEST");
+  await page.goto("/dashboard/workspace");
+  await expect(page.getByRole("main").getByRole("listitem")).toHaveCount(1);
+});
+
+test("only ADMIN fixture identity can access Author creation and records", async ({ page, request }) => {
+  for (const role of ["USER", "AUTHOR"]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=${role}`);
+    for (const path of ["/dashboard/workspace", "/dashboard/authors/new"]) {
+      await page.goto(path);
+      await expect(page.getByRole("button", { name: "افزودن نویسنده", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "افزودن نویسنده", exact: true })).toHaveCount(0);
+    }
+    expect((await request.get("http://127.0.0.1:4101/dashboard-authors")).status()).toBe(403);
+    expect((await request.post("http://127.0.0.1:4101/dashboard-authors", { data: { name: "نویسنده", email: "blocked@example.test" } })).status()).toBe(403);
+  }
+});
+
+test("optional cover can be selected, replaced, saved and removed independently of body images", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts/new");
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("مقالهٔ جلددار");
+  await page.getByRole("textbox", { name: "متن مقاله", exact: true }).fill("متن مستقل مقاله");
+  await page.getByRole("checkbox", { name: "توسعهٔ وب" }).check();
+  await page.getByRole("button", { name: "افزودن تصویر", exact: true }).click();
+  await page.getByLabel("فایل تصویر", { exact: true }).setInputFiles("public/social/linkedin.png");
+  await page.getByLabel("متن جایگزین تصویر", { exact: true }).fill("تصویر داخل متن");
+  await page.getByRole("button", { name: "درج تصویر", exact: true }).click();
+  await page.getByLabel("فایل تصویر جلد", { exact: true }).setInputFiles("public/social/linkedin.png");
+  await page.getByLabel("متن جایگزین جلد", { exact: true }).fill("جلد نخست");
+  await page.getByRole("button", { name: "انتخاب تصویر جلد", exact: true }).click();
+  await expect(page.getByRole("img", { name: "جلد نخست", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page).toHaveURL(/\/edit$/);
+  const editorUrl = page.url();
+  await page.reload();
+  await expect(page.getByRole("img", { name: "جلد نخست", exact: true })).toBeVisible();
+  await page.getByLabel("فایل تصویر جلد", { exact: true }).setInputFiles("public/social/linkedin.png");
+  await page.getByLabel("متن جایگزین جلد", { exact: true }).fill("جلد جایگزین");
+  await page.getByRole("button", { name: "انتخاب تصویر جلد", exact: true }).click();
+  await expect(page.getByRole("img", { name: "جلد جایگزین", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "مقاله در داده‌های آزمایشی ذخیره شد." })).toBeVisible();
+  await page.getByRole("button", { name: "انتشار مقاله", exact: true }).click();
+  await page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
+  await expect(page.getByRole("link", { name: "مشاهده در خواندن آزمایشی", exact: true })).toBeVisible();
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/preview/posts");
+    const cover = page.getByRole("img", { name: "جلد جایگزین", exact: true });
+    await expect(cover).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath(`cover-cards-${width}.png`), fullPage: true });
+    await expect.poll(() => cover.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+    await expect(page.getByRole("img", { name: "تصویر داخل متن", exact: true })).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await page.goto(editorUrl);
+  await page.getByRole("button", { name: "حذف تصویر جلد", exact: true }).click();
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "مقاله در داده‌های آزمایشی ذخیره شد." })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("img", { name: "جلد جایگزین", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("img", { name: "تصویر داخل متن", exact: true })).toBeVisible();
+  await page.goto("/preview/posts");
+  const card = page.getByRole("article").filter({ hasText: "مقالهٔ جلددار" });
+  await expect(card).toBeVisible();
+  await expect(card.getByRole("img")).toHaveCount(0);
+});
+
+test("cover validation, upload retry and cancellation preserve the article on mobile", async ({ page, request }) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=AUTHOR";
+  await request.post(control);
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/dashboard/posts/00000000-0000-4000-8000-000000000001/edit");
+  await expect(page.getByRole("textbox", { name: "متن مقاله", exact: true })).toHaveAttribute("contenteditable", "true");
+  const save = page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true });
+  const choose = page.getByRole("button", { name: "انتخاب تصویر جلد", exact: true });
+  const file = page.getByLabel("فایل تصویر جلد", { exact: true });
+  await file.setInputFiles({ name: "invalid.txt", mimeType: "text/plain", buffer: Buffer.from("test double") });
+  await page.getByLabel("متن جایگزین جلد", { exact: true }).fill("جلد حفظ‌شده");
+  await choose.click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("فقط تصویر JPEG، PNG یا WebP مجاز است.");
+  await expect(save).toBeDisabled();
+  await file.setInputFiles("public/social/linkedin.png");
+  await request.post(`${control}&imageMode=error`);
+  await choose.click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("بارگذاری تصویر ممکن نشد.");
+  await expect(page.getByLabel("متن جایگزین جلد", { exact: true })).toHaveValue("جلد حفظ‌شده");
+  await request.post(control);
+  await choose.click();
+  await expect(page.getByRole("img", { name: "جلد حفظ‌شده", exact: true })).toBeVisible();
+  await request.post(`${control}&saveMode=error`);
+  await save.click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("ذخیره انجام نشد.");
+  await expect(page.getByRole("img", { name: "جلد حفظ‌شده", exact: true })).toBeVisible();
+  await request.post(control);
+  await save.click();
+  await expect(page.getByRole("status").filter({ hasText: "مقاله در داده‌های آزمایشی ذخیره شد." })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("img", { name: "جلد حفظ‌شده", exact: true })).toBeVisible();
+  await file.setInputFiles("public/social/linkedin.png");
+  await page.getByLabel("متن جایگزین جلد", { exact: true }).fill("جلد لغوشده");
+  await request.post(`${control}&imageMode=slow`);
+  await choose.click();
+  await page.getByRole("button", { name: "انصراف از انتخاب جلد", exact: true }).click();
+  await expect(save).toBeEnabled();
+  await expect(page.getByRole("img", { name: "جلد حفظ‌شده", exact: true })).toBeVisible();
+  await expect(page.getByRole("img", { name: "جلد لغوشده", exact: true })).toHaveCount(0);
+});
+
+test("article images survive save, reload and published reading without losing text", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts/new");
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("مقالهٔ تصویری");
+  const text = page.getByRole("textbox", { name: "متن مقاله", exact: true });
+  await text.fill("متن پیش از تصویر");
+  await text.press("End");
+  await page.getByRole("checkbox", { name: "توسعهٔ وب" }).check();
+  await page.getByRole("button", { name: "افزودن تصویر", exact: true }).click();
+  await page.getByLabel("فایل تصویر", { exact: true }).setInputFiles("public/social/linkedin.png");
+  await page.getByLabel("متن جایگزین تصویر", { exact: true }).fill("نشان لینکدین");
+  await page.getByRole("button", { name: "درج تصویر", exact: true }).click();
+  const image = page.getByRole("img", { name: "نشان لینکدین", exact: true });
+  await expect(image).toHaveAttribute("src", /^\/fixture-images\/[a-f0-9-]+$/);
+  await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+  await expect(text).toContainText("متن پیش از تصویر");
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page).toHaveURL(/\/edit$/);
+  await page.reload();
+  await expect(image).toBeVisible();
+  await expect(text).toContainText("متن پیش از تصویر");
+  await page.getByRole("button", { name: "انتشار مقاله", exact: true }).click();
+  await page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
+  await page.getByRole("link", { name: "مشاهده در خواندن آزمایشی", exact: true }).click();
+  await expect(image).toBeVisible();
+  await expect(page.getByRole("document", { name: "متن مقاله", exact: true })).toContainText("متن پیش از تصویر");
+});
+
+test("article images support validation, retry, cancel and removal on mobile and desktop", async ({ page, request }, testInfo) => {
+  test.setTimeout(60000);
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=AUTHOR";
+  await request.post(control);
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/dashboard/posts/new");
+    const text = page.getByRole("textbox", { name: "متن مقاله", exact: true });
+    const save = page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true });
+    const add = page.getByRole("button", { name: "افزودن تصویر", exact: true });
+    await page.getByLabel("عنوان مقاله", { exact: true }).fill("تصویر آزمایشی");
+    await text.fill("متن حفظ‌شده");
+    await add.click();
+    await expect(save).toBeDisabled();
+    await page.getByRole("button", { name: "درج تصویر", exact: true }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("فایل تصویر و متن جایگزین را وارد کنید.");
+    const file = page.getByLabel("فایل تصویر", { exact: true });
+    await file.setInputFiles({ name: "invalid.txt", mimeType: "text/plain", buffer: Buffer.from("test double") });
+    await page.getByLabel("متن جایگزین تصویر", { exact: true }).fill("تصویر انتخابی");
+    await page.getByRole("button", { name: "درج تصویر", exact: true }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("یک فایل PNG، JPEG یا WebP غیرخالی تا ۵ مگابایت انتخاب کنید.");
+    await file.setInputFiles("public/social/linkedin.png");
+    await request.post(`${control}&imageMode=error`);
+    await page.getByRole("button", { name: "درج تصویر", exact: true }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("بارگذاری تصویر ممکن نشد.");
+    await expect(save).toBeDisabled();
+    await expect(page.getByLabel("متن جایگزین تصویر", { exact: true })).toHaveValue("تصویر انتخابی");
+    await request.post(`${control}&imageMode=slow`);
+    await page.getByRole("button", { name: "تلاش دوباره برای تصویر", exact: true }).click();
+    await expect(page.getByRole("status", { name: "" }).filter({ hasText: "در حال بارگذاری تصویر…" })).toBeVisible();
+    await page.getByRole("button", { name: "انصراف از تصویر", exact: true }).click();
+    await expect(save).toBeEnabled();
+    await expect(page.locator(".rich-editor img")).toHaveCount(0);
+    await request.post(control);
+    await add.click();
+    await file.setInputFiles("public/social/linkedin.png");
+    await page.getByLabel("متن جایگزین تصویر", { exact: true }).fill("تصویر نهایی");
+    await request.post(`${control}&imageMode=error`);
+    await page.getByRole("button", { name: "درج تصویر", exact: true }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("بارگذاری تصویر ممکن نشد.");
+    await request.post(control);
+    await page.getByRole("button", { name: "تلاش دوباره برای تصویر", exact: true }).click();
+    const image = page.getByRole("img", { name: "تصویر نهایی", exact: true });
+    await expect(image).toBeVisible();
+    await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`article-image-${width}.png`), fullPage: true });
+    await image.click();
+    await page.getByRole("button", { name: "حذف تصویر انتخاب‌شده", exact: true }).click();
+    await expect(page.locator(".rich-editor img")).toHaveCount(0);
+    await expect(text).toContainText("متن حفظ‌شده");
+    await save.click();
+    await expect(page).toHaveURL(/\/edit$/);
+    await page.reload();
+    await expect(page.locator(".rich-editor img")).toHaveCount(0);
+    await expect(text).toContainText("متن حفظ‌شده");
+  }
+  for (const role of ["USER", "ADMIN"]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=${role}`);
+    for (const width of [360, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/dashboard/posts/new");
+      await expect(page.getByRole("button", { name: "افزودن تصویر", exact: true })).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    }
+  }
+});
+
+test("image fixture rejects transient and unknown image references", async ({ request }) => {
+  const base = "http://127.0.0.1:4101";
+  await request.post(`${base}/__test/dashboard?role=AUTHOR`);
+  for (const src of ["blob:http://127.0.0.1/image", "data:image/png;base64,AAAA", "/fixture-images/missing"]) {
+    const coverResponse = await request.post(`${base}/dashboard-posts`, { data: { title: "جلد", content: "متن", categoryIds: [], tagIds: [], coverImage: { src, alt: "جلد" } } });
+    expect(coverResponse.status()).toBe(400);
+    const response = await request.post(`${base}/dashboard-posts`, { data: { title: "تصویر", content: "متن", categoryIds: [], tagIds: [], previewDocument: { format: "tiptap-ui-proposal-1", document: { type: "doc", content: [{ type: "image", attrs: { src, alt: "تصویر" } }] } } } });
+    expect(response.status()).toBe(400);
+  }
+});
+
+test("Author status filters restore selection and results through URLs and history", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts?page=2");
+  const filters = page.getByRole("navigation", { name: "وضعیت مقاله‌ها" });
+  const rows = page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem");
+  const draft = filters.getByRole("link", { name: "پیش‌نویس", exact: true });
+  await draft.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL("/dashboard/posts?status=DRAFT");
+  await expect(draft).toHaveAttribute("aria-current", "page");
+  await expect(rows).toHaveCount(4);
+  await expect(rows.filter({ hasText: "منتشرشده" })).toHaveCount(0);
+  await expect(rows.filter({ hasText: "کنارگذاشته‌شده" })).toHaveCount(0);
+  await page.reload();
+  await expect(draft).toHaveAttribute("aria-current", "page");
+  await expect(rows).toHaveCount(4);
+  await filters.getByRole("link", { name: "منتشرشده", exact: true }).click();
+  await expect(page).toHaveURL("/dashboard/posts?status=PUBLISHED");
+  await expect(rows).toHaveCount(4);
+  await expect(rows.filter({ hasText: "پیش‌نویس" })).toHaveCount(0);
+  await page.goBack();
+  await expect(draft).toHaveAttribute("aria-current", "page");
+  await page.goForward();
+  await expect(filters.getByRole("link", { name: "منتشرشده", exact: true })).toHaveAttribute("aria-current", "page");
+  await filters.getByRole("link", { name: "همه", exact: true }).click();
+  await expect(page).toHaveURL("/dashboard/posts");
+  await expect(rows).toHaveCount(10);
+  await expect(rows.filter({ hasText: "کنارگذاشته‌شده" })).toHaveCount(3);
+  for (const query of ["status=DEPRECATED", "status=unknown", "status=DRAFT&status=PUBLISHED"]) {
+    await page.goto(`/dashboard/posts?${query}`);
+    await expect(filters.getByRole("link", { name: "همه", exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(rows).toHaveCount(10);
+  }
+});
+
+test("Author status filters paginate filtered records and preserve selection through recovery", async ({ page, request }) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=AUTHOR";
+  await request.post(control);
+  // Test-only drafts use the existing fixture write seam to span two filtered pages.
+  for (let index = 0; index < 7; index++) {
+    const response = await request.post("http://127.0.0.1:4101/dashboard-posts", { data: { title: `پیش‌نویس آزمایشی ${index}`, content: "متن آزمایشی", categoryIds: [], tagIds: [] } });
+    expect(response.status()).toBe(201);
+  }
+  const filtered = await (await request.get("http://127.0.0.1:4101/dashboard-posts?page=2&limit=10&status=DRAFT")).json();
+  expect(filtered.meta).toEqual({ page: 2, limit: 10, total: 11, totalPages: 2 });
+  expect(filtered.data).toHaveLength(1);
+  expect(filtered.data[0].status).toBe("DRAFT");
+  const rows = page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem");
+  await page.goto("/dashboard/posts?status=DRAFT");
+  await expect(rows).toHaveCount(10);
+  await page.getByRole("link", { name: "صفحهٔ بعد" }).click();
+  await expect(page).toHaveURL("/dashboard/posts?page=2&status=DRAFT");
+  await expect(rows).toHaveCount(1);
+  await page.reload();
+  await expect(page.getByRole("main")).toContainText("صفحهٔ ۲ از ۲");
+  await page.getByRole("link", { name: "صفحهٔ قبل" }).click();
+  await expect(page).toHaveURL("/dashboard/posts?status=DRAFT");
+  await page.goBack();
+  await expect(rows).toHaveCount(1);
+  await page.getByRole("navigation", { name: "وضعیت مقاله‌ها" }).getByRole("link", { name: "منتشرشده", exact: true }).click();
+  await expect(page).toHaveURL("/dashboard/posts?status=PUBLISHED");
+  await expect(rows).toHaveCount(4);
+  await page.goto("/dashboard/posts?page=999&status=DRAFT");
+  await expect(page.getByRole("status")).toHaveText("در این صفحه مقاله‌ای وجود ندارد.");
+  await page.getByRole("link", { name: "بازگشت به صفحهٔ اول" }).click();
+  await expect(page).toHaveURL("/dashboard/posts?status=DRAFT");
+  await expect(rows).toHaveCount(10);
+  for (const failure of ["postsMode=error", "postsMode=invalid", "postsMode=foreign", "mode=error"]) {
+    await request.post(`${control}&${failure}`);
+    await page.goto("/dashboard/posts?page=2&status=DRAFT");
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("دریافت مقاله‌های شما ممکن نشد.");
+    await request.post(control);
+    await page.getByRole("button", { name: "تلاش دوباره" }).click();
+    await expect(page).toHaveURL("/dashboard/posts?page=2&status=DRAFT");
+    await expect(rows).toHaveCount(1);
+    await expect(page.getByRole("navigation", { name: "وضعیت مقاله‌ها" }).getByRole("link", { name: "پیش‌نویس", exact: true })).toHaveAttribute("aria-current", "page");
+  }
+});
+
+test("Author status filters remain available during loading and distinguish an empty status", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&postsMode=slow");
+  await page.goto("/dashboard/posts?status=PUBLISHED", { waitUntil: "commit" });
+  await expect(page.getByRole("status")).toHaveText("در حال دریافت مقاله‌های شما…");
+  const filters = page.getByRole("navigation", { name: "وضعیت مقاله‌ها" });
+  await expect(filters.getByRole("link", { name: "منتشرشده", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(4);
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&author=nima");
+  await page.goto("/dashboard/posts?status=DRAFT");
+  await expect(page.getByRole("status")).toHaveText("مقاله‌ای با این وضعیت ندارید.");
+  await expect(page.getByRole("navigation", { name: "صفحه‌بندی مقاله‌های من" })).toHaveCount(0);
+  await filters.getByRole("link", { name: "همه", exact: true }).click();
+  await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(1);
+  await expect(page.getByRole("main")).toContainText("کنارگذاشته‌شده");
+  for (const query of ["status=DEPRECATED", "status=DRAFT&status=PUBLISHED"]) {
+    expect((await request.get(`http://127.0.0.1:4101/dashboard-posts?page=1&limit=10&${query}`)).status()).toBe(400);
+  }
+});
+
+test("an Author starts a new article and browses own articles from the workspace", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  for (const width of [360, 390, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/dashboard/workspace");
+    const main = page.getByRole("main");
+    const create = main.getByRole("link", { name: "مقاله جدید", exact: true });
+    const posts = main.getByRole("link", { name: "مقاله‌های من", exact: true });
+    await expect(create).toBeVisible();
+    await expect(posts).toBeVisible();
+    for (const theme of ["light", "dark"]) {
+      await page.getByRole("button", { name: theme === "light" ? "فعال‌کردن حالت روشن" : "فعال‌کردن حالت تاریک" }).click();
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      for (const link of [create, posts]) {
+        const bounds = await link.boundingBox();
+        expect(bounds!.width).toBeGreaterThanOrEqual(44);
+        expect(bounds!.height).toBeGreaterThanOrEqual(44);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`author-workspace-${theme}-${width}.png`), fullPage: true });
+    }
+    await create.focus();
+    await expect(create).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/dashboard\/posts\/new$/);
+    await expect(page.getByLabel("عنوان مقاله", { exact: true })).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/dashboard\/workspace$/);
+    await create.focus();
+    await page.keyboard.press("Tab");
+    await expect(posts).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/dashboard\/posts$/);
+    await expect(page.getByRole("heading", { level: 1, name: "مقاله‌های من" })).toBeVisible();
+    await expect(page.getByRole("listitem").filter({ hasText: "راهنمای Next.js" })).toBeVisible();
+  }
+  for (const role of ["USER", "ADMIN"]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=${role}`);
+    await page.goto("/dashboard/workspace");
+    await expect(page.getByRole("main").getByRole("link", { name: "مقاله جدید", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("main").getByRole("link", { name: "مقاله‌های من", exact: true })).toHaveCount(0);
+  }
+});
+
+test("publication actions share an RTL row and use a centered keyboard-accessible confirmation modal", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts/new");
+  const save = page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true });
+  const publish = page.getByRole("button", { name: "انتشار مقاله", exact: true });
+  await expect(publish).toBeVisible();
+  await expect(publish).toBeDisabled();
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("مقاله برای تأیید انتشار");
+  await page.getByRole("textbox", { name: "متن مقاله", exact: true }).fill("محتوای حفظ‌شده");
+  await page.getByRole("checkbox", { name: "توسعهٔ وب" }).check();
+  await expect(publish).toBeDisabled();
+  await save.click();
+  await expect(publish).toBeEnabled();
+  const actions = page.getByRole("group", { name: "عملیات مقاله" });
+  const modal = page.getByRole("dialog", { name: "تأیید تغییر وضعیت" });
+  for (const width of [360, 390, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(actions.getByRole("button")).toHaveCount(2);
+    const saveBox = await save.boundingBox();
+    const publishBox = await publish.boundingBox();
+    expect(publishBox!.x + publishBox!.width).toBeLessThanOrEqual(saveBox!.x);
+    expect(Math.abs(publishBox!.y - saveBox!.y)).toBeLessThanOrEqual(1);
+    await publish.click();
+    await expect(modal).toHaveAttribute("aria-modal", "true");
+    const confirm = modal.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true });
+    const cancel = modal.getByRole("button", { name: "انصراف", exact: true });
+    await expect(confirm).toBeFocused();
+    const panel = await modal.boundingBox();
+    expect(Math.abs(panel!.x + panel!.width / 2 - width / 2)).toBeLessThanOrEqual(2);
+    expect(Math.abs(panel!.y + panel!.height / 2 - 450)).toBeLessThanOrEqual(2);
+    await page.keyboard.press("Tab");
+    await expect(cancel).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(modal.getByRole("button", { name: "بستن", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(confirm).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(modal.getByRole("button", { name: "بستن", exact: true })).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(cancel).toBeFocused();
+    await page.screenshot({ path: testInfo.outputPath(`publication-modal-${width}.png`), fullPage: true });
+    await page.keyboard.press("Escape");
+    await expect(modal).toBeHidden();
+    await expect(publish).toBeFocused();
+    await expect(page.getByRole("region", { name: "وضعیت انتشار آزمایشی" })).toContainText("پیش‌نویس");
+  }
+  await publish.click();
+  await modal.getByRole("button", { name: "بستن", exact: true }).click();
+  await expect(modal).toBeHidden();
+  await expect(publish).toBeFocused();
+  await publish.click();
+  await page.mouse.click(4, 4);
+  await expect(modal).toBeHidden();
+  await expect(publish).toBeFocused();
+  await publish.click();
+  await modal.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
+  const unpublish = page.getByRole("button", { name: "بازگشت به پیش‌نویس", exact: true });
+  await expect(unpublish).toBeVisible();
+  await unpublish.click();
+  await modal.getByRole("button", { name: "انصراف", exact: true }).click();
+  await expect(modal).toBeHidden();
+  await expect(unpublish).toBeFocused();
+  await unpublish.click();
+  await modal.getByRole("button", { name: "تأیید لغو انتشار آزمایشی", exact: true }).click();
+  await expect(publish).toBeVisible();
+});
+
+test("an Author publishes, unpublishes and republishes only through the fixture reading views", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  const edit = "/dashboard/posts/00000000-0000-4000-8000-000000000001/edit";
+  const reading = "/preview/posts/test-post-1";
+  await page.goto("/dashboard/posts");
+  await page.getByRole("listitem").filter({ hasText: "راهنمای Next.js" }).getByRole("link", { name: "ویرایش مقاله" }).click();
+  const lifecycle = page.getByRole("region", { name: "وضعیت انتشار آزمایشی" });
+  await expect(lifecycle).toContainText("پیش‌نویس");
+  await page.getByRole("button", { name: "انتشار مقاله", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "تأیید تغییر وضعیت" })).toBeVisible();
+  await page.getByRole("button", { name: "انصراف", exact: true }).click();
+  await expect(lifecycle).toContainText("پیش‌نویس");
+  expect((await request.get(reading)).status()).toBe(404);
+  await page.getByRole("button", { name: "انتشار مقاله", exact: true }).click();
+  await page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
+  await expect(lifecycle).toContainText("در داده‌های آزمایشی منتشر شد");
+  await page.reload();
+  await expect(lifecycle).toContainText("منتشرشده");
+  await page.getByRole("link", { name: "بازگشت به مقاله‌های من" }).click();
+  await expect(page.getByRole("listitem").filter({ hasText: "راهنمای Next.js" })).toContainText("منتشرشده");
+  await page.goto(reading);
+  await expect(page.getByRole("article")).toContainText("راهنمای Next.js");
+  await page.goto(edit);
+  await page.getByRole("button", { name: "بازگشت به پیش‌نویس", exact: true }).click();
+  await page.getByRole("button", { name: "تأیید لغو انتشار آزمایشی", exact: true }).click();
+  await expect(lifecycle).toContainText("به پیش‌نویس برگشت");
+  expect((await request.get(reading)).status()).toBe(404);
+  await page.getByRole("button", { name: "انتشار مقاله", exact: true }).click();
+  await page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
+  await expect(lifecycle).toContainText("در داده‌های آزمایشی منتشر شد");
+  expect((await request.get(reading)).status()).toBe(200);
+});
+
+test("publication feedback requires a saved Category, keeps Tags optional and recovers failed or uncertain fixture writes", async ({ page, request }, testInfo) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=AUTHOR";
+  await request.post(control);
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/dashboard/posts/new");
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("مقاله با قالب حفظ‌شده");
+  const editor = page.getByRole("textbox", { name: "متن مقاله", exact: true, includeHidden: true });
+  await editor.fill("متن فارسی 123");
+  await editor.press("ControlOrMeta+a");
+  await page.getByRole("button", { name: "پررنگ", exact: true }).click();
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("ذخیره شد");
+  const lifecycle = page.getByRole("region", { name: "وضعیت انتشار آزمایشی" });
+  const publish = page.getByRole("button", { name: "انتشار مقاله", exact: true });
+  await expect(publish).toBeDisabled();
+  await expect(lifecycle).toContainText("دست‌کم یک دسته‌بندی");
+  await page.getByRole("checkbox", { name: "توسعهٔ وب" }).check();
+  await expect(publish).toBeDisabled();
+  await expect(lifecycle).toContainText("تغییرات مقاله را ذخیره کنید");
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(publish).toBeEnabled();
+  await expect(page.getByRole("checkbox", { name: "برنامه‌نویسی" })).not.toBeChecked();
+  await request.post(`${control}&saveMode=error`);
+  await publish.click();
+  await page.keyboard.press("Escape");
+  await expect(publish).toBeFocused();
+  await publish.click();
+  const confirm = page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true });
+  await expect(confirm).toBeFocused();
+  await confirm.click();
+  const modal = page.getByRole("dialog", { name: "تأیید تغییر وضعیت" });
+  await expect(modal.getByRole("alert")).toContainText("تغییر وضعیت انجام نشد");
+  await expect(editor.locator("strong")).toHaveText("متن فارسی 123");
+  await request.post(`${control}&saveMode=slow`);
+  const count = async () => (await (await request.get("http://127.0.0.1:4101/__test/dashboard-writes")).json()).writes;
+  const before = await count();
+  await confirm.dblclick();
+  await expect(modal.getByRole("status")).toHaveText("در حال تغییر وضعیت…");
+  await page.keyboard.press("Escape");
+  await expect(modal).toBeVisible();
+  await expect(modal.getByRole("button", { name: "انصراف", exact: true })).toBeDisabled();
+  await expect(modal.getByRole("button", { name: "بستن", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true, includeHidden: true })).toBeDisabled();
+  await expect(page.getByLabel("عنوان مقاله", { exact: true })).toBeDisabled();
+  await expect(lifecycle.getByRole("status")).toContainText("در داده‌های آزمایشی منتشر شد");
+  expect(await count()).toBe(before + 1);
+  await page.reload();
+  await expect(lifecycle).toContainText("منتشرشده");
+  await expect(editor.locator("strong")).toHaveText("متن فارسی 123");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("publication-mobile.png"), fullPage: true });
+  await request.post(`${control}&saveMode=uncertain`);
+  await page.getByRole("button", { name: "بازگشت به پیش‌نویس", exact: true }).click();
+  await page.getByRole("button", { name: "تأیید لغو انتشار آزمایشی", exact: true }).click();
+  await expect(lifecycle.getByRole("alert")).toContainText("نتیجهٔ تغییر وضعیت مشخص نیست");
+  await expect(page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true })).toBeDisabled();
+  await page.reload();
+  await expect(lifecycle).toContainText("پیش‌نویس");
+  await expect(editor.locator("strong")).toHaveText("متن فارسی 123");
+});
+
+test("status-only fixture contracts preserve article data, model publication times and keep public fixture state independent", async ({ request }) => {
+  const base = "http://127.0.0.1:4101";
+  await request.post(`${base}/__test/dashboard?role=AUTHOR`);
+  const document = { format: "tiptap-ui-proposal-1", document: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "محتوای حفظ‌شده", marks: [{ type: "bold" }] }] }] } };
+  const saved = await (await request.post(`${base}/dashboard-posts`, { data: { title: "چرخهٔ مقاله", content: "محتوای حفظ‌شده", categoryIds: [], tagIds: [], previewDocument: document } })).json();
+  const url = `${base}/dashboard-posts/${saved.id}`;
+  const stableFields = (post: typeof saved) => ({ id: post.id, slug: post.slug, title: post.title, content: post.content, authorId: post.authorId, createdAt: post.createdAt, categories: post.categories, tags: post.tags, previewDocument: post.previewDocument });
+  // The HTTP fixture intentionally does not enforce the UI's Category feedback.
+  const publication = await request.patch(url, { data: { status: "PUBLISHED" } });
+  expect(publication.status()).toBe(200);
+  const first = await publication.json();
+  expect(stableFields(first)).toEqual(stableFields(saved));
+  expect(first.status).toBe("PUBLISHED");
+  expect(Number.isFinite(Date.parse(first.publishedAt))).toBe(true);
+  const same = await (await request.patch(url, { data: { status: "PUBLISHED" } })).json();
+  expect(same.publishedAt).toBe(first.publishedAt);
+  const draft = await (await request.patch(url, { data: { status: "DRAFT" } })).json();
+  expect(draft.publishedAt).toBeNull();
+  expect(stableFields(draft)).toEqual(stableFields(saved));
+  expect((await request.get(`${base}/dashboard-public-posts/${saved.slug}`)).status()).toBe(404);
+  const again = await (await request.patch(url, { data: { status: "PUBLISHED" } })).json();
+  expect(Date.parse(again.publishedAt)).toBeGreaterThan(Date.parse(first.publishedAt));
+  expect(stableFields(again)).toEqual(stableFields(saved));
+  const visible = await (await request.get(`${base}/dashboard-public-posts/${saved.slug}`)).json();
+  expect(visible).toMatchObject({ id: saved.id, content: "محتوای حفظ‌شده", status: "PUBLISHED" });
+  expect(visible.previewDocument).toEqual(document);
+  const publishedList = await (await request.get(`${base}/dashboard-public-posts`)).json();
+  expect(publishedList.find((post: { id: string }) => post.id === saved.id)).not.toHaveProperty("previewDocument");
+  expect((await request.get(`${base}/posts/${saved.slug}`)).status()).toBe(404);
+  expect((await request.patch(url, { data: { status: "DEPRECATED" } })).status()).toBe(400);
+  await request.post(`${base}/__test/dashboard?role=AUTHOR&reset=1`);
+  expect((await request.get(url)).status()).toBe(404);
+  expect((await request.get(`${base}/dashboard-public-posts/${saved.slug}`)).status()).toBe(404);
+});
+
+test("the Persian rich editor formats a selection and reloads its fixture-only UI document", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts/new");
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("سند آزمایشی ویرایشگر");
+  await page.getByRole("checkbox", { name: "توسعهٔ وب" }).check();
+  const editor = page.getByRole("textbox", { name: "متن مقاله", exact: true });
+  await expect(editor).toHaveAttribute("contenteditable", "true");
+  await editor.fill("فارسی 123 و ۱۲۳");
+  await editor.press("ControlOrMeta+a");
+  await page.getByRole("button", { name: "پررنگ", exact: true }).click();
+  await expect(editor.locator("strong")).toHaveText("فارسی 123 و ۱۲۳");
+  await page.getByRole("button", { name: "تیتر ۲", exact: true }).click();
+  await expect(editor.locator("h2")).toContainText("فارسی 123 و ۱۲۳");
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("ذخیره شد");
+  await page.reload();
+  await expect(editor.locator("h2 strong")).toHaveText("فارسی 123 و ۱۲۳");
+  await page.getByRole("button", { name: "انتشار مقاله", exact: true }).click();
+  await page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
+  await expect(page.getByRole("region", { name: "وضعیت انتشار آزمایشی" })).toContainText("در داده‌های آزمایشی منتشر شد");
+  await page.getByRole("link", { name: "مشاهده در خواندن آزمایشی" }).click();
+  const reading = page.getByRole("document", { name: "متن مقاله", exact: true });
+  await expect(reading).toHaveAttribute("contenteditable", "false");
+  await expect(reading.locator("h2 strong")).toHaveText("فارسی 123 و ۱۲۳");
+  await expect(page.getByRole("article").getByRole("toolbar")).toHaveCount(0);
+  await expect(page.getByRole("article").locator("button, input, textarea, [contenteditable=true]")).toHaveCount(0);
+  const rendered = await reading.innerHTML();
+  await reading.focus();
+  await reading.press("ControlOrMeta+b");
+  await reading.press("ControlOrMeta+Alt+3");
+  await page.keyboard.type("cannot edit");
+  expect(await reading.innerHTML()).toBe(rendered);
+  await page.reload();
+  await expect(reading.locator("h2 strong")).toHaveText("فارسی 123 و ۱۲۳");
+});
+
+test("published preview reading preserves rich blocks, safe links and literal markup without editing controls", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  // Test-only UI document seeded through the existing HTTP fixture, then saved in the real form.
+  const sampleDocument = { type: "doc", content: [
+    { type: "heading", attrs: { level: 2, dir: "rtl" }, content: [{ type: "text", text: "تیتر دوم", marks: [{ type: "bold" }] }] },
+    { type: "heading", attrs: { level: 3, dir: "rtl" }, content: [{ type: "text", text: "تیتر سوم", marks: [{ type: "italic" }] }] },
+    { type: "heading", attrs: { level: 4, dir: "rtl" }, content: [{ type: "text", text: "تیتر چهارم" }] },
+    { type: "bulletList", content: [{ type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "نشانه" }] }] }] },
+    { type: "orderedList", content: [{ type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "شماره" }] }] }] },
+    { type: "paragraph", attrs: { dir: "ltr" }, content: [{ type: "text", text: "English 123" }] },
+    { type: "paragraph", attrs: { dir: "rtl" }, content: [{ type: "text", text: "پیوند امن", marks: [{ type: "link", attrs: { href: "https://example.test/guide" } }] }] },
+    { type: "paragraph", content: [{ type: "text", text: "پیوند ناامن", marks: [{ type: "link", attrs: { href: "javascript:window.previewExecuted=true" } }] }] },
+    { type: "codeBlock", attrs: { dir: "ltr" }, content: [{ type: "text", text: 'const n = 123; // فارسی ۱۲۳' }] },
+    { type: "paragraph", content: [{ type: "text", text: '<img src=x onerror="window.previewExecuted=true">' }] },
+  ] };
+  const saved = await (await request.post("http://127.0.0.1:4101/dashboard-posts", { data: {
+    title: "نمایش سند قالب‌دار", content: "تیتر دوم\nتیتر سوم\nتیتر چهارم\nنشانه\nشماره\nEnglish 123\nپیوند امن\nپیوند ناامن\nconst n = 123; // فارسی ۱۲۳\n<img src=x onerror=\"window.previewExecuted=true\">",
+    categoryIds: ["20000000-0000-4000-8000-000000000001"], tagIds: [], previewDocument: { format: "tiptap-ui-proposal-1", document: sampleDocument },
+  } })).json();
+  await page.goto(`/dashboard/posts/${saved.id}/edit`);
+  await expect(page.getByRole("textbox", { name: "متن مقاله", exact: true }).locator("h2 strong")).toHaveText("تیتر دوم");
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("سند ذخیره‌شده و منتشرشده");
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("ذخیره شد");
+  await page.getByRole("button", { name: "انتشار مقاله", exact: true }).click();
+  await page.getByRole("button", { name: "تأیید انتشار آزمایشی", exact: true }).click();
+  await expect(page.getByRole("region", { name: "وضعیت انتشار آزمایشی" })).toContainText("در داده‌های آزمایشی منتشر شد");
+  await page.getByRole("link", { name: "مشاهده در خواندن آزمایشی" }).click();
+  const reading = page.getByRole("document", { name: "متن مقاله", exact: true });
+  await expect(reading).toHaveAttribute("contenteditable", "false");
+  await expect(reading.locator("h2 strong")).toHaveText("تیتر دوم");
+  await expect(reading.locator("h3 em")).toHaveText("تیتر سوم");
+  await expect(reading.locator("h4")).toHaveText("تیتر چهارم");
+  await expect(reading.locator("ul li")).toHaveText("نشانه");
+  await expect(reading.locator("ol li")).toHaveText("شماره");
+  await expect(reading.getByText("English 123", { exact: true })).toHaveAttribute("dir", "ltr");
+  await expect(reading.locator("h2")).toHaveAttribute("dir", "rtl");
+  await expect(reading.getByRole("link", { name: "پیوند امن", exact: true })).toHaveAttribute("href", "https://example.test/guide");
+  await expect(reading.locator('a[href^="javascript:"]')).toHaveCount(0);
+  await expect(reading.locator("pre")).toHaveCSS("direction", "ltr");
+  await expect(reading.locator("pre code")).toHaveText('const n = 123; // فارسی ۱۲۳');
+  await expect(reading).toContainText('<img src=x onerror="window.previewExecuted=true">');
+  await expect(reading.locator("img, script, button, input, textarea")).toHaveCount(0);
+  await expect(page.getByRole("article").getByRole("toolbar")).toHaveCount(0);
+  expect(await page.evaluate(() => "previewExecuted" in window)).toBe(false);
+  await page.setViewportSize({ width: 360, height: 900 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("readonly-reading-mobile.png"), fullPage: true });
+  await page.reload();
+  await expect(reading.locator("h3 em")).toHaveText("تیتر سوم");
+});
+
+test("editor toolbar keyboard access preserves selection and history across unrelated form changes", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts/new");
+  const editor = page.getByRole("textbox", { name: "متن مقاله", exact: true });
+  await editor.fill("انتخاب پایدار 42");
+  await editor.press("ControlOrMeta+a");
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("تغییر عنوان");
+  await page.getByRole("checkbox", { name: "توسعهٔ وب" }).check();
+  await page.getByRole("button", { name: "پررنگ", exact: true }).click();
+  await expect(editor.locator("strong")).toHaveText("انتخاب پایدار 42");
+  await editor.press("Alt+F10");
+  await expect(page.getByRole("button", { name: "بند معمولی", exact: true })).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.getByRole("button", { name: "تیتر ۲", exact: true })).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("button", { name: "بند معمولی", exact: true })).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(page.getByRole("button", { name: "واگرد", exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(editor).toBeFocused();
+  await expect(editor.locator("strong")).toHaveCount(0);
+  await page.getByRole("button", { name: "ازنو", exact: true }).click();
+  await expect(editor.locator("strong")).toHaveText("انتخاب پایدار 42");
+  await editor.press("Alt+F10");
+  await page.keyboard.press("Escape");
+  await expect(editor).toBeFocused();
+});
+
+test("rich editor supports reviewed headings, lists, block direction, LTR code and composition text", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts/new");
+  const editor = page.getByRole("textbox", { name: "متن مقاله", exact: true });
+  await expect(editor).toHaveAttribute("dir", "rtl");
+  await editor.fill("متن فارسی 123 و ۱۲۳");
+  await editor.press("ControlOrMeta+a");
+  for (const level of [2, 3, 4]) {
+    await page.getByRole("button", { name: `تیتر ${["", "", "۲", "۳", "۴"][level]}`, exact: true }).click();
+    await expect(editor.locator(`h${level}`)).toHaveText("متن فارسی 123 و ۱۲۳");
+  }
+  await page.getByRole("button", { name: "بند معمولی", exact: true }).click();
+  await page.getByRole("button", { name: "کج", exact: true }).click();
+  await expect(editor.locator("em")).toHaveText("متن فارسی 123 و ۱۲۳");
+  for (const [name, tag] of [["فهرست نشانه‌دار", "ul"], ["فهرست شماره‌دار", "ol"]]) {
+    await page.getByRole("button", { name, exact: true }).click();
+    await expect(editor.locator(`${tag} li`)).toContainText("متن فارسی 123 و ۱۲۳");
+    await page.getByRole("button", { name, exact: true }).click();
+  }
+  await page.getByRole("button", { name: "جهت بند چپ‌به‌راست", exact: true }).click();
+  await expect(editor.locator("p")).toHaveAttribute("dir", "ltr");
+  await page.getByRole("button", { name: "جهت بند راست‌به‌چپ", exact: true }).click();
+  await expect(editor.locator("p")).toHaveAttribute("dir", "rtl");
+  await editor.press("ControlOrMeta+End");
+  await editor.press("Enter");
+  await page.getByRole("button", { name: "بلوک کد", exact: true }).click();
+  await page.keyboard.insertText('const count = 123; // فارسی ۱۲۳');
+  await expect(editor.locator("pre")).toHaveCSS("direction", "ltr");
+  await expect(editor.locator("pre code")).toHaveText('const count = 123; // فارسی ۱۲۳');
+  await editor.dispatchEvent("compositionstart", { data: "" });
+  await page.keyboard.insertText(" می‌نویسم");
+  await editor.dispatchEvent("compositionend", { data: " می‌نویسم" });
+  await expect(editor).toContainText("می‌نویسم");
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("فارسی و کد");
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("ذخیره شد");
+  await page.reload();
+  await expect(editor.locator("pre")).toHaveCSS("direction", "ltr");
+  await expect(editor).toContainText('const count = 123; // فارسی ۱۲۳ می‌نویسم');
+});
+
+test("link editing gives safe Persian feedback and restores the selected text", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts/new");
+  const editor = page.getByRole("textbox", { name: "متن مقاله", exact: true });
+  await editor.fill("پیوند انتخاب‌شده");
+  await editor.press("ControlOrMeta+End");
+  await page.getByRole("button", { name: "ویرایش پیوند", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("ابتدا بخشی از متن را انتخاب کنید");
+  await editor.press("ControlOrMeta+a");
+  await page.getByRole("button", { name: "ویرایش پیوند", exact: true }).click();
+  const url = page.getByLabel("نشانی پیوند", { exact: true });
+  await expect(url).toBeFocused();
+  await url.fill("javascript:alert(1)");
+  await page.getByRole("button", { name: "اعمال پیوند", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("یک نشانی کامل");
+  await expect(editor.locator("a")).toHaveCount(0);
+  await url.fill("https://example.test/guide");
+  await url.press("Enter");
+  await expect(editor.locator("a")).toHaveAttribute("href", "https://example.test/guide");
+  await expect(editor.locator("a")).toHaveText("پیوند انتخاب‌شده");
+  await page.getByRole("button", { name: "ویرایش پیوند", exact: true }).click();
+  await page.getByRole("button", { name: "حذف پیوند", exact: true }).click();
+  await expect(editor.locator("a")).toHaveCount(0);
+  await expect(editor).toHaveText("پیوند انتخاب‌شده");
+});
+
+test("an Author explicitly creates a fixture draft and edits plain content with persisted taxonomy", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts");
+  await page.getByRole("link", { name: "ایجاد مقالهٔ آزمایشی" }).click();
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByText("عنوان مقاله را وارد کنید.", { exact: true })).toBeVisible();
+  await expect(page.getByText("متن مقاله را وارد کنید.", { exact: true })).toBeVisible();
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("پیش‌نویس تازه");
+  await page.getByLabel("متن مقاله", { exact: true }).fill("متن ساده <strong>بدون تبدیل</strong>\nخط دوم");
+  await page.getByRole("checkbox", { name: "توسعهٔ وب" }).check();
+  await page.getByRole("checkbox", { name: "برنامه‌نویسی" }).check();
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("ذخیره شد");
+  await expect(page).toHaveURL(/\/dashboard\/posts\/[^/]+\/edit$/);
+  await page.getByRole("link", { name: "بازگشت به مقاله‌های من" }).click();
+  const row = page.getByRole("listitem").filter({ hasText: "پیش‌نویس تازه" });
+  await expect(row).toContainText("پیش‌نویس");
+  await row.getByRole("link", { name: "ویرایش مقاله" }).click();
+  await expect(page.getByLabel("متن مقاله", { exact: true })).toHaveText("متن ساده <strong>بدون تبدیل</strong>\nخط دوم", { useInnerText: true });
+  await expect(page.getByRole("checkbox", { name: "توسعهٔ وب" })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "برنامه‌نویسی" })).toBeChecked();
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("عنوان ویرایش‌شده");
+  await page.getByRole("checkbox", { name: "برنامه‌نویسی" }).uncheck();
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("ذخیره شد");
+  await page.reload();
+  await expect(page.getByLabel("عنوان مقاله", { exact: true })).toHaveValue("عنوان ویرایش‌شده");
+  await expect(page.getByRole("checkbox", { name: "برنامه‌نویسی" })).not.toBeChecked();
+});
+
+test("an Author recovers missing taxonomy choices and failed reads without losing selected relations", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&formMode=missing");
+  const edit = "/dashboard/posts/00000000-0000-4000-8000-000000000001/edit";
+  await page.goto(edit);
+  const category = page.getByRole("checkbox", { name: "توسعهٔ وب" });
+  await expect(category).toBeChecked();
+  await category.uncheck();
+  await expect(category).toBeVisible();
+  await category.check();
+  await page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("ذخیره شد");
+  await page.reload();
+  await expect(category).toBeChecked();
+  for (const mode of ["error", "invalid", "detail-error"]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&formMode=${mode}`);
+    await page.goto(edit);
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("دریافت مقاله یا گزینه‌های آن ممکن نشد.");
+    await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+    await page.getByRole("button", { name: "تلاش دوباره" }).click();
+    await expect(category).toBeChecked();
+  }
+});
+
+test("fixture saves are explicit, prevent duplicate submission and preserve inputs on failed or uncertain writes", async ({ page, request }) => {
+  const control = "http://127.0.0.1:4101/__test/dashboard?role=AUTHOR";
+  const writes = async () => (await (await request.get("http://127.0.0.1:4101/__test/dashboard-writes")).json()).writes;
+  await request.post(`${control}&saveMode=error`);
+  await page.goto("/dashboard/posts/new");
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("حفظ ورودی‌ها");
+  await page.getByLabel("متن مقاله", { exact: true }).fill("متن حفظ می‌شود.");
+  await page.getByRole("checkbox", { name: "یادگیری ۲۰۲۶" }).check();
+  expect(await writes()).toBe(0);
+  const save = page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true });
+  await save.click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("ذخیره انجام نشد.");
+  await expect(page.getByLabel("عنوان مقاله", { exact: true })).toHaveValue("حفظ ورودی‌ها");
+  await expect(page.getByLabel("متن مقاله", { exact: true })).toHaveText("متن حفظ می‌شود.");
+  await expect(page.getByRole("checkbox", { name: "یادگیری ۲۰۲۶" })).toBeChecked();
+  await request.post(`${control}&saveMode=slow`);
+  await save.dblclick();
+  await expect(page.getByRole("button", { name: "در حال ذخیره…" })).toBeDisabled();
+  await expect(page.getByLabel("عنوان مقاله", { exact: true })).toBeDisabled();
+  await expect(page.getByRole("status")).toContainText("ذخیره شد");
+  expect(await writes()).toBe(2);
+  await request.post(`${control}&saveMode=uncertain`);
+  await page.getByLabel("عنوان مقاله", { exact: true }).fill("نتیجهٔ نامشخص");
+  await save.click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("نتیجهٔ ذخیره مشخص نیست.");
+  await expect(save).toBeDisabled();
+  await expect(page.getByLabel("عنوان مقاله", { exact: true })).toHaveValue("نتیجهٔ نامشخص");
+  expect(await writes()).toBe(3);
+  await page.getByRole("link", { name: "بازگشت به مقاله‌های من" }).click();
+  const row = page.getByRole("listitem").filter({ hasText: "نتیجهٔ نامشخص" });
+  await row.getByRole("link", { name: "ویرایش مقاله" }).click();
+  await expect(page.getByLabel("عنوان مقاله", { exact: true })).toHaveValue("نتیجهٔ نامشخص");
+});
+
+test("fixture HTTP contracts keep detail/write responses distinct and reset list/detail together", async ({ request }) => {
+  const base = "http://127.0.0.1:4101";
+  await request.post(`${base}/__test/dashboard?role=AUTHOR`);
+  const previewDocument = { format: "tiptap-ui-proposal-1", document: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "متن ساده" }] }, { type: "paragraph", content: [{ type: "text", text: "بدون JSON" }] }] } };
+  const input = { title: "قرارداد آزمایشی", content: "متن ساده\nبدون JSON", categoryIds: ["20000000-0000-4000-8000-000000000001"], tagIds: ["40000000-0000-4000-8000-000000000001"], previewDocument };
+  const response = await request.post(`${base}/dashboard-posts`, { data: input });
+  expect(response.status()).toBe(201);
+  const payload = await response.json();
+  expect(payload.content).toBe("متن ساده\nبدون JSON");
+  expect(payload.previewDocument).toEqual(previewDocument);
+  const saved = parseArticleWrite(payload);
+  expect(saved).toMatchObject({ title: input.title, content: input.content, status: "DRAFT", publishedAt: null });
+  expect(saved.id).toMatch(/^[0-9a-f-]{36}$/);
+  expect(saved.slug).toMatch(/^fixture-draft-/);
+  expect(payload).not.toHaveProperty("author");
+  expect(payload.categories[0]).toHaveProperty("createdAt");
+  expect(() => parseArticleDetail(payload)).toThrow();
+  const detail = await (await request.get(`${base}/dashboard-posts/${saved.id}`)).json();
+  expect(detail.previewDocument).toEqual(previewDocument);
+  expect(parseArticleDetail(detail)).toEqual(saved);
+  expect(detail.categories[0]).not.toHaveProperty("createdAt");
+  expect(() => parseArticleWrite(detail)).toThrow();
+  for (const invalid of [{ ...detail, content: {} }, { ...detail, author: { ...detail.author, id: "other" } }, { ...detail, categories: null }]) expect(() => parseArticleDetail(invalid)).toThrow();
+  const list = await (await request.get(`${base}/dashboard-posts?page=1&limit=10`)).json();
+  expect(list.data[0]).toMatchObject({ id: saved.id, slug: saved.slug, title: input.title });
+  expect(list.data[0]).not.toHaveProperty("categories");
+  expect(list.data[0]).not.toHaveProperty("previewDocument");
+  expect((await request.patch(`${base}/dashboard-posts/${saved.id}`, { data: { ...input, previewDocument: { ...previewDocument, format: "unknown" } } })).status()).toBe(400);
+  expect((await request.patch(`${base}/dashboard-posts/${saved.id}`, { data: { ...input, status: "PUBLISHED" } })).status()).toBe(400);
+  await request.post(`${base}/__test/dashboard?role=AUTHOR&reset=1`);
+  expect((await request.get(`${base}/dashboard-posts/${saved.id}`)).status()).toBe(404);
+  expect((await (await request.get(`${base}/dashboard-posts?page=1&limit=10`)).json()).meta.total).toBe(11);
+});
+
+test("article forms remain accessible on mobile and saving is unavailable without the preview adapter", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  for (const width of [360, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/dashboard/posts/new");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    for (const theme of ["light", "dark"]) {
+      const toggle = page.getByRole("button", { name: theme === "light" ? "فعال‌کردن حالت روشن" : "فعال‌کردن حالت تاریک" });
+      await toggle.click();
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.getByLabel("عنوان مقاله", { exact: true }).focus();
+      await page.keyboard.press("Tab");
+      await expect(page.getByRole("button", { name: "بند معمولی", exact: true })).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(page.getByLabel("متن مقاله", { exact: true })).toBeFocused();
+      await page.screenshot({ path: testInfo.outputPath(`article-form-${width}-${theme}.png`), fullPage: true });
+    }
+  }
+  await page.goto("/dashboard/posts/unavailable");
+  await expect(page.getByText("ذخیرهٔ واقعی تا اتصال امن به سامانه در دسترس نیست.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "ذخیرهٔ آزمایشی", exact: true })).toBeDisabled();
+  expect((await (await request.get("http://127.0.0.1:4101/__test/dashboard-writes")).json()).writes).toBe(0);
+  for (const role of ["USER", "ADMIN"]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=${role}`);
+    await page.goto("/dashboard/posts/new");
+    await expect(page.getByLabel("عنوان مقاله", { exact: true })).toHaveCount(0);
+  }
+});
+
+test("an Author browses only their own Posts with persisted pagination and no premature actions", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.goto("/dashboard/posts");
+  await expect(page.getByRole("heading", { level: 1, name: "مقاله‌های من" })).toBeVisible();
+  await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(10);
+  await expect(page.getByRole("main")).toContainText("پیش‌نویس");
+  await expect(page.getByRole("main")).toContainText("منتشرشده");
+  await expect(page.getByRole("main")).toContainText("کنارگذاشته‌شده");
+  await page.getByRole("link", { name: "صفحهٔ بعد" }).click();
+  await expect(page).toHaveURL(/\/dashboard\/posts\?page=2$/);
+  await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(1);
+  await page.reload();
+  await expect(page.getByRole("main")).toContainText("صفحهٔ ۲ از ۲");
+  await expect(page.getByRole("main").getByRole("link", { name: /حذف|انتشار/ })).toHaveCount(0);
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&author=nima");
+  await page.goto("/dashboard/posts");
+  await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(1);
+  await expect(page.getByRole("main")).toContainText("پایان این مجموعه");
+  await expect(page.getByRole("main")).not.toContainText("راهنمای Next.js");
+});
+
+test("own-Post loading, empty, invalid and failed reads recover at the selected page", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&postsMode=slow");
+  await page.goto("/dashboard/posts", { waitUntil: "commit" });
+  await expect(page.getByRole("status")).toHaveText("در حال دریافت مقاله‌های شما…");
+  await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(10);
+  for (const mode of ["error", "invalid", "foreign"]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&postsMode=${mode}`);
+    await page.goto("/dashboard/posts?page=2");
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("دریافت مقاله‌های شما ممکن نشد.");
+    await expect(page.getByRole("list", { name: "مقاله‌های من" })).toHaveCount(0);
+    await expect(page.getByRole("main")).not.toContainText("TEST DOUBLE");
+  }
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.getByRole("button", { name: "تلاش دوباره" }).click();
+  await expect(page).toHaveURL(/page=2$/);
+  await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(1);
+  for (const mode of ["error", "invalid"]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&mode=${mode}`);
+    await page.goto("/dashboard/posts?page=2");
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("دریافت مقاله‌های شما ممکن نشد.");
+    await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+    await page.getByRole("button", { name: "تلاش دوباره" }).click();
+    await expect(page).toHaveURL(/page=2$/);
+    await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(1);
+  }
+  await page.goto("/dashboard/posts?page=999");
+  await expect(page.getByRole("status")).toHaveText("در این صفحه مقاله‌ای وجود ندارد.");
+  await page.getByRole("link", { name: "بازگشت به صفحهٔ اول" }).click();
+  await expect(page).toHaveURL(/\/dashboard\/posts$/);
+  for (const query of ["page=-1", "page=2&page=3", "page=9007199254740992"]) {
+    await page.goto(`/dashboard/posts?${query}`);
+    await expect(page.getByRole("main")).toContainText("صفحهٔ ۱ از ۲");
+  }
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR&postsMode=empty");
+  await page.reload();
+  await expect(page.getByRole("status")).toHaveText("هنوز مقاله‌ای ندارید.");
+  await expect(page.getByRole("navigation", { name: "صفحه‌بندی مقاله‌های من" })).toHaveCount(0);
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER");
+  await page.goto("/dashboard/posts");
+  await expect(page.getByRole("list", { name: "مقاله‌های من" })).toHaveCount(0);
+});
+
+test("author list remains readable and keyboard-paginated on mobile in both themes", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  for (const width of [360, 390, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/dashboard/posts");
+    await expect(page.getByRole("list", { name: "مقاله‌های من" }).getByRole("listitem")).toHaveCount(10);
+    const filters = page.getByRole("navigation", { name: "وضعیت مقاله‌ها" });
+    for (const link of await filters.getByRole("link").all()) {
+      const bounds = await link.boundingBox();
+      expect(bounds!.width).toBeGreaterThanOrEqual(44);
+      expect(bounds!.height).toBeGreaterThanOrEqual(44);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await expect(page.getByRole("heading", { name: "عنوان <strong>مقاله</strong> باید متن بماند" })).toBeVisible();
+    for (const theme of ["light", "dark"]) {
+      await page.getByRole("button", { name: theme === "light" ? "فعال‌کردن حالت روشن" : "فعال‌کردن حالت تاریک" }).click();
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      await page.screenshot({ path: testInfo.outputPath(`author-posts-${theme}-${width}.png`), fullPage: true });
+    }
+    const next = page.getByRole("link", { name: "صفحهٔ بعد" });
+    await next.focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/page=2$/);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/dashboard\/posts$/);
+  }
+});
+
+test("each fixture Role gets an honest RTL dashboard with working role navigation", async ({ page, request }) => {
+  for (const [role, name, label, destination] of [
+    ["USER", "نرگس رضایی", "مقالات ذخیره‌شده", "bookmarks"],
+    ["AUTHOR", "سارا کیانی", "فضای نویسندگی", "workspace"],
+    ["ADMIN", "مدیر نمونه", "فضای مدیریت", "workspace"],
+  ]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?role=${role}`);
+    await page.goto("/dashboard");
+    await expect(page.getByRole("heading", { level: 1, name: "پیشخوان" })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+    await expect(page.getByRole("note")).toContainText("داده‌های آزمایشی");
+    await expect(page.getByRole("group", { name: "هویت حساب" })).toContainText(name);
+    await page.getByRole("link", { name: label, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/dashboard/${destination}$`));
+    await expect(page.getByRole("heading", { level: 1, name: label })).toBeVisible();
+    await expect(page.getByRole("link", { name: label, exact: true })).toHaveAttribute("aria-current", "page");
+    await page.reload();
+    await expect(page.getByRole("group", { name: "هویت حساب" })).toContainText(name);
+    await expect(page.locator("aside").getByRole("button", { name: "خروج", exact: true })).toHaveCount(role === "ADMIN" ? 0 : 1);
+  }
+});
+
+test("loading and unavailable identity preserve preview context and offer a fresh retry", async ({ page, request }) => {
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await request.post("http://127.0.0.1:4101/__test/dashboard?mode=slow");
+    await page.goto("/dashboard", { waitUntil: "commit" });
+    await expect(page.getByRole("status")).toHaveText("در حال دریافت پیشخوان…");
+    await expect(page.getByRole("note")).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    const loadingContent = await page.getByRole("main").boundingBox();
+    await expect(page.getByRole("group", { name: "هویت حساب" })).toContainText("نرگس رضایی");
+    const loadedContent = await page.getByRole("main").boundingBox();
+    expect(Math.abs(loadedContent!.y - loadingContent!.y)).toBeLessThanOrEqual(1);
+  }
+  for (const mode of ["error", "invalid"]) {
+    await request.post(`http://127.0.0.1:4101/__test/dashboard?mode=${mode}`);
+    await page.goto("/dashboard/workspace");
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("دریافت اطلاعات پیشخوان ممکن نشد.");
+    await expect(page.getByRole("group", { name: "هویت حساب" })).not.toContainText("نرگس رضایی");
+    await expect(page.getByRole("note")).toBeVisible();
+    await expect(page.getByRole("main")).not.toContainText("TEST DOUBLE");
+  }
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.getByRole("button", { name: "تلاش دوباره" }).click();
+  await expect(page).toHaveURL(/\/dashboard\/workspace$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("فضای نویسندگی");
+});
+
+test("mobile navigation, skip link, theme persistence and return-to-blog work with a keyboard", async ({ page, request }, testInfo) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=AUTHOR");
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/dashboard");
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "رفتن به محتوای پیشخوان" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("main")).toBeFocused();
+
+  const menu = page.getByRole("button", { name: "فهرست پیشخوان", exact: true });
+  const workspace = page.getByRole("link", { name: "فضای نویسندگی", exact: true });
+  await menu.focus();
+  await page.keyboard.press("Enter");
+  await expect(menu).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(workspace).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeFocused();
+  await expect(menu).toHaveAttribute("aria-expanded", "false");
+  await page.keyboard.press("Space");
+  await workspace.click();
+  await expect(page).toHaveURL(/\/dashboard\/workspace$/);
+  await expect(menu).toHaveAttribute("aria-expanded", "false");
+
+  for (const width of [360, 390, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    if (width < 1024) await menu.click();
+    else await expect(menu).toBeHidden();
+    await expect(workspace).toBeVisible();
+    for (const control of await page.getByRole("navigation", { name: "راهبری پیشخوان" }).locator("a:visible, button:visible").all()) {
+      const bounds = await control.boundingBox();
+      expect(bounds?.width).toBeGreaterThanOrEqual(44);
+      expect(bounds?.height).toBeGreaterThanOrEqual(44);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const darkBackground = await page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor);
+    await page.getByRole("button", { name: "فعال‌کردن حالت روشن" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    expect(await page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor)).not.toBe(darkBackground);
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await page.screenshot({ path: testInfo.outputPath(`dashboard-light-${width}.png`), fullPage: true });
+    await page.getByRole("button", { name: "فعال‌کردن حالت تاریک" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await page.screenshot({ path: testInfo.outputPath(`dashboard-dark-${width}.png`), fullPage: true });
+  }
+  await page.getByRole("link", { name: "بازگشت به وبلاگ" }).click();
+  await expect(page).toHaveURL("/");
+  await expect(page.getByRole("article").first()).toBeVisible();
+});
+
+
+test("bookmark icons sit inside article and saved cards with accessible toggle states", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER");
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/posts/test-post-1");
+    const save = page.getByRole("button", { name: "ذخیره مقاله", exact: true });
+    await expect(save).toHaveAttribute("aria-pressed", "false");
+    await expect(save).toHaveText("");
+    await expect(save.locator("svg")).toHaveAttribute("aria-hidden", "true");
+    await expect(save.locator("svg")).toHaveAttribute("fill", "none");
+    const checkCorner = async () => {
+      const geometry = await page.getByRole("button", { name: /ذخیره مقاله|حذف از ذخیره‌شده‌ها/ }).evaluate(button => {
+        const card = button.closest("article")!.querySelector(":scope > div")!;
+        const b = button.getBoundingClientRect(), c = card.getBoundingClientRect();
+        return { left: b.left-c.left, top: b.top-c.top, width:b.width, height:b.height, nested:!!button.closest("a") };
+      });
+      expect(geometry.left).toBeGreaterThanOrEqual(0);
+      expect(geometry.left).toBeLessThanOrEqual(28);
+      expect(geometry.top).toBeGreaterThanOrEqual(0);
+      expect(geometry.top).toBeLessThanOrEqual(28);
+      expect(geometry.width).toBeGreaterThanOrEqual(44);
+      expect(geometry.height).toBeGreaterThanOrEqual(44);
+      expect(geometry.nested).toBe(false);
+    };
+    await checkCorner();
+    await save.focus();
+    await page.keyboard.press("Space");
+    const remove = page.getByRole("button", { name: "حذف از ذخیره‌شده‌ها", exact:true });
+    await expect(remove).toHaveAttribute("aria-pressed", "true");
+    await expect(remove.locator("svg")).toHaveAttribute("fill", "currentColor");
+    await page.reload();
+    await expect(remove).toHaveAttribute("aria-pressed", "true");
+    await page.goto("/dashboard/bookmarks");
+    await expect(remove).toHaveText("");
+    await expect(remove.locator("svg")).toHaveAttribute("fill", "currentColor");
+    await checkCorner();
+    const link = page.getByRole("main").getByRole("article").getByRole("link");
+    await expect(link).toHaveAttribute("href", "/posts/test-post-1");
+    await link.click();
+    await expect(page).toHaveURL(/\/posts\/test-post-1$/);
+    await page.goto("/dashboard/bookmarks");
+    await remove.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("هنوز مقاله‌ای ذخیره نکرده‌اید.")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+});
+
+test("public account actions align on desktop and fit mobile navigation", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:4101/__test/dashboard?role=USER");
+  for (const width of [360, 768, 1024, 1280]) {
+    await page.setViewportSize({ width, height:900 });
+    await page.goto("/");
+    const banner = page.getByRole("banner");
+    const account = banner.getByRole("link", { name:/حساب آزمایشی/ });
+    const logout = banner.getByRole("button", { name:"خروج", exact:true });
+    await expect(account).toBeVisible();
+    await expect(logout).toBeVisible();
+    if (width >= 1024) {
+      const theme = banner.getByRole("button", { name:/فعال‌کردن حالت/ });
+      const centers = await Promise.all([account, logout, theme].map(async locator => {
+        const box = await locator.boundingBox(); return box!.y + box!.height/2;
+      }));
+      expect(Math.max(...centers)-Math.min(...centers)).toBeLessThanOrEqual(1);
+      const themeBox = await theme.boundingBox();
+      for (const control of [account, logout]) {
+        expect(themeBox!.x + themeBox!.width).toBeLessThanOrEqual((await control.boundingBox())!.x);
+      }
+      await theme.focus();
+      await page.keyboard.press("Enter");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+      await page.keyboard.press("Enter");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+});
