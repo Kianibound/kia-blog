@@ -13,6 +13,7 @@ async function resetFixture(request: APIRequestContext) {
   await request.post(`${fixture}/__test/comments?mode=reset`);
   await request.post(`${fixture}/__test/bookmarks?mode=reset`);
   await request.post(`${fixture}/__test/oauth?mode=reset`);
+  await request.post(`${fixture}/__test/profile?mode=reset`);
 }
 
 async function login(page: Page, email: string, next = "/dashboard") {
@@ -658,6 +659,36 @@ test("a callback without a server-side flow shows the Persian state error", asyn
   await expect(page).toHaveURL(/\/login\?error=oauth&reason=state$/);
   await expect(page.getByText("پیوند ورود منقضی یا نامعتبر شده است.", { exact: false })).toBeVisible();
   expect((await page.context().cookies()).some((cookie) => cookie.name.includes("kia_session"))).toBe(false);
+});
+
+test("AUTHOR uploads and removes an avatar through the real projections", async ({ page }) => {
+  await login(page, "author@example.test", "/dashboard/avatar");
+  await expect(page.getByRole("img", { name: "بدون عکس پروفایل", exact: true })).toBeVisible();
+
+  await page.getByLabel("فایل عکس پروفایل", { exact: true }).setInputFiles("public/social/linkedin.png");
+  await page.getByRole("button", { name: "ذخیرهٔ عکس پروفایل", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "عکس پروفایل ذخیره شد." })).toBeVisible();
+  await expect(page.getByRole("img", { name: "عکس پروفایل", exact: true })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("img", { name: "عکس پروفایل", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "حذف عکس پروفایل", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "عکس پروفایل حذف شد." })).toBeVisible();
+  await expect(page.getByRole("img", { name: "بدون عکس پروفایل", exact: true })).toBeVisible();
+});
+
+test("a concurrent avatar change asks for a reload instead of claiming success", async ({ page, request }) => {
+  await login(page, "author@example.test", "/dashboard/avatar");
+  await page.getByLabel("فایل عکس پروفایل", { exact: true }).setInputFiles("public/social/linkedin.png");
+  await page.getByRole("button", { name: "ذخیرهٔ عکس پروفایل", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "عکس پروفایل ذخیره شد." })).toBeVisible();
+
+  await request.post(`${fixture}/__test/profile?mode=conflict`);
+  await page.getByRole("button", { name: "حذف عکس پروفایل", exact: true }).click();
+  const alert = page.getByRole("alert").filter({ hasText: "عکس پروفایل همزمان تغییر کرده است." });
+  await expect(alert).toBeVisible();
+  await expect(alert.getByRole("button", { name: "بارگذاری دوباره", exact: true })).toBeVisible();
+  await expect(page.getByText("عکس پروفایل حذف شد.", { exact: false })).toHaveCount(0);
 });
 
 test("signed-out readers see no bookmark control on the article", async ({ page }) => {

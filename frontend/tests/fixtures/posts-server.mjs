@@ -176,6 +176,7 @@ function fixtureOAuthUser(provider) {
     email: `${provider}@example.test`,
     username: `${provider}_fixture`,
     name: null,
+    avatarUrl: null,
     emailVerified: true,
     role: { name: "USER" },
   };
@@ -237,9 +238,19 @@ function userFor(email) {
     email,
     username: "user_fixture",
     name: null,
+    avatarUrl: null,
     emailVerified: false,
     role: { name: role },
   };
+}
+
+// Test-only avatar state; the safe projection mirrors Nest's avatarUserSelect.
+let avatarMode = "success";
+const FIXTURE_AVATAR_URL = "https://res.cloudinary.com/demo/image/upload/v1/avatar/author.png";
+
+function resetProfile() {
+  avatarMode = "success";
+  if (lastAuthUser) lastAuthUser = { ...lastAuthUser, avatarUrl: null };
 }
 
 function inventoryPost(index, status, authorId) {
@@ -720,6 +731,21 @@ createServer(async (request, response) => {
   }
   if (request.method === "GET" && url.pathname === "/tags" && !url.search && !request.headers.authorization) {
     return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(tags));
+  }
+  if ((request.method === "PATCH" || request.method === "DELETE") && url.pathname === "/media/avatar") {
+    if (!requireUser(response)) return;
+    await new Promise((resolve) => { request.resume(); request.on("end", resolve); request.on("error", resolve); });
+    if (avatarMode === "conflict")
+      return response.writeHead(409, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Avatar changed concurrently; reload and retry." }));
+    lastAuthUser = { ...lastAuthUser, avatarUrl: request.method === "PATCH" ? FIXTURE_AVATAR_URL : null };
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(lastAuthUser));
+  }
+  if (request.method === "POST" && url.pathname === "/__test/profile") {
+    const mode = url.searchParams.get("mode");
+    if (!["reset", "conflict"].includes(mode)) return response.writeHead(400).end();
+    if (mode === "reset") resetProfile();
+    else avatarMode = "conflict";
+    return response.writeHead(204).end();
   }
   if (request.method === "POST" && url.pathname === "/media/images") {
     await new Promise((resolve) => { request.resume(); request.on("end", resolve); request.on("error", resolve); });
