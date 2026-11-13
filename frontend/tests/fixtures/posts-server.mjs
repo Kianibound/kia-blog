@@ -24,6 +24,7 @@ const seedCategories = [
 const seedTags = [
   { id: "30000000-0000-4000-8000-000000000001", name: "ری‌اکت", slug: "react", createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" },
   { id: "30000000-0000-4000-8000-000000000002", name: "نست", slug: "nest", createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" },
+  { id: "30000000-0000-4000-8000-000000000003", name: "برنامه‌نویسی", slug: "programming", createdAt: "2026-03-19T12:00:00.000Z", updatedAt: "2026-03-19T12:00:00.000Z" },
 ];
 
 let categories = structuredClone(seedCategories);
@@ -953,10 +954,11 @@ createServer(async (request, response) => {
   const search = url.searchParams.get("search");
   const category = url.searchParams.get("category");
   const tag = url.searchParams.get("tag");
+  const author = url.searchParams.get("author");
   if (
     request.method !== "GET" ||
     url.pathname !== "/posts" ||
-    [...url.searchParams.keys()].some((key) => !["page", "limit", "sort", "search", "category", "tag"].includes(key) || url.searchParams.getAll(key).length !== 1) ||
+    [...url.searchParams.keys()].some((key) => !["page", "limit", "sort", "search", "category", "tag", "author"].includes(key) || url.searchParams.getAll(key).length !== 1) ||
     (!preview && ["page", "limit", "sort"].some((key) => !url.searchParams.has(key))) ||
     !Number.isSafeInteger(page) || page < 1 ||
     !Number.isSafeInteger(limit) || limit < 1 || limit > 50 ||
@@ -978,7 +980,8 @@ createServer(async (request, response) => {
     post.status === "PUBLISHED" &&
     (!search || [post.title, post.content].some((text) => text.toLowerCase().includes(search.toLowerCase()))) &&
     (!category || post.categories.some((item) => item.slug === category)) &&
-    (!tag || post.tags.some((item) => item.slug === tag)));
+    (!tag || post.tags.some((item) => item.slug === tag)) &&
+    (!author || post.author.username.toLowerCase() === author.toLowerCase()));
   // PostgreSQL defaults: NULLS FIRST for DESC, NULLS LAST for ASC; ties retain fixture order.
   const ordered = [...posts].sort((a, b) => {
     if (a.publishedAt === b.publishedAt) return 0;

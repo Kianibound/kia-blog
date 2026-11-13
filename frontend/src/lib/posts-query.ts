@@ -4,6 +4,7 @@ export type PostsQuery = {
   search?: string;
   category?: string;
   tag?: string;
+  author?: string;
 };
 
 export type PostsSearchParams = Record<string, string | string[] | undefined>;
@@ -26,6 +27,7 @@ export function postsQueryParams(query: PostsQuery): URLSearchParams {
   if (query.sort !== "newest") params.set("sort", query.sort);
   if (query.category) params.set("category", query.category);
   if (query.tag) params.set("tag", query.tag);
+  if (query.author) params.set("author", query.author);
   if (query.page !== 1) params.set("page", String(query.page));
   return params;
 }

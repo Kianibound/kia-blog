@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { getPublicCategories, type Category } from "./categories";
 import { loadApiBaseUrl } from "./session/config";
 
@@ -37,11 +38,14 @@ async function getPublicTags(): Promise<Category[] | null> {
   }
 }
 
-export async function getEditorTaxonomy(): Promise<EditorTaxonomy | null> {
-  const [categories, tags] = await Promise.all([
-    getPublicCategories(),
-    getPublicTags(),
-  ]);
-  if (!categories || !tags) return null;
-  return { categories, tags };
-}
+/** Deduplicated per request (metadata + page share one read). */
+export const getEditorTaxonomy = cache(
+  async (): Promise<EditorTaxonomy | null> => {
+    const [categories, tags] = await Promise.all([
+      getPublicCategories(),
+      getPublicTags(),
+    ]);
+    if (!categories || !tags) return null;
+    return { categories, tags };
+  },
+);

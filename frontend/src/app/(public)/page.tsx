@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PublishedFeed } from "@/components/posts/published-feed";
 import { FeedLoading } from "@/components/posts/feed-loading";
@@ -6,9 +7,27 @@ import { messages } from "@/i18n/messages/fa";
 import { redirect } from "next/navigation";
 import { SearchForm } from "@/components/posts/search-form";
 import { normalizePostsQuery, postsHref, type PostsSearchParams } from "@/lib/posts-query";
+import { categoryHref, pagedHref, tagHref } from "@/lib/discovery";
 
 // Keep environment validation and public reads at request time, not during builds.
 export const dynamic = "force-dynamic";
+
+/** Filtered home URLs point at the canonical discovery routes. */
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<PostsSearchParams>;
+}): Promise<Metadata> {
+  const query = normalizePostsQuery(await searchParams);
+  const canonical = query.search
+    ? pagedHref("/search", { page: 1, sort: query.sort, q: query.search })
+    : query.category
+      ? categoryHref(query.category)
+      : query.tag
+        ? tagHref(query.tag)
+        : "/";
+  return { alternates: { canonical } };
+}
 
 export default async function Home({ searchParams }: { searchParams: Promise<PostsSearchParams> }) {
   const params = await searchParams;
