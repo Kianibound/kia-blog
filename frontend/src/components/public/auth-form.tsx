@@ -5,6 +5,7 @@ import { useActionState, useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
+import { oauthMessages } from "@/i18n/messages/oauth.fa";
 import {
   initialAuthFormState,
   validateEmailValue,
@@ -208,16 +209,20 @@ export function AuthForm({
         </form>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Button type="button" size="lg" variant="outline" disabled>
-            {title} با گوگل
-          </Button>
-          <Button type="button" size="lg" variant="outline" disabled>
-            {title} با گیت‌هاب
-          </Button>
+          <Link
+            href="/auth/google"
+            className="inline-flex min-h-12 items-center justify-center rounded-control border border-border px-4 font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+          >
+            {title} با {oauthMessages.providers.google}
+          </Link>
+          <Link
+            href="/auth/github"
+            className="inline-flex min-h-12 items-center justify-center rounded-control border border-border px-4 font-semibold hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+          >
+            {title} با {oauthMessages.providers.github}
+          </Link>
         </div>
-        <p className="text-sm text-muted-foreground">
-          ورود با گوگل و گیت‌هاب در مرحلهٔ بعد فعال می‌شود.
-        </p>
+        <p className="text-sm text-muted-foreground">{oauthMessages.help}</p>
 
         <div className="min-h-12" aria-live="polite" aria-atomic="true">
           {state.status === "error" && !state.field && (

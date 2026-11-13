@@ -1,4 +1,5 @@
 import { AuthForm } from "@/components/public/auth-form";
+import { oauthErrorMessage } from "@/i18n/messages/oauth.fa";
 import { getAuthFormToken } from "@/lib/auth/form-token";
 import { loginAction } from "../auth-actions";
 
@@ -16,14 +17,19 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const token = getAuthFormToken();
+  const oauthNotice =
+    single(params.error) === "oauth"
+      ? oauthErrorMessage(single(params.reason))
+      : undefined;
   const notice =
-    single(params.registered) === "1"
+    oauthNotice ??
+    (single(params.registered) === "1"
       ? "ثبت‌نام انجام شد. اکنون با ایمیل و گذرواژهٔ خود وارد شوید."
       : single(params.loggedOut) === "1"
         ? "از حساب خود خارج شدید."
         : single(params.logout) === "error"
           ? "خروج کامل نشد. دوباره تلاش کنید."
-          : undefined;
+          : undefined);
 
   return (
     <AuthForm

@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { randomBytes } from "node:crypto";
 import { publishedPosts } from "./posts.mjs";
 import { previewPosts } from "./preview-posts.mjs";
 import { handleDashboardFixture } from "./dashboard.mjs";
@@ -159,6 +160,24 @@ function adminAuthorResponse(author) {
     role: { name: "AUTHOR" },
     createdAt: "2026-01-01T10:00:00.000Z",
     updatedAt: "2026-01-01T10:00:00.000Z",
+  };
+}
+
+// Test-only OAuth provider double: the browser never talks to a real provider.
+let pendingOAuth = null;
+
+function resetOAuth() {
+  pendingOAuth = null;
+}
+
+function fixtureOAuthUser(provider) {
+  return {
+    id: `91000000-0000-4000-8000-00000000000${provider === "google" ? 1 : 2}`,
+    email: `${provider}@example.test`,
+    username: `${provider}_fixture`,
+    name: null,
+    emailVerified: true,
+    role: { name: "USER" },
   };
 }
 
@@ -373,6 +392,51 @@ createServer(async (request, response) => {
   }
   if (request.method === "POST" && url.pathname === "/redis") {
     return handleRedis(request, response);
+  }
+  const oauthInitiate = /^\/auth\/(google|github)$/.exec(url.pathname);
+  if (request.method === "POST" && oauthInitiate) {
+    const provider = oauthInitiate[1];
+    const state = randomBytes(32).toString("base64url");
+    const flowVerifier = randomBytes(32).toString("base64url");
+    pendingOAuth = { provider, state, flowVerifier };
+    const redirectUri = `http://127.0.0.1:3101/auth/${provider}/callback`;
+    const authorizationUrl = `http://127.0.0.1:4101/oauth/authorize?provider=${provider}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ authorizationUrl, flowVerifier, expiresIn: 600 }));
+  }
+  if (request.method === "GET" && url.pathname === "/oauth/authorize") {
+    const provider = url.searchParams.get("provider");
+    const redirectUri = url.searchParams.get("redirect_uri");
+    const state = url.searchParams.get("state");
+    if (!pendingOAuth || pendingOAuth.provider !== provider || pendingOAuth.state !== state || !redirectUri)
+      return response.writeHead(400).end("Invalid OAuth request");
+    const target = new URL(redirectUri);
+    if (target.hostname !== "127.0.0.1" || !["/auth/google/callback", "/auth/github/callback"].includes(target.pathname))
+      return response.writeHead(400).end("Invalid OAuth redirect");
+    target.searchParams.set("code", "fixture-code");
+    target.searchParams.set("state", state);
+    return response.writeHead(302, { Location: target.toString() }).end();
+  }
+  const oauthCallback = /^\/auth\/(google|github)\/callback$/.exec(url.pathname);
+  if (request.method === "POST" && oauthCallback) {
+    const provider = oauthCallback[1];
+    const body = await readJson(request);
+    const consumed = pendingOAuth;
+    pendingOAuth = null;
+    if (
+      !consumed ||
+      consumed.provider !== provider ||
+      consumed.state !== body?.state ||
+      consumed.flowVerifier !== body?.flowVerifier ||
+      body?.error ||
+      body?.code !== "fixture-code"
+    )
+      return response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "OAuth login failed." }));
+    lastAuthUser = fixtureOAuthUser(provider);
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ accessToken: "fixture-oauth-access", refreshToken: "fixture-oauth-refresh", user: lastAuthUser }));
+  }
+  if (request.method === "POST" && url.pathname === "/__test/oauth" && url.searchParams.get("mode") === "reset") {
+    resetOAuth();
+    return response.writeHead(204).end();
   }
   if (request.method === "POST" && url.pathname === "/auth/register") {
     const body = await readJson(request);

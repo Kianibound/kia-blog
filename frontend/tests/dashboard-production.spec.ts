@@ -12,6 +12,7 @@ async function resetFixture(request: APIRequestContext) {
   await request.post(`${fixture}/__test/taxonomy?mode=reset`);
   await request.post(`${fixture}/__test/comments?mode=reset`);
   await request.post(`${fixture}/__test/bookmarks?mode=reset`);
+  await request.post(`${fixture}/__test/oauth?mode=reset`);
 }
 
 async function login(page: Page, email: string, next = "/dashboard") {
@@ -632,6 +633,31 @@ test("AUTHOR cannot open admin comment moderation or the USER comments list", as
     await page.goto(path);
     await expectNotFound(page);
   }
+});
+
+test("Google browser flow signs in server-side and lands on the dashboard", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("link", { name: "ورود با گوگل", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  expect(await dashboardNavigation(page)).toEqual(["پیشخوان", "مقالات ذخیره‌شده", "کامنت‌های من"]);
+  const cookies = await page.context().cookies();
+  const session = cookies.find((cookie) => cookie.name.includes("kia_session"));
+  expect(session?.httpOnly).toBe(true);
+  // Tokens never appear in the browser URL or in readable storage.
+  expect(page.url()).not.toContain("access");
+  expect(page.url()).not.toContain("refresh");
+  const storage = await page.evaluate(() => ({
+    local: Object.keys(localStorage),
+    session: Object.keys(sessionStorage),
+  }));
+  expect([...storage.local, ...storage.session].join(" ")).not.toContain("token");
+});
+
+test("a callback without a server-side flow shows the Persian state error", async ({ page }) => {
+  await page.goto(`/auth/google/callback?state=${"A".repeat(43)}&code=x`);
+  await expect(page).toHaveURL(/\/login\?error=oauth&reason=state$/);
+  await expect(page.getByText("پیوند ورود منقضی یا نامعتبر شده است.", { exact: false })).toBeVisible();
+  expect((await page.context().cookies()).some((cookie) => cookie.name.includes("kia_session"))).toBe(false);
 });
 
 test("signed-out readers see no bookmark control on the article", async ({ page }) => {

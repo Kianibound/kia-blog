@@ -10,8 +10,8 @@ test("production login uses real email fields with no fixture role choice", asyn
     await expect(page.getByLabel("گذرواژه", { exact: true })).toBeVisible();
     await expect(page.getByRole("radio")).toHaveCount(0);
     await expect(page.getByText("هنوز فعال نیست.", { exact: false })).toHaveCount(0);
-    for (const provider of ["گوگل", "گیت‌هاب"]) {
-      await expect(page.getByRole("button", { name: `${title} با ${provider}`, exact: true })).toBeDisabled();
+    for (const [provider, href] of [["گوگل", "/auth/google"], ["گیت‌هاب", "/auth/github"]]) {
+      await expect(page.getByRole("link", { name: `${title} با ${provider}`, exact: true })).toHaveAttribute("href", href);
     }
   }
   expect((await request.post("/__test/auth", { data: { operation: "login", role: "AUTHOR", provider: "email" } })).status()).toBe(404);
