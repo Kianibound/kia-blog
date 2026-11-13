@@ -8,6 +8,7 @@ async function resetFixture(request: APIRequestContext) {
   await request.post(`${fixture}/__test/inventory?mode=success`);
   await request.post(`${fixture}/__test/articles?mode=reset`);
   await request.post(`${fixture}/__test/media?mode=success`);
+  await request.post(`${fixture}/__test/authors?mode=reset`);
 }
 
 async function login(page: Page, email: string, next = "/dashboard") {
@@ -412,6 +413,74 @@ test("cover upload error states are specific and leak no backend details", async
   await page.getByRole("button", { name: "انتخاب تصویر جلد", exact: true }).click();
   await expect(page.locator("#cover-error")).toHaveText("نشست شما معتبر نیست. صفحه را دوباره بارگذاری کنید.");
   await expect(page.getByText("Unauthorized", { exact: false })).toHaveCount(0);
+});
+
+test("ADMIN creates an author with the exact initial-password policy", async ({ page }) => {
+  await login(page, "admin@example.test");
+  await page.goto("/dashboard/authors");
+  await expect(page.getByRole("heading", { level: 1, name: "نویسندگان", exact: true })).toBeVisible();
+  await expect(page.getByText("nima@example.test", { exact: false })).toBeVisible();
+
+  await page.getByRole("link", { name: "افزودن نویسنده", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/authors\/new$/);
+  await page.getByLabel("نام", { exact: true }).fill("نویسندهٔ تازه");
+  await page.getByLabel("ایمیل", { exact: true }).fill("new-author@example.test");
+  const password = page.getByLabel("گذرواژهٔ اولیه", { exact: true });
+  await password.fill("Secret1!");
+  await page.getByRole("button", { name: "افزودن نویسنده", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "نویسنده ایجاد شد" })).toBeVisible();
+  await expect(password).toHaveValue("");
+
+  await page.goto("/dashboard/authors");
+  await expect(page.getByText("نویسندهٔ تازه", { exact: false })).toBeVisible();
+  await expect(page.getByText("new-author@example.test", { exact: false })).toBeVisible();
+});
+
+test("duplicate email and weak passwords produce specific Persian messages", async ({ page }) => {
+  await login(page, "admin@example.test");
+  await page.goto("/dashboard/authors/new");
+
+  await page.getByLabel("نام", { exact: true }).fill("نویسندهٔ تکراری");
+  await page.getByLabel("ایمیل", { exact: true }).fill("sara@example.test");
+  await page.getByLabel("گذرواژهٔ اولیه", { exact: true }).fill("Secret1!");
+  await page.getByRole("button", { name: "افزودن نویسنده", exact: true }).click();
+  await expect(page.getByText("این ایمیل یا نام کاربری قبلاً استفاده شده است.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Account exists", { exact: false })).toHaveCount(0);
+
+  await page.getByLabel("ایمیل", { exact: true }).fill("weak@example.test");
+  await page.getByLabel("گذرواژهٔ اولیه", { exact: true }).fill("short");
+  await page.getByRole("button", { name: "افزودن نویسنده", exact: true }).click();
+  await expect(page.getByText("گذرواژه باید دست‌کم ۸ نویسه داشته باشد.", { exact: false })).toBeVisible();
+  await expect(page.getByLabel("ایمیل", { exact: true })).toHaveValue("weak@example.test");
+});
+
+test("ADMIN deactivates an author without deleting the account row", async ({ page }) => {
+  await login(page, "admin@example.test");
+  await page.goto("/dashboard/authors");
+
+  const row = page.getByRole("listitem").filter({ hasText: "sara@example.test" });
+  await expect(row.getByText("فعال", { exact: true })).toBeVisible();
+  await row.getByRole("button", { name: "غیرفعال‌سازی", exact: true }).click();
+  const dialog = page.getByRole("alertdialog", { name: "غیرفعال‌سازی نویسنده", exact: true });
+  await expect(dialog).toContainText("مقاله‌ها، دیدگاه‌ها و رسانه‌های او حفظ می‌شوند.");
+  await dialog.getByRole("button", { name: "تأیید غیرفعال‌سازی", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "حساب نویسنده غیرفعال شد." })).toBeVisible();
+  await expect(row.getByText("غیرفعال", { exact: true })).toBeVisible();
+  await expect(row.getByRole("button", { name: "غیرفعال‌سازی", exact: true })).toHaveCount(0);
+  await expect(page.getByText("sara@example.test", { exact: false })).toBeVisible();
+
+  const disabledSeed = page.getByRole("listitem").filter({ hasText: "nima@example.test" });
+  await expect(disabledSeed.getByRole("button", { name: "غیرفعال‌سازی", exact: true })).toHaveCount(0);
+});
+
+test("non-admin roles cannot open the ADMIN author routes", async ({ page }) => {
+  await login(page, "author@example.test");
+  for (const path of ["/dashboard/authors", "/dashboard/authors/new"]) {
+    await page.goto(path);
+    await expect(page.locator("main h1")).toBeVisible();
+    await expect(page.getByRole("button", { name: "افزودن نویسنده", exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("گذرواژهٔ اولیه")).toHaveCount(0);
+  }
 });
 
 test("production upload errors stay in the editor and expose no backend details", async ({ page, request }) => {

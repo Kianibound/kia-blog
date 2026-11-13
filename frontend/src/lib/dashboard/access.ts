@@ -5,6 +5,7 @@ import type {
 } from "@/components/dashboard/types";
 import type { AuthenticatedUser } from "@/lib/auth/nest-auth";
 import { dashboardMessages as copy } from "../../i18n/messages/dashboard.fa.ts";
+import { authorsMessages } from "../../i18n/messages/authors.fa.ts";
 import { articleFormMessages } from "../../i18n/messages/article-form.fa.ts";
 
 export type DashboardSectionMeta = {
@@ -53,6 +54,11 @@ const sections: Record<
     meta: copy.sections.avatar,
   },
 };
+
+/** The ADMIN author-creation form is a nested route, not a section. */
+function authorCreateSection(section: readonly string[]): boolean {
+  return section.length === 2 && section[0] === "authors" && section[1] === "new";
+}
 
 const destinations: Record<DashboardRole, DashboardDestination[]> = {
   USER: [
@@ -108,6 +114,7 @@ export function canAccessDashboard(
   if (!ROLE_SET.has(role as DashboardRole)) return false;
   if (articleSection(section))
     return role === "AUTHOR" || role === "ADMIN";
+  if (authorCreateSection(section)) return role === "ADMIN";
   if (section.length > 1) return false;
   const entry = sections[sectionKey(section)];
   return !!entry && entry.roles.has(role as DashboardRole);
@@ -124,6 +131,11 @@ export function dashboardSectionMeta(
       title:
         article === "new" ? articleFormMessages.productionCreate : articleFormMessages.edit,
       description: "",
+    };
+  if (authorCreateSection(section))
+    return {
+      title: authorsMessages.createTitle,
+      description: authorsMessages.createDescription,
     };
   return sections[sectionKey(section)].meta;
 }

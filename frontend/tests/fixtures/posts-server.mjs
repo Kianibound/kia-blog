@@ -52,6 +52,43 @@ let lastAuthUser = null;
 let inventoryMode = "success";
 let lastArticleWrite = null;
 let mediaUploadMode = "success";
+let adminAuthors = [];
+
+// Deterministic ADMIN author roster; a disabled seed proves status rendering.
+function resetAdminAuthors() {
+  adminAuthors = [
+    { id: "author-1", name: "سارا", email: "sara@example.test", username: "sara", disabledAt: null },
+    { id: "author-2", name: null, email: "nima@example.test", username: "nima", disabledAt: "2026-02-01T10:00:00.000Z" },
+  ];
+}
+resetAdminAuthors();
+
+function adminAuthorResponse(author) {
+  return {
+    ...author,
+    emailVerified: true,
+    avatarUrl: null,
+    role: { name: "AUTHOR" },
+    createdAt: "2026-01-01T10:00:00.000Z",
+    updatedAt: "2026-01-01T10:00:00.000Z",
+  };
+}
+
+function requireAdmin(response, user = lastAuthUser) {
+  if (authMode === "unavailable") {
+    response.writeHead(503, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unavailable" }));
+    return false;
+  }
+  if (authMode === "revoke" || !user) {
+    response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Unauthorized" }));
+    return false;
+  }
+  if (user.role?.name !== "ADMIN") {
+    response.writeHead(403, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Forbidden" }));
+    return false;
+  }
+  return true;
+}
 
 function redisGet(key) {
   const entry = redis.get(key);
@@ -316,6 +353,60 @@ createServer(async (request, response) => {
     const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
     return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(adminInventory(page, 10)));
   }
+  if (request.method === "GET" && url.pathname === "/admin/users") {
+    if (!requireAdmin(response)) return;
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify([
+      ...adminAuthors.map(adminAuthorResponse),
+      {
+        id: "user-1",
+        name: null,
+        email: "user@example.test",
+        username: "reader",
+        emailVerified: true,
+        avatarUrl: null,
+        role: { name: "USER" },
+        disabledAt: null,
+        createdAt: "2026-01-01T10:00:00.000Z",
+        updatedAt: "2026-01-01T10:00:00.000Z",
+      },
+    ]));
+  }
+  if (request.method === "POST" && url.pathname === "/admin/authors") {
+    if (!requireAdmin(response)) return;
+    const body = await readJson(request);
+    const name = typeof body?.name === "string" ? body.name.trim() : "";
+    const email = typeof body?.email === "string" ? body.email.trim() : "";
+    const password = typeof body?.password === "string" ? body.password : "";
+    const keys = body && typeof body === "object" ? Object.keys(body) : [];
+    const validPassword = /^[\x21-\x7e]{8,}$/.test(password) && /[A-Za-z]/.test(password) && /[0-9]/.test(password) && /[^A-Za-z0-9]/.test(password);
+    if (
+      !name ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      !validPassword ||
+      keys.some((key) => !["name", "email", "password"].includes(key))
+    )
+      return response.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Invalid author" }));
+    if (adminAuthors.some((author) => author.email === email))
+      return response.writeHead(409, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "Account exists" }));
+    const author = {
+      id: `author-${adminAuthors.length + 1}`,
+      name,
+      email,
+      username: `author_${adminAuthors.length + 1}`,
+      disabledAt: null,
+    };
+    adminAuthors.push(author);
+    return response.writeHead(201, { "Content-Type": "application/json" }).end(JSON.stringify(adminAuthorResponse(author)));
+  }
+  if (request.method === "PATCH" && /^\/admin\/authors\/[^/]+\/deactivate$/.test(url.pathname)) {
+    if (!requireAdmin(response)) return;
+    const id = decodeURIComponent(url.pathname.slice("/admin/authors/".length, -"/deactivate".length));
+    const author = adminAuthors.find((item) => item.id === id);
+    if (!author) return response.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ message: "User not found" }));
+    // Repeats preserve the first disabled timestamp, matching Nest.
+    if (!author.disabledAt) author.disabledAt = "2026-03-01T10:00:00.000Z";
+    return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(adminAuthorResponse(author)));
+  }
   if (request.method === "GET" && url.pathname === "/tags" && !url.search && !request.headers.authorization) {
     return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(tags));
   }
@@ -407,6 +498,10 @@ createServer(async (request, response) => {
     const mode = url.searchParams.get("mode");
     if (!["success", "empty", "error", "forbidden"].includes(mode)) return response.writeHead(400).end();
     inventoryMode = mode;
+    return response.writeHead(204).end();
+  }
+  if (request.method === "POST" && url.pathname === "/__test/authors" && url.searchParams.get("mode") === "reset") {
+    resetAdminAuthors();
     return response.writeHead(204).end();
   }
   if (request.method === "POST" && url.pathname === "/__test/articles" && url.searchParams.get("mode") === "reset") {

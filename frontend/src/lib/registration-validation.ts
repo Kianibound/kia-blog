@@ -5,14 +5,19 @@ export function validatePasswordCharacters(password: unknown): string {
   return "";
 }
 
+/** Mirrors the Nest registration password policy for every password write. */
+export function validatePasswordStrength(password: unknown): string {
+  const characters = validatePasswordCharacters(password);
+  if (characters || typeof password !== "string") return characters;
+  if (password.length < 8) return "گذرواژه باید دست‌کم ۸ نویسه داشته باشد.";
+  if (!/[A-Za-z]/.test(password)) return "گذرواژه باید دست‌کم یک حرف انگلیسی داشته باشد.";
+  if (!/[0-9]/.test(password)) return "گذرواژه باید دست‌کم یک رقم انگلیسی داشته باشد.";
+  if (!/[^A-Za-z0-9]/.test(password)) return "گذرواژه باید دست‌کم یک نماد مانند ! یا @ داشته باشد.";
+  return "";
+}
+
 export function validateRegistrationPasswords(password: unknown, confirmation: unknown) {
-  let error = validatePasswordCharacters(password);
-  if (!error && typeof password === "string") {
-    if (password.length < 8) error = "گذرواژه باید دست‌کم ۸ نویسه داشته باشد.";
-    else if (!/[A-Za-z]/.test(password)) error = "گذرواژه باید دست‌کم یک حرف انگلیسی داشته باشد.";
-    else if (!/[0-9]/.test(password)) error = "گذرواژه باید دست‌کم یک رقم انگلیسی داشته باشد.";
-    else if (!/[^A-Za-z0-9]/.test(password)) error = "گذرواژه باید دست‌کم یک نماد مانند ! یا @ داشته باشد.";
-  }
+  const error = validatePasswordStrength(password);
   return {
     password: error,
     confirmPassword: typeof confirmation !== "string" || !confirmation ? "تکرار گذرواژه را وارد کنید." : confirmation !== password ? "تکرار گذرواژه باید دقیقاً با گذرواژه یکسان باشد." : "",

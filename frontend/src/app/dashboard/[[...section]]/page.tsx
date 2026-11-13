@@ -10,6 +10,11 @@ import {
 } from "@/components/dashboard/production-posts";
 import { ArticleFormLoading } from "@/components/dashboard/article-form";
 import { ProductionArticleEditor } from "@/components/dashboard/production-article-editor";
+import { ProductionAuthorForm } from "@/components/dashboard/production-author-form";
+import {
+  ProductionAuthors,
+  ProductionAuthorsLoading,
+} from "@/components/dashboard/production-authors";
 import { Card } from "@/components/ui/card";
 import { dashboardMessages as copy } from "@/i18n/messages/dashboard.fa";
 import { lookupPublicAccount } from "@/lib/auth/current-user";
@@ -112,6 +117,14 @@ export default async function DashboardPage({
             invalidStatus={invalidStatus}
           />
         </Suspense>
+      ) : section.length === 1 && section[0] === "authors" ? (
+        <Suspense fallback={<ProductionAuthorsLoading />}>
+          <ProductionAuthors account={account} />
+        </Suspense>
+      ) : section.length === 2 &&
+        section[0] === "authors" &&
+        section[1] === "new" ? (
+        <ProductionAuthorForm csrfToken={account.csrfToken} />
       ) : (
         <Card className="min-h-64 space-y-4 p-6 sm:p-8">
           <h2 className="text-xl leading-tight font-semibold">{meta.title}</h2>
