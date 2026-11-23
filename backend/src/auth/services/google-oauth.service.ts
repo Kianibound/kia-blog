@@ -75,7 +75,7 @@ export class GoogleOAuthService {
       client_id: clientId,
       redirect_uri: redirectUri,
       response_type: 'code',
-      scope: ['openid', 'email'],
+      scope: ['openid', 'email', 'profile'],
       state,
       nonce: digest(state),
       code_challenge: digest(flowVerifier),
@@ -127,6 +127,10 @@ export class GoogleOAuthService {
       // Provider exceptions can contain codes, tokens or client credentials.
       throw new UnauthorizedException('Google login failed.');
     }
+    const displayName =
+      typeof identity.name === 'string' && identity.name.trim()
+        ? identity.name.trim()
+        : undefined;
     const linked = await this.prisma.googleIdentity.findUnique({
       where: { subject: identity.sub },
       include: { user: { include: { role: true } } },
@@ -147,6 +151,7 @@ export class GoogleOAuthService {
       .create({
         data: {
           email: identity.email,
+          name: displayName,
           username: `google_${createHash('sha256').update(identity.sub).digest('hex')}`,
           emailVerified: true,
           roleId: role.id,

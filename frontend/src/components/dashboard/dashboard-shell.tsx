@@ -36,7 +36,11 @@ export function DashboardShell({ identity, destinations, title, description, act
       <a href="#dashboard-content" className="sr-only rounded-control bg-background p-4 font-semibold focus:not-sr-only focus:outline-2 focus:outline-ring">{copy.skipToContent}</a>
       <header className="flex flex-wrap items-center justify-between gap-4 rounded-surface border border-border bg-card p-4 sm:p-6">
         <div role="group" aria-label={copy.identity} aria-busy={pending} className="flex min-h-12 min-w-0 items-center gap-4">
-          {pending ? <Skeleton className="size-12 shrink-0 motion-reduce:animate-none" /> : displayName && <span aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-control bg-secondary text-xl font-semibold">{fa(Array.from(displayName)[0])}</span>}
+          {pending ? <Skeleton className="size-12 shrink-0 motion-reduce:animate-none" /> : identity?.avatarUrl ? (
+            // Server-resolved avatar URL only.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={identity.avatarUrl} alt="" width={48} height={48} className="size-12 shrink-0 rounded-full object-cover" />
+          ) : displayName && <span aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-control bg-secondary text-xl font-semibold">{fa(Array.from(displayName)[0])}</span>}
           <div className="min-w-0 space-y-1">
             {pending ? <><Skeleton className="h-6 w-32 motion-reduce:animate-none" /><Skeleton className="h-5 w-16 motion-reduce:animate-none" /></> : <>
               <p className="leading-6 font-semibold wrap-anywhere">{displayName ? fa(displayName) : copy.identityUnavailable}</p>
@@ -53,7 +57,29 @@ export function DashboardShell({ identity, destinations, title, description, act
       </header>
       <div className="grid min-w-0 flex-1 content-start gap-6 lg:grid-cols-4">
         <aside className="self-start rounded-surface border border-border bg-card p-4 lg:sticky lg:top-6">
+          {pending ? (
+            <Skeleton className="mb-4 h-12 w-full motion-reduce:animate-none" />
+          ) : (
+            identity &&
+            displayName && (
+              <div className="mb-4 flex min-h-12 items-center gap-3">
+                {identity.avatarUrl ? (
+                  // Server-resolved avatar URL only.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={identity.avatarUrl} alt="" width={40} height={40} className="size-10 shrink-0 rounded-full object-cover" />
+                ) : (
+                  <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-base font-semibold">{fa(Array.from(displayName)[0])}</span>
+                )}
+                <span className="min-w-0 truncate font-semibold">{fa(displayName)}</span>
+              </div>
+            )
+          )}
           <DashboardNavigation destinations={destinations} pending={pending} />
+          {identity && (identity.role === "AUTHOR" || identity.role === "ADMIN") && (
+            <Link href="/dashboard/posts/new" className="mt-4 flex min-h-12 items-center justify-center rounded-control bg-success px-4 font-semibold text-success-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
+              {copy.addArticle}
+            </Link>
+          )}
           {/* Reserve action geometry while identity is loading or unavailable. */}
           <div className="mt-4 min-h-24">{pending ? <Skeleton className="h-12 w-24 motion-reduce:animate-none" /> : sidebarActions}</div>
         </aside>

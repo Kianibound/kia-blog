@@ -53,6 +53,19 @@ function walk(value: unknown): unknown {
       },
     };
   }
+  if (value.type === "heading") {
+    const attrs = isRecord(value.attrs) ? value.attrs : {};
+    const level = attrs.level;
+    if (level !== undefined && level !== 2 && level !== 3 && level !== 4)
+      throw new Error("Invalid article document");
+    return {
+      ...value,
+      attrs: { ...attrs, level: level === undefined ? 2 : level },
+      ...(Array.isArray(value.content)
+        ? { content: value.content.map((child) => walk(child)) }
+        : {}),
+    };
+  }
   return {
     ...value,
     ...(Array.isArray(value.content)
@@ -130,14 +143,21 @@ export function taxonomyIds(items: ArticleTaxonomy[]): string[] {
   return items.map((item) => item.id);
 }
 
-/** CSRF rejection is definite; other thrown write errors remain uncertain. */
+/** CSRF rejection is definite; a cut-short request is a timeout; other thrown write errors remain uncertain. */
 export function mutationErrorResult(
   error: unknown,
   csrfMessage: string,
+  timeoutMessage?: string,
 ): { state: "error"; message: string } | { state: "uncertain" } {
-  return error instanceof CsrfError
-    ? { state: "error", message: csrfMessage }
-    : { state: "uncertain" };
+  if (error instanceof CsrfError)
+    return { state: "error", message: csrfMessage };
+  if (
+    timeoutMessage &&
+    error instanceof Error &&
+    (error.name === "TimeoutError" || error.name === "AbortError")
+  )
+    return { state: "error", message: timeoutMessage };
+  return { state: "uncertain" };
 }
 
 /** Only definite server-provided messages override generic publication copy. */
@@ -161,6 +181,18 @@ export function articleDocument(record: {
       ...(line ? { content: [{ type: "text", text: line }] } : {}),
     })),
   };
+}
+
+/** True when the document holds non-empty text or an image node. */
+export function hasArticleContent(document: EditorDocument | null | undefined): boolean {
+  if (!document || !Array.isArray(document.content)) return false;
+  const visit = (node: EditorDocument): boolean => {
+    if (node.type === "text")
+      return typeof node.text === "string" && node.text.trim().length > 0;
+    if (node.type === "image") return true;
+    return Array.isArray(node.content) && node.content.some(visit);
+  };
+  return document.content.some(visit);
 }
 
 /** Hydrate editor-only src values from trusted server-resolved contentMedia. */

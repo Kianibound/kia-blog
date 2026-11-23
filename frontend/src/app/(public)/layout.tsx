@@ -2,6 +2,7 @@ import { SiteHeader } from "@/components/public/site-header";
 import { SiteFooter } from "@/components/public/site-footer";
 import { AccountEntry } from "@/components/public/account-entry";
 import { getPublicAccount } from "@/lib/auth/current-user";
+import { getPublicCategories } from "@/lib/categories";
 
 export default async function PublicLayout({
   children,
@@ -11,10 +12,14 @@ export default async function PublicLayout({
   /** Test preview override; production resolves the real Nest identity. */
   accountEntry?: React.ReactNode;
 }) {
-  const account = accountEntry ? null : await getPublicAccount();
+  const [account, categories] = await Promise.all([
+    accountEntry ? Promise.resolve(null) : getPublicAccount(),
+    getPublicCategories(),
+  ]);
   return (
     <div className="flex min-h-svh flex-col">
       <SiteHeader
+        categories={categories}
         accountEntry={
           accountEntry ?? (account ? <AccountEntry account={account} /> : undefined)
         }

@@ -107,7 +107,7 @@ export default async function DashboardPage({
     <DashboardShell
       identity={toDashboardIdentity(account.user)}
       destinations={dashboardDestinations(account.user.role)}
-      sidebarActions={<AccountEntry account={account} />}
+      sidebarActions={<AccountEntry account={account} showIdentity={false} />}
       title={meta.title}
       description={meta.description}
       actions={

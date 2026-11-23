@@ -1,3 +1,4 @@
+import { cache } from "react";
 import {
   createCsrfToken,
   createSessionId,
@@ -149,22 +150,33 @@ export class SessionService {
 
   async loadSession(sessionId: unknown): Promise<SessionRecord | null> {
     if (!isSessionId(sessionId)) return null;
-    const raw = await this.store.get(this.key(sessionId));
-    if (raw === null) return null;
-    let record: SessionRecord;
-    try {
-      record = decryptSession(raw, this.encryptionKey);
-    } catch {
-      // Corrupt or foreign data must never be trusted; drop it.
-      await this.invalidate(sessionId);
-      return null;
-    }
-    if (record.refreshExpiresAt <= this.now()) {
-      await this.invalidate(sessionId);
-      return null;
-    }
-    return record;
+    return this.cachedLoadSession(sessionId);
   }
+
+  /**
+   * One Upstash round-trip per request: the layout, the page and the actions
+   * share the session read instead of each paying a full REST call.
+   * Request-scoped, so a later request always re-reads the store.
+   */
+  private readonly cachedLoadSession = cache(
+    async (sessionId: string): Promise<SessionRecord | null> => {
+      const raw = await this.store.get(this.key(sessionId));
+      if (raw === null) return null;
+      let record: SessionRecord;
+      try {
+        record = decryptSession(raw, this.encryptionKey);
+      } catch {
+        // Corrupt or foreign data must never be trusted; drop it.
+        await this.invalidate(sessionId);
+        return null;
+      }
+      if (record.refreshExpiresAt <= this.now()) {
+        await this.invalidate(sessionId);
+        return null;
+      }
+      return record;
+    },
+  );
 
   async getCsrfToken(sessionId: unknown): Promise<string> {
     const record = await this.loadSession(sessionId);

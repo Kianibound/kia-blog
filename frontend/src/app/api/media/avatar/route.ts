@@ -61,6 +61,7 @@ export async function PATCH(request: Request) {
           method: "PATCH",
           body: form,
           headers: { Accept: "application/json" },
+          signal: AbortSignal.timeout(60000),
         }),
       );
     });

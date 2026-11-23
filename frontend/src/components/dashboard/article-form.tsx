@@ -22,6 +22,8 @@ type Props = {
   publicationAction?: PublicationAction;
   readingHref?: (slug: string) => string;
   contentBlocked?: boolean;
+  /** Production editor: emptiness measured on the document, not plain text. */
+  contentEmpty?: () => boolean;
   uploadImage?: (file: File, signal: AbortSignal) => Promise<string | { id: string; url: string; width?: number | null; height?: number | null }>;
   backLabel?: string;
   helpText?: string;
@@ -55,7 +57,7 @@ function TaxonomyChoices({ label, choices, original, selected, onChange }: { lab
 }
 
 /** Presentation only. Without an explicitly supplied adapter, saving is unavailable. */
-export function ArticleForm({ article, categories, tags, saveAction, renderContent, publicationAction, readingHref, contentBlocked = false, uploadImage, backLabel = copy.back, helpText = copy.preview, savedText = copy.saved, errorText = copy.error, uncertainText = copy.uncertain, production = false }: Props) {
+export function ArticleForm({ article, categories, tags, saveAction, renderContent, publicationAction, readingHref, contentBlocked = false, contentEmpty, uploadImage, backLabel = copy.back, helpText = copy.preview, savedText = copy.saved, errorText = copy.error, uncertainText = copy.uncertain, production = false }: Props) {
   const formId = useId();
   const [coverImage, setCoverImage] = useState(article?.coverImage ?? null);
   const [coverPending, setCoverPending] = useState(false);
@@ -79,7 +81,7 @@ export function ArticleForm({ article, categories, tags, saveAction, renderConte
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!saveAction || pending.current || lifecycleBlocked || blocked || state === "uncertain") return;
-    const invalid = { title: !title.trim(), content: !content.trim() };
+    const invalid = { title: !title.trim(), content: contentEmpty ? contentEmpty() : !content.trim() };
     setErrors(invalid);
     if (invalid.title || invalid.content) {
       event.currentTarget.querySelector<HTMLElement>(invalid.title ? "#article-title" : "#article-content")?.focus();
@@ -106,13 +108,13 @@ export function ArticleForm({ article, categories, tags, saveAction, renderConte
     <p>{saveAction ? helpText : copy.unavailable}</p>
     <form id={formId} noValidate onSubmit={submit} className="space-y-6" aria-busy={busy}>
       <fieldset disabled={!saveAction || busy} className="min-w-0 space-y-6">
-        <Field label={copy.title} htmlFor="article-title"><Input id="article-title" value={title} onChange={event => { setTitle(event.target.value); edited(); }} required aria-invalid={errors.title} aria-describedby={errors.title ? "article-title-error" : undefined} className="min-h-12" />{errors.title && <p id="article-title-error" className="text-sm text-destructive">{copy.requiredTitle}</p>}</Field>
-        {renderContent ? <Field label={copy.content} htmlFor="article-content">{renderContent({ id: "article-content", label: copy.content, editable: Boolean(saveAction) && !busy, error: errors.content ? copy.requiredContent : undefined, onChange: text => { setContent(text); edited(); } })}</Field> : <Field label={copy.content} htmlFor="article-content" hint={copy.plain}><Textarea id="article-content" value={content} onChange={event => { setContent(event.target.value); edited(); }} required rows={10} aria-invalid={errors.content} aria-describedby={errors.content ? "article-content-error" : undefined} />{errors.content && <p id="article-content-error" className="text-sm text-destructive">{copy.requiredContent}</p>}</Field>}
+        <Field label={copy.title} htmlFor="article-title"><Input id="article-title" value={title} onChange={event => { setTitle(event.target.value); setErrors(prev => (prev.title ? { ...prev, title: false } : prev)); edited(); }} required aria-invalid={errors.title} aria-describedby={errors.title ? "article-title-error" : undefined} className="min-h-12" />{errors.title && <p id="article-title-error" className="text-sm text-destructive">{copy.requiredTitle}</p>}</Field>
+        {renderContent ? <Field label={copy.content} htmlFor="article-content">{renderContent({ id: "article-content", label: copy.content, editable: Boolean(saveAction) && !busy, error: errors.content ? copy.requiredContent : undefined, onChange: text => { setContent(text); setErrors(prev => (prev.content ? { ...prev, content: false } : prev)); edited(); } })}</Field> : <Field label={copy.content} htmlFor="article-content" hint={copy.plain}><Textarea id="article-content" value={content} onChange={event => { setContent(event.target.value); setErrors(prev => (prev.content ? { ...prev, content: false } : prev)); edited(); }} required rows={10} aria-invalid={errors.content} aria-describedby={errors.content ? "article-content-error" : undefined} />{errors.content && <p id="article-content-error" className="text-sm text-destructive">{copy.requiredContent}</p>}</Field>}
         {uploadImage && <CoverImageField value={coverImage} disabled={busy || !saveAction || contentBlocked} uploadImage={uploadImage} onChange={value => { setCoverImage(value); edited(); }} onPending={setCoverPending} />}
         <TaxonomyChoices label={copy.categories} choices={categories} original={article?.categories ?? []} selected={selectedCategories} onChange={value => { setCategories(value); edited(); }} />
         <TaxonomyChoices label={copy.tags} choices={tags} original={article?.tags ?? []} selected={selectedTags} onChange={value => { setTags(value); edited(); }} />
       </fieldset>
-      {(state === "error" || state === "uncertain") && <p role="alert">{state === "error" ? writeMessage || errorText : uncertainText}</p>}
+      {(state === "error" || state === "uncertain") && <p role="alert">{state === "error" ? writeMessage || errorText : writeMessage || uncertainText}</p>}
       <p role="status" aria-live="polite">{state === "saved" ? savedText : state === "saving" ? copy.saving : ""}</p>
     </form>
     <PublicationControls article={saved} action={publicationAction} readingHref={readingHref} busy={busy} dirty={dirty} blocked={lifecycleBlocked || blocked || state === "uncertain"} production={production} onSaved={post => { setSaved(post); setState("idle"); }} onPending={value => { pending.current = value; setLifecyclePending(value); }} onUncertain={() => setLifecycleBlocked(true)}

@@ -65,6 +65,22 @@ test("canonical writes contain contentDocument and never legacy content", () => 
   assert.throws(() => buildArticleWritePayload({ title: "x", document, categoryIds: ["a", "a"], tagIds: [] }), /Duplicate/);
 });
 
+test("headings without a level are sent as level 2", () => {
+  const payload = buildArticleWritePayload({
+    title: "تست",
+    document: {
+      type: "doc",
+      content: [
+        { type: "heading", content: [{ type: "text", text: "عنوان" }] },
+        { type: "paragraph", content: [{ type: "text", text: "متن" }] },
+      ],
+    },
+    categoryIds: [],
+    tagIds: [],
+  });
+  assert.equal(payload.contentDocument.content[0].attrs.level, 2);
+});
+
 test("legacy text and canonical documents round-trip without the preview envelope", () => {
   assert.deepEqual(articleDocument({ content: "خط اول\nخط دوم" }), {
     type: "doc",

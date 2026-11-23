@@ -11,7 +11,6 @@ export const messages = {
     categories: "دسته‌بندی‌ها",
     categoriesEmpty: "هنوز دسته‌بندی‌ای وجود ندارد.",
     categoriesUnavailable: "دسته‌بندی‌ها در دسترس نیستند.",
-    categoriesInfo: "صفحهٔ دسته‌بندی‌ها به‌زودی در دسترس قرار می‌گیرد.",
     socialLinks: "شبکه‌های اجتماعی",
     socialGithub: "گیت‌هاب",
     socialLinkedin: "لینکدین",

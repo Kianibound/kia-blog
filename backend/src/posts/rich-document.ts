@@ -205,12 +205,19 @@ export function parseRichDocument(value: unknown): {
             /^[A-Za-z0-9_+.#-]*$/.test(attrs.language),
         );
     }
-    if (type === 'heading')
-      ensure(
-        record(node.attrs) &&
-          [2, 3, 4].includes(Number(node.attrs.level)) &&
-          typeof node.attrs.level === 'number',
-      );
+    if (type === 'heading') {
+      // The real editor omits attrs on headings, so a missing level is the
+      // default heading level, not an invalid document.
+      const attrs = record(node.attrs) ? node.attrs : {};
+      if (attrs.level === undefined) {
+        node.attrs = { ...attrs, level: 2 };
+      } else {
+        ensure(
+          [2, 3, 4].includes(Number(attrs.level)) &&
+            typeof attrs.level === 'number',
+        );
+      }
+    }
     if (type === 'hardBreak') {
       marks(node.marks, false);
       return '\n';

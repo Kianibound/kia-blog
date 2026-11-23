@@ -5,6 +5,7 @@ export type AuthenticatedUser = {
   email: string;
   username: string;
   name: string | null;
+  avatarUrl: string | null;
   role: "USER" | "AUTHOR" | "ADMIN";
 };
 
@@ -65,7 +66,10 @@ export function parseAuthenticatedUser(
     !nonEmpty(value.username) ||
     !nonEmpty(value.role.name) ||
     !ROLES.has(value.role.name) ||
-    !(value.name === null || typeof value.name === "string")
+    !(value.name === null || typeof value.name === "string") ||
+    !(value.avatarUrl === null ||
+      value.avatarUrl === undefined ||
+      typeof value.avatarUrl === "string")
   )
     return null;
   return {
@@ -73,6 +77,7 @@ export function parseAuthenticatedUser(
     email: value.email,
     username: value.username,
     name: value.name,
+    avatarUrl: typeof value.avatarUrl === "string" ? value.avatarUrl : null,
     role: value.role.name as AuthenticatedUser["role"],
   };
 }

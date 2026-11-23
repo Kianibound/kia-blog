@@ -13,7 +13,9 @@ export async function readFixtureIdentity(): Promise<(DashboardIdentity & { id: 
     if (!("id" in data) || typeof data.id !== "string" || !data.id.trim()) return null;
     const { name, username, role } = data;
     if ((name !== null && typeof name !== "string") || typeof username !== "string" || !username.trim() || (role !== "USER" && role !== "AUTHOR" && role !== "ADMIN")) return null;
-    return { id: data.id, name, username, role };
+    const avatarUrl = "avatarUrl" in data ? data.avatarUrl : null;
+    if (avatarUrl !== null && typeof avatarUrl !== "string") return null;
+    return { id: data.id, name, username, avatarUrl, role };
   } catch {
     return null;
   }

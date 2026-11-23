@@ -13,7 +13,7 @@ export async function getPublicCategories(): Promise<Category[] | null> {
     }
     const response = await fetch(new URL("/categories", origin), {
       headers: { Accept: "application/json" },
-      cache: "no-store",
+      next: { revalidate: 60 },
       signal: AbortSignal.timeout(2500),
     });
     if (!response.ok) throw new Error("Categories unavailable");

@@ -16,6 +16,7 @@ import type {
 } from "@/lib/article-form-contract";
 import {
   buildArticleWritePayload,
+  hasArticleContent,
   prepareArticleDocument,
   UnsupportedArticleImageError,
 } from "@/lib/article-write";
@@ -132,6 +133,7 @@ export function ProductionArticleForm({
       categories={categories}
       tags={tags}
       saveAction={save}
+      contentEmpty={() => !hasArticleContent(document.current)}
       uploadImage={(file, signal) =>
         uploadImageFile(file, { csrfToken, signal })
       }

@@ -362,7 +362,8 @@ function parseNode(input: unknown, depth: number, parent: string): RichNode {
   if (type === "heading") {
     if (parent !== "doc" && parent !== "listItem" && parent !== "blockquote")
       throw new Error("Invalid content document");
-    const level = isRecord(input.attrs) ? input.attrs.level : undefined;
+    const rawLevel = isRecord(input.attrs) ? input.attrs.level : undefined;
+    const level = rawLevel === undefined ? 2 : rawLevel;
     if (level !== 2 && level !== 3 && level !== 4)
       throw new Error("Invalid content document");
     return {

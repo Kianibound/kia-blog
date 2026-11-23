@@ -1,10 +1,15 @@
 import Link from "next/link";
 import { messages } from "@/i18n/messages/fa";
 import { SiteNavigation } from "./site-navigation";
-import { getPublicCategories } from "@/lib/categories";
+import type { Category } from "@/lib/categories";
 
-export async function SiteHeader({ accountEntry }: { accountEntry?: React.ReactNode }) {
-  const categories = await getPublicCategories();
+export function SiteHeader({
+  accountEntry,
+  categories,
+}: {
+  accountEntry?: React.ReactNode;
+  categories: Category[] | null;
+}) {
   return (
     <>
       <a

@@ -42,10 +42,12 @@ export async function POST(request: Request) {
       if (invalid === "invalid") return failure(422);
       if (invalid === "too-large") return failure(413);
 
+      // Media uploads to Cloudinary often exceed the 5s default mutation timeout.
       const response = await mutate("/media/images", {
         method: "POST",
         body: form,
         headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(60000),
       });
       if (response.status === 401) return failure(401);
       if (response.status === 413) return failure(413);

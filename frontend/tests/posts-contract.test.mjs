@@ -275,6 +275,20 @@ test("detail parsing accepts a Nest rich document and resolves media by id", () 
   assert.equal(detail.content, "عنوان متن");
 });
 
+test("detail parsing defaults a heading without a level to 2", () => {
+  const detail = parsePublishedPost({
+    ...richDetail,
+    contentDocument: {
+      type: "doc",
+      content: [
+        { type: "heading", content: [{ type: "text", text: "عنوان" }] },
+        { type: "paragraph", content: [{ type: "text", text: "متن" }] },
+      ],
+    },
+  });
+  assert.equal(detail.contentDocument.content[0].level, 2);
+});
+
 test("legacy detail keeps plain text and an empty media projection", () => {
   for (const payload of [
     { ...previewPosts[0], contentDocument: null },

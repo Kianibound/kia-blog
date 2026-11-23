@@ -4,6 +4,7 @@ export type DashboardRole = "USER" | "AUTHOR" | "ADMIN";
 export type DashboardIdentity = {
   name: string | null;
   username: string;
+  avatarUrl: string | null;
   role: DashboardRole;
 };
 

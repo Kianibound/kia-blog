@@ -101,6 +101,7 @@ export class GithubOAuthService {
     if (dto.error || !dto.code)
       throw new UnauthorizedException('GitHub login failed.');
     let subject: string;
+    let displayName: string | undefined;
     let accessToken: string;
     try {
       const tokens = await this.requestJson(
@@ -138,6 +139,12 @@ export class GithubOAuthService {
       )
         throw new Error();
       subject = String(profile.id);
+      displayName =
+        typeof profile.name === 'string' && profile.name.trim()
+          ? profile.name.trim()
+          : typeof profile.login === 'string' && profile.login.trim()
+            ? profile.login.trim()
+            : undefined;
     } catch {
       // Never expose fetch errors or provider response details/credentials.
       throw new UnauthorizedException('GitHub login failed.');
@@ -169,6 +176,7 @@ export class GithubOAuthService {
       .create({
         data: {
           email,
+          name: displayName,
           emailVerified: true,
           roleId: role.id,
           username: `github_${createHash('sha256').update(subject).digest('hex')}`,

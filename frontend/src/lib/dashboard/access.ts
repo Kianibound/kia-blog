@@ -157,5 +157,5 @@ export function dashboardLoginHref(section: readonly string[]): string {
 }
 
 export function toDashboardIdentity(user: AuthenticatedUser): DashboardIdentity {
-  return { name: user.name, username: user.username, role: user.role };
+  return { name: user.name, username: user.username, avatarUrl: user.avatarUrl, role: user.role };
 }

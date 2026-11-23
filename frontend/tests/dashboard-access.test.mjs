@@ -81,9 +81,10 @@ test("dashboard identity derives only from the verified account user", () => {
       email: "author@example.test",
       username: "author",
       name: "نویسنده",
+      avatarUrl: null,
       role: "AUTHOR",
     }),
-    { name: "نویسنده", username: "author", role: "AUTHOR" },
+    { name: "نویسنده", username: "author", avatarUrl: null, role: "AUTHOR" },
   );
   assert.equal(
     toDashboardIdentity({
@@ -91,6 +92,7 @@ test("dashboard identity derives only from the verified account user", () => {
       email: "admin@example.test",
       username: "admin",
       name: null,
+      avatarUrl: "https://res.cloudinary.com/demo/image/upload/v1/avatar.png",
       role: "ADMIN",
     }).role,
     "ADMIN",

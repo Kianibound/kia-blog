@@ -36,7 +36,9 @@ export function validateImageFile(file: { type: string; size: number }): MediaUp
   return null;
 }
 
-export async function uploadImageFile(
+const UPLOAD_ATTEMPT_DELAYS_MS = [400, 1200];
+
+async function attemptUpload(
   file: File,
   options: {
     csrfToken: string;
@@ -44,10 +46,6 @@ export async function uploadImageFile(
     signal?: AbortSignal;
   },
 ): Promise<UploadedImage> {
-  const invalid = validateImageFile(file);
-  if (invalid) throw new MediaUploadError(invalid);
-  if (options.signal?.aborted) throw new MediaUploadError("aborted");
-
   const body = new FormData();
   body.append("file", file);
   const fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
@@ -86,6 +84,35 @@ export async function uploadImageFile(
   )
     throw new MediaUploadError("unsupported");
   return { id: value.id, url: value.url, width: value.width, height: value.height };
+}
+
+export async function uploadImageFile(
+  file: File,
+  options: {
+    csrfToken: string;
+    fetchImpl?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+    signal?: AbortSignal;
+  },
+): Promise<UploadedImage> {
+  const invalid = validateImageFile(file);
+  if (invalid) throw new MediaUploadError(invalid);
+  if (options.signal?.aborted) throw new MediaUploadError("aborted");
+
+  // Transient upload failures (network, 5xx) retry with backoff; validation,
+  // auth and user-abort errors never retry.
+  let lastError: MediaUploadError | null = null;
+  for (let attempt = 0; attempt <= UPLOAD_ATTEMPT_DELAYS_MS.length; attempt++) {
+    if (options.signal?.aborted) throw new MediaUploadError("aborted");
+    try {
+      return await attemptUpload(file, options);
+    } catch (error) {
+      if (!(error instanceof MediaUploadError) || error.kind !== "unavailable") throw error;
+      lastError = error;
+      if (attempt === UPLOAD_ATTEMPT_DELAYS_MS.length) throw error;
+      await new Promise((resolve) => setTimeout(resolve, UPLOAD_ATTEMPT_DELAYS_MS[attempt]));
+    }
+  }
+  throw lastError ?? new MediaUploadError("unavailable");
 }
 
 export function mediaUploadMessage(kind: MediaUploadErrorKind): string {

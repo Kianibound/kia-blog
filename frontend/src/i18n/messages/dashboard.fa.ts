@@ -8,6 +8,7 @@ export const dashboardMessages = {
   navigationUnavailable: "پیوندهای پیشخوان در دسترس نیستند.",
   returnToBlog: "بازگشت به وبلاگ",
   browse: "خواندن مقاله‌ها",
+  addArticle: "افزودن مقاله",
   skipToContent: "رفتن به محتوای پیشخوان",
   roles: { USER: "خواننده", AUTHOR: "نویسنده", ADMIN: "مدیر" },
   sections: {
