@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CoverImageField } from "./cover-image-field";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,7 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { articleFormMessages as copy } from "@/i18n/messages/article-form.fa";
 import { fa } from "@/lib/utils";
 import { PublicationControls, type PublicationAction } from "./publication-controls";
-import type { ArticleInput, ArticleRecord, ArticleSaveResult, ArticleTaxonomy } from "@/lib/article-form-contract";
+import { DeleteArticleButton } from "./delete-article-button";
+import type { ArticleDeleteResult, ArticleInput, ArticleRecord, ArticleSaveResult, ArticleTaxonomy } from "@/lib/article-form-contract";
 
 type Props = {
   article?: ArticleRecord;
@@ -20,6 +22,8 @@ type Props = {
   saveAction?: (id: string | undefined, input: ArticleInput) => Promise<ArticleSaveResult>;
   renderContent?: (field: { id: string; label: string; editable: boolean; error?: string; onChange: (text: string) => void }) => ReactNode;
   publicationAction?: PublicationAction;
+  /** ADMIN-only permanent deletion; absent for authors and new articles. */
+  deleteAction?: (id: string) => Promise<ArticleDeleteResult>;
   readingHref?: (slug: string) => string;
   contentBlocked?: boolean;
   /** Production editor: emptiness measured on the document, not plain text. */
@@ -57,8 +61,9 @@ function TaxonomyChoices({ label, choices, original, selected, onChange }: { lab
 }
 
 /** Presentation only. Without an explicitly supplied adapter, saving is unavailable. */
-export function ArticleForm({ article, categories, tags, saveAction, renderContent, publicationAction, readingHref, contentBlocked = false, contentEmpty, uploadImage, backLabel = copy.back, helpText = copy.preview, savedText = copy.saved, errorText = copy.error, uncertainText = copy.uncertain, production = false }: Props) {
+export function ArticleForm({ article, categories, tags, saveAction, renderContent, publicationAction, deleteAction, readingHref, contentBlocked = false, contentEmpty, uploadImage, backLabel = copy.back, helpText = copy.preview, savedText = copy.saved, errorText = copy.error, uncertainText = copy.uncertain, production = false }: Props) {
   const formId = useId();
+  const router = useRouter();
   const [coverImage, setCoverImage] = useState(article?.coverImage ?? null);
   const [coverPending, setCoverPending] = useState(false);
   const blocked = contentBlocked || coverPending;
@@ -118,6 +123,7 @@ export function ArticleForm({ article, categories, tags, saveAction, renderConte
       <p role="status" aria-live="polite">{state === "saved" ? savedText : state === "saving" ? copy.saving : ""}</p>
     </form>
     <PublicationControls article={saved} action={publicationAction} readingHref={readingHref} busy={busy} dirty={dirty} blocked={lifecycleBlocked || blocked || state === "uncertain"} production={production} onSaved={post => { setSaved(post); setState("idle"); }} onPending={value => { pending.current = value; setLifecyclePending(value); }} onUncertain={() => setLifecycleBlocked(true)}
+      deleteControl={saved && deleteAction ? <DeleteArticleButton postId={saved.id} postTitle={saved.title} onDelete={deleteAction} onDeleted={() => router.push("/dashboard/posts")} size="md" className="min-h-12 w-full motion-reduce:transition-none sm:w-auto" /> : undefined}
       saveControl={<Button type="submit" form={formId} size="md" disabled={!saveAction || busy || lifecycleBlocked || blocked || state === "uncertain"} className="min-h-12 w-full motion-reduce:transition-none sm:w-auto">{state === "saving" ? copy.saving : copy.save}</Button>} />
     <Link href="/dashboard/posts" className="inline-flex min-h-12 items-center rounded-control px-4 underline focus-visible:outline-2 focus-visible:outline-ring">{backLabel}</Link>
   </Card>;

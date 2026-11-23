@@ -12,11 +12,12 @@ import type { ArticleRecord, ArticleSaveResult } from "@/lib/article-form-contra
 
 export type PublicationAction = (id: string, status: "DRAFT" | "PUBLISHED") => Promise<ArticleSaveResult>;
 
-export function PublicationControls({ article, action, busy, dirty, blocked, onPending, onSaved, onUncertain, readingHref, saveControl, production = false }: {
+export function PublicationControls({ article, action, busy, dirty, blocked, onPending, onSaved, onUncertain, readingHref, saveControl, deleteControl, production = false }: {
   article?: ArticleRecord; action?: PublicationAction; busy: boolean; dirty: boolean; blocked: boolean;
   onPending: (value: boolean) => void; onSaved: (post: ArticleRecord) => void; onUncertain: () => void;
   readingHref?: (slug: string) => string;
   saveControl: ReactNode;
+  deleteControl?: ReactNode;
   production?: boolean;
 }) {
   const messages = production
@@ -66,6 +67,7 @@ export function PublicationControls({ article, action, busy, dirty, blocked, onP
     <div role="group" aria-label={copy.actions} className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:gap-4">
       {saveControl}
       <Button size="md" className="min-h-12 w-full sm:w-auto" disabled={Boolean(disabled)} aria-haspopup="dialog" aria-expanded={confirming} onClick={event => { trigger.current = event.currentTarget; setFeedback("idle"); setConfirming(true); }}>{publishing ? copy.publish : copy.unpublish}</Button>
+      {deleteControl}
     </div>
     <section aria-label={messages.title} className="min-h-48 space-y-4 rounded-field border border-border p-4" aria-busy={feedback === "pending"}>
     <h2 className="text-xl font-semibold leading-tight">{messages.title}</h2>

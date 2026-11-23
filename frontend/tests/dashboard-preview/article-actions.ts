@@ -1,18 +1,17 @@
 "use server";
 
-import { parseArticleDetail, parseArticleWrite, type ArticleInput, type ArticleSaveResult } from "@/lib/article-form-contract";
+import { parseArticleDetail, parseArticleWrite, type ArticleDeleteResult, type ArticleInput, type ArticleSaveResult } from "@/lib/article-form-contract";
 import { readFixtureIdentity } from "./identity";
 import type { PreviewDocument } from "./editor-document";
-import type { ArticleDeleteResult } from "@/components/dashboard/admin-article-list";
 
 // Removes only a resettable fixture article, never production data or media.
 export async function deleteFixtureArticle(id: string): Promise<ArticleDeleteResult> {
-  if ((await readFixtureIdentity())?.role !== "ADMIN" || typeof id !== "string" || !id.trim()) return "error";
+  if ((await readFixtureIdentity())?.role !== "ADMIN" || typeof id !== "string" || !id.trim()) return { state: "error" };
   try {
     const response = await fetch(`http://127.0.0.1:4101/dashboard-posts/${encodeURIComponent(id)}`, { method: "DELETE", cache: "no-store", signal: AbortSignal.timeout(2500) });
-    if (response.status === 204) return "deleted";
-    return response.status >= 400 && response.status < 500 ? "error" : "uncertain";
-  } catch { return "uncertain"; }
+    if (response.status === 204) return { state: "deleted" };
+    return response.status >= 400 && response.status < 500 ? { state: "error" } : { state: "uncertain" };
+  } catch { return { state: "uncertain" }; }
 }
 
 // Test-only HTTP adapter. No production API, credentials or auth policy.

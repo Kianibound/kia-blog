@@ -30,6 +30,6 @@ export async function PreviewOwnPosts({ page, authorId, status, admin = false }:
   } catch {
     return <AuthorPostsUnavailable page={page} status={status} admin={admin} />;
   }
-  if (authors) return <AdminArticleList posts={posts} authors={authors} deleteAction={deleteFixtureArticle} />;
+  if (authors) return <AdminArticleList posts={posts} authors={authors} deleteAction={deleteFixtureArticle} messages={{ confirmSuffix: "برای همیشه از داده‌های آزمایشی حذف شود؟", deleted: "مقاله از داده‌های آزمایشی حذف شد." }} />;
   return <AuthorPostList posts={posts} status={status} href={page => ownPostsHref(page, status)} formLinks={{ create: "/dashboard/posts/new", edit: id => `/dashboard/posts/${encodeURIComponent(id)}/edit` }} />;
 }

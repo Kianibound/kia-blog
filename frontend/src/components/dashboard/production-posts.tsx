@@ -7,6 +7,7 @@ import {
   AuthorPostsLoading,
   AuthorPostsUnavailable,
 } from "@/components/dashboard/author-post-list";
+import { AdminArticleList } from "@/components/dashboard/admin-article-list";
 import { loadInventory } from "@/lib/dashboard/inventory";
 import {
   inventoryHref,
@@ -62,12 +63,11 @@ export async function ProductionPosts({
       ]),
     );
     return (
-      <AuthorPostList
+      <AdminArticleList
         posts={posts}
         authors={authors}
+        csrfToken={account.csrfToken}
         createHref="/dashboard/posts/new"
-        formLinks={{ edit: (id) => `/dashboard/posts/${encodeURIComponent(id)}/edit` }}
-        href={(nextPage) => inventoryHref("ADMIN", nextPage)}
       />
     );
   }

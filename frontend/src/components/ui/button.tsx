@@ -2,7 +2,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-type Variant = "default" | "secondary" | "outline" | "ghost" | "brand" | "destructive";
+type Variant = "default" | "secondary" | "outline" | "ghost" | "brand" | "destructive" | "warning";
 type Size = "sm" | "md" | "lg" | "icon";
 
 const variants: Record<Variant, string> = {
@@ -12,6 +12,7 @@ const variants: Record<Variant, string> = {
   ghost: "hover:bg-accent hover:text-accent-foreground",
   brand: "bg-brand text-brand-foreground hover:bg-brand/90 shadow-control active:shadow-press",
   destructive: "bg-destructive text-white hover:bg-destructive/90 shadow-control active:shadow-press",
+  warning: "bg-warning text-warning-foreground hover:bg-warning/90 shadow-control active:shadow-press",
 };
 
 const sizes: Record<Size, string> = {

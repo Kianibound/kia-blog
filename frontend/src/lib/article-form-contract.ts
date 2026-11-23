@@ -6,6 +6,7 @@ export type ArticleTaxonomy = { id: string; name: string; slug: string };
 export type ArticleInput = { title: string; content?: string; contentDocument?: EditorDocument; categoryIds: string[]; tagIds: string[]; coverImage?: CoverImage | null };
 export type ArticleRecord = OwnPost & { contentDocument?: EditorDocument | null; contentMedia?: ContentMedia[]; categories: ArticleTaxonomy[]; tags: ArticleTaxonomy[]; coverImage?: CoverImage | null };
 export type ArticleSaveResult = { state: "saved"; post: ArticleRecord } | { state: "error"; message?: string } | { state: "uncertain"; message?: string };
+export type ArticleDeleteResult = { state: "deleted" } | { state: "error"; message?: string } | { state: "uncertain"; message?: string };
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

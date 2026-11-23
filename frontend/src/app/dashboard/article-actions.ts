@@ -1,8 +1,8 @@
 "use server";
 
 import { headers } from "next/headers";
-import { parseArticleWrite, type ArticleSaveResult } from "@/lib/article-form-contract";
-import { articleFormMessages as copy } from "@/i18n/messages/article-form.fa";
+import { parseArticleWrite, type ArticleDeleteResult, type ArticleSaveResult } from "@/lib/article-form-contract";
+import { articleFormMessages as copy, deleteArticleMessages as deleteCopy } from "@/i18n/messages/article-form.fa";
 import {
   articleWriteMethod,
   articleWritePath,
@@ -113,4 +113,37 @@ export async function updateArticleStatusAction(
   } catch (error) {
     return mutationErrorResult(error, copy.productionCsrfError, copy.timeout);
   }
+}
+
+/** ADMIN-only permanent deletion. The backend rejects non-ADMIN roles with 403. */
+export async function deleteArticleAction(
+  id: string,
+  csrfToken: string,
+): Promise<ArticleDeleteResult> {
+  try {
+    const request = await mutationRequest(csrfToken);
+    let deleteResponse: Response | null = null;
+    await handleAuthenticatedMutation(request, async ({ mutate }) => {
+      deleteResponse = await mutate(articleWritePath(id), {
+        method: "DELETE",
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      return deleteResponse;
+    });
+    return deleteResponse
+      ? readDeleteResponse(deleteResponse)
+      : { state: "uncertain" };
+  } catch (error) {
+    return mutationErrorResult(error, copy.productionCsrfError, copy.timeout);
+  }
+}
+
+function readDeleteResponse(response: Response): ArticleDeleteResult {
+  if (response.status >= 500) return { state: "uncertain" };
+  if (response.status === 403)
+    return { state: "error", message: deleteCopy.forbidden };
+  if (response.status === 404)
+    return { state: "error", message: copy.notFound };
+  if (!response.ok) return { state: "error" };
+  return { state: "deleted" };
 }

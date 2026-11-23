@@ -40,3 +40,15 @@ export const articleFormMessages = {
   noChoices: "گزینه‌ای وجود ندارد.",
   recovered: "گزینهٔ انتخاب‌شده در فهرست فعلی نیست؛ می‌توانید آن را نگه دارید یا حذف کنید.",
 };
+
+export const deleteArticleMessages = {
+  delete: "حذف مقاله",
+  confirm: "تأیید حذف مقاله",
+  cancel: "انصراف",
+  confirmSuffix: "برای همیشه حذف شود؟",
+  deleting: "در حال حذف مقاله…",
+  failed: "حذف مقاله انجام نشد. دوباره تلاش کنید.",
+  uncertain: "نتیجهٔ حذف مشخص نیست. فهرست را دوباره بارگذاری کنید.",
+  deleted: "مقاله حذف شد.",
+  forbidden: "فقط ادمین می‌تواند مقاله را حذف کند.",
+};

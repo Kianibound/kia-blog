@@ -56,6 +56,7 @@ export async function ProductionArticleEditor({
       categories={result.taxonomy.categories}
       tags={result.taxonomy.tags}
       csrfToken={account.csrfToken}
+      canDelete={account.user.role === "ADMIN"}
     />
   );
 }

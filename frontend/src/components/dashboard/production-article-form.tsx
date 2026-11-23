@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { editorMessages as editorCopy } from "@/i18n/messages/editor.fa";
 import { articleFormMessages as copy } from "@/i18n/messages/article-form.fa";
 import type {
+  ArticleDeleteResult,
   ArticleInput,
   ArticleRecord,
   ArticleSaveResult,
@@ -23,6 +24,7 @@ import {
 import { uploadImageFile } from "@/lib/media-upload";
 import type { EditorDocument } from "@/components/editor/types";
 import {
+  deleteArticleAction,
   saveArticleAction,
   updateArticleStatusAction,
 } from "@/app/dashboard/article-actions";
@@ -53,11 +55,13 @@ export function ProductionArticleForm({
   categories,
   tags,
   csrfToken,
+  canDelete = false,
 }: {
   article?: ArticleRecord;
   categories: ArticleTaxonomy[];
   tags: ArticleTaxonomy[];
   csrfToken: string;
+  canDelete?: boolean;
 }) {
   const document = useRef<EditorDocument | null>(null);
   const documentChanged = useRef(false);
@@ -140,6 +144,7 @@ export function ProductionArticleForm({
       publicationAction={(id, status) =>
         updateArticleStatusAction(id, status, csrfToken)
       }
+      deleteAction={canDelete ? (id: string): Promise<ArticleDeleteResult> => deleteArticleAction(id, csrfToken) : undefined}
       readingHref={(slug) => `/posts/${encodeURIComponent(slug)}`}
       helpText={copy.productionHelp}
       savedText={copy.productionSaved}
