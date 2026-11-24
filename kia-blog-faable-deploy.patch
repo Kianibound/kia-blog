@@ -1,0 +1,22 @@
+diff --git a/backend/faable.json b/backend/faable.json
+new file mode 100644
+index 0000000..3bbc5a1
+--- /dev/null
++++ b/backend/faable.json
+@@ -0,0 +1 @@
++{"buildCommand":"npm install && npx prisma migrate deploy && npm run build","startCommand":"npm run start:prod"}
+\ No newline at end of file
+diff --git a/backend/package.json b/backend/package.json
+index 4ecde0e..91e3626 100644
+--- a/backend/package.json
++++ b/backend/package.json
+@@ -1,6 +1,9 @@
+ {
+   "name": "backend",
+   "version": "0.0.1",
++  "engines": {
++    "node": "22"
++  },
+   "description": "",
+   "author": "",
+   "private": true,
