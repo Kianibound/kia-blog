@@ -96,13 +96,13 @@ export function inventoryStatus(value: unknown): OwnPostStatusFilter | undefined
 
 export function inventoryPath(role: "AUTHOR" | "ADMIN", page: number, status?: OwnPostStatusFilter): string {
   const params = new URLSearchParams({ page: String(page), limit: "10" });
-  if (role === "AUTHOR" && status) params.set("status", status);
+  if (status) params.set("status", status);
   return role === "ADMIN" ? `/posts/admin/inventory?${params}` : `/posts/mine?${params}`;
 }
 
 export function inventoryHref(role: "AUTHOR" | "ADMIN", page: number, status?: OwnPostStatusFilter): string {
   const params = new URLSearchParams();
   if (page !== 1) params.set("page", String(page));
-  if (role === "AUTHOR" && status) params.set("status", status);
+  if (status) params.set("status", status);
   return `/dashboard/posts${params.size ? `?${params}` : ""}`;
 }

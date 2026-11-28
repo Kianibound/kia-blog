@@ -32,15 +32,16 @@ const summary = (post = ownPost, author = { id: authorId, username: "sara", name
 test("inventory requests use the exact Nest endpoints and query fields", () => {
   assert.equal(inventoryPath("AUTHOR", 1), "/posts/mine?page=1&limit=10");
   assert.equal(inventoryPath("AUTHOR", 2, "DRAFT"), "/posts/mine?page=2&limit=10&status=DRAFT");
-  assert.equal(inventoryPath("ADMIN", 3, "PUBLISHED"), "/posts/admin/inventory?page=3&limit=10");
+  assert.equal(inventoryPath("ADMIN", 3, "PUBLISHED"), "/posts/admin/inventory?page=3&limit=10&status=PUBLISHED");
   assert.ok(!inventoryPath("AUTHOR", 1).includes("author="));
   assert.ok(!inventoryPath("ADMIN", 1).includes("status="));
 });
 
-test("dashboard inventory links preserve pagination and AUTHOR-only status", () => {
+test("dashboard inventory links preserve pagination and status for both roles", () => {
   assert.equal(inventoryHref("AUTHOR", 1), "/dashboard/posts");
   assert.equal(inventoryHref("AUTHOR", 2, "DRAFT"), "/dashboard/posts?page=2&status=DRAFT");
-  assert.equal(inventoryHref("ADMIN", 2, "DRAFT"), "/dashboard/posts?page=2");
+  assert.equal(inventoryHref("ADMIN", 1, "DRAFT"), "/dashboard/posts?status=DRAFT");
+  assert.equal(inventoryHref("ADMIN", 2, "DRAFT"), "/dashboard/posts?page=2&status=DRAFT");
 });
 
 test("page and status parsing rejects malformed values", () => {

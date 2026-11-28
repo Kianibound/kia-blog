@@ -86,9 +86,7 @@ export default async function DashboardPage({
   if (!meta) notFound();
   const parsedStatus = inventoryStatus(query.status);
   const status = parsedStatus ?? undefined;
-  const invalidStatus =
-    parsedStatus === null ||
-    (account.user.role === "ADMIN" && query.status !== undefined);
+  const invalidStatus = parsedStatus === null;
   const newArticle =
     section.length === 2 && section[0] === "posts" && section[1] === "new";
   const editId =

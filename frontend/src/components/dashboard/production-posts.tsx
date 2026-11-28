@@ -35,7 +35,7 @@ export async function ProductionPosts({
   const result = await loadInventory({
     role,
     page,
-    status: role === "AUTHOR" ? status : undefined,
+    status,
     authorId: account.user.id,
   });
 
@@ -46,7 +46,7 @@ export async function ProductionPosts({
     return (
       <AuthorPostsUnavailable
         page={page}
-        status={role === "AUTHOR" ? status : undefined}
+        status={status}
         admin={role === "ADMIN"}
       />
     );
@@ -63,12 +63,19 @@ export async function ProductionPosts({
       ]),
     );
     return (
-      <AdminArticleList
-        posts={posts}
-        authors={authors}
-        csrfToken={account.csrfToken}
-        createHref="/dashboard/posts/new"
-      />
+      <div className="space-y-6">
+        <AuthorPostFilters
+          status={status}
+          href={(nextStatus) => inventoryHref("ADMIN", 1, nextStatus)}
+        />
+        <AdminArticleList
+          posts={posts}
+          authors={authors}
+          csrfToken={account.csrfToken}
+          createHref="/dashboard/posts/new"
+          status={status}
+        />
+      </div>
     );
   }
 

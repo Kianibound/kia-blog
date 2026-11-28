@@ -156,6 +156,13 @@ test("ADMIN inventory shows all statuses and real author summaries without mutat
   await expect(page.getByText("سارا", { exact: false }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: "مقالهٔ جدید" })).toBeVisible();
   await expect(page.getByRole("button", { name: "حذف" })).toHaveCount(0);
+
+  await page.getByRole("navigation", { name: "وضعیت مقاله‌ها" }).getByRole("link", { name: "پیش‌نویس", exact: true }).click();
+  await expect(page).toHaveURL(/status=DRAFT$/);
+  await expect(page.getByRole("heading", { name: /مقالهٔ آزمایشی/ })).toHaveCount(2);
+  await page.getByRole("navigation", { name: "وضعیت مقاله‌ها" }).getByRole("link", { name: "همه", exact: true }).click();
+  await expect(page).toHaveURL("/dashboard/posts");
+  await expect(page.getByRole("heading", { name: /مقالهٔ آزمایشی/ })).toHaveCount(5);
 });
 
 test("invalid status queries are rejected instead of silently showing all posts", async ({ page }) => {
@@ -172,8 +179,13 @@ test("invalid status queries are rejected instead of silently showing all posts"
   await page.context().clearCookies();
   await login(page, "admin@example.test");
   await page.goto("/dashboard/posts?status=DRAFT");
-  await expect(page.getByText("فیلتر وضعیت انتخابی معتبر نیست.", { exact: false })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /مقالهٔ آزمایشی/ })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /مقالهٔ آزمایشی/ })).toHaveCount(2);
+  for (const status of ["DEPRECATED", "deprecated", "UNKNOWN"]) {
+    await page.goto(`/dashboard/posts?status=${status}`);
+    await expect(page.getByText("فیلتر وضعیت انتخابی معتبر نیست.", { exact: false })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /مقالهٔ آزمایشی/ })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "نمایش همهٔ مقاله‌ها" })).toBeVisible();
+  }
 });
 
 test("AUTHOR and ADMIN denial is distinct from recoverable backend failure", async ({ page, request }) => {

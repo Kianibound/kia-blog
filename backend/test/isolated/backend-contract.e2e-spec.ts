@@ -4613,6 +4613,29 @@ describe('Backend contracts with isolated I/O', () => {
       },
     );
 
+    it.each([
+      { status: 'DRAFT', ids: ['p5', 'p1'] },
+      { status: 'PUBLISHED', ids: ['p4', 'p2'] },
+    ])(
+      'filters the inventory by status $status before pagination',
+      async ({ status, ids }) => {
+        const response = await request(app.getHttpServer())
+          .get('/posts/admin/inventory')
+          .query({ status })
+          .auth(auth(), { type: 'bearer' })
+          .expect(200);
+        expect(
+          response.body.data.map((post: { id: string }) => post.id),
+        ).toEqual(ids);
+        expect(response.body.meta).toEqual({
+          page: 1,
+          limit: 10,
+          total: 2,
+          totalPages: 1,
+        });
+      },
+    );
+
     it('returns an empty inventory with zero pages when no posts exist', async () => {
       persistence.post.findMany.mockResolvedValue([]);
       persistence.post.count.mockResolvedValue(0);
@@ -4633,7 +4656,9 @@ describe('Backend contracts with isolated I/O', () => {
         'page=wrong',
         'limit=0',
         'limit=51',
-        'status=DRAFT',
+        'status=DEPRECATED',
+        'status=wrong',
+        'status=DRAFT&status=PUBLISHED',
         'author=author-a',
         'search=Title',
         'sort=oldest',
@@ -4677,7 +4702,7 @@ describe('Backend contracts with isolated I/O', () => {
             'name' in parameter ? parameter.name : '',
           )
           .sort(),
-      ).toEqual(['limit', 'page']);
+      ).toEqual(['limit', 'page', 'status']);
       expect(operation.responses['200']).toMatchObject({
         content: {
           'application/json': {

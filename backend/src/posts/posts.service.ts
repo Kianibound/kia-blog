@@ -58,8 +58,8 @@ export class PostsService {
     return this.present(await this.queries.findById(id));
   }
 
-  findAdminInventory(page: number, limit: number) {
-    return this.queries.findAdminInventory(page, limit);
+  findAdminInventory(page: number, limit: number, status?: PostStatus) {
+    return this.queries.findAdminInventory(page, limit, status);
   }
 
   async findMine(

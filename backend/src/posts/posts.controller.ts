@@ -60,7 +60,7 @@ export class PostsController {
   @ApiOperation({
     summary: 'Inventory all posts (admin only)',
     description:
-      'All authors and publication statuses, including DRAFT and DEPRECATED. Pagination only. Ordered by createdAt descending, then id descending for ties. Returns compact summaries and safe author identity; existing mutation endpoints are unchanged.',
+      'All authors and publication statuses, including DRAFT and DEPRECATED. Optionally filter DRAFT or PUBLISHED before pagination. Ordered by createdAt descending, then id descending for ties. Returns compact summaries and safe author identity; existing mutation endpoints are unchanged.',
   })
   @ApiResponse({
     status: 200,
@@ -70,7 +70,8 @@ export class PostsController {
   @ApiResponse({
     status: 400,
     type: ErrorResponseDto,
-    description: 'Invalid pagination or unsupported query fields.',
+    description:
+      'Invalid status or pagination. Only DRAFT and PUBLISHED are valid explicit status filters.',
   })
   @ApiResponse({
     status: 401,
@@ -83,7 +84,11 @@ export class PostsController {
     description: 'ADMIN required.',
   })
   findAdminInventory(@Query() query: AdminPostsQueryDto) {
-    return this.postsService.findAdminInventory(query.page, query.limit);
+    return this.postsService.findAdminInventory(
+      query.page,
+      query.limit,
+      query.status,
+    );
   }
 
   @ApiBearerAuth('access-token')

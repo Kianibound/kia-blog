@@ -47,16 +47,18 @@ export class PostQueries {
     private readonly publishedPosts: PublishedPosts,
   ) {}
 
-  async findAdminInventory(page: number, limit: number) {
+  async findAdminInventory(page: number, limit: number, status?: PostStatus) {
+    const where = { ...(status ? { status } : {}) };
     const [posts, total] = await Promise.all([
       this.prisma.post.findMany({
-        // No owner or publication predicate: ADMIN sees every stored Post.
+        // No owner predicate: ADMIN sees every stored Post.
+        where,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * limit,
         take: limit,
         select: inventoryProjection,
       }),
-      this.prisma.post.count(),
+      this.prisma.post.count({ where }),
     ]);
     return {
       data: posts,
