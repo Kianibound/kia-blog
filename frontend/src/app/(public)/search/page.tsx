@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { DiscoveryFeed } from "@/components/posts/discovery-feed";
 import { FeedLoading } from "@/components/posts/feed-loading";
@@ -78,10 +79,18 @@ export default async function SearchPage({
             <option value="oldest">{messages.search.oldest}</option>
           </select>
         </Field>
-        <div className="sm:col-span-3">
+        <div className="flex flex-wrap items-center gap-4 sm:col-span-3">
           <Button type="submit" size="lg" className="motion-reduce:transition-none">
             {messages.discovery.searchSubmit}
           </Button>
+          {state.q && (
+            <Link
+              href="/search"
+              className="inline-flex min-h-12 items-center rounded-control border border-border px-4 font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+            >
+              {messages.search.clear}
+            </Link>
+          )}
         </div>
       </form>
       <section aria-labelledby="discovery-results" className="space-y-6">

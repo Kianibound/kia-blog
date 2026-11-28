@@ -27,7 +27,7 @@ export default async function PublicLayout({
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto min-h-96 w-full max-w-6xl flex-1 px-4 py-10 sm:px-6 sm:py-14"
+        className="mx-auto min-h-96 w-full max-w-6xl flex-1 px-4 pt-12 pb-10 sm:px-6 sm:pt-16 sm:pb-14"
       >
         {children}
       </main>

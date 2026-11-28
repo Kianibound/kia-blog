@@ -32,7 +32,7 @@ export function DashboardShell({ identity, destinations, title, description, act
 }) {
   const displayName = identity ? identity.name?.trim() || identity.username : null;
   return (
-    <div className="mx-auto flex min-h-svh w-full max-w-7xl flex-col gap-6 p-4 sm:p-6">
+    <div className="mx-auto flex min-h-svh w-full max-w-7xl flex-col gap-6 px-4 pt-6 pb-4 sm:px-6 sm:pt-8 sm:pb-6">
       <a href="#dashboard-content" className="sr-only rounded-control bg-background p-4 font-semibold focus:not-sr-only focus:outline-2 focus:outline-ring">{copy.skipToContent}</a>
       <header className="flex flex-wrap items-center justify-between gap-4 rounded-surface border border-border bg-card p-4 sm:p-6">
         <div role="group" aria-label={copy.identity} aria-busy={pending} className="flex min-h-12 min-w-0 items-center gap-4">

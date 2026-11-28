@@ -618,13 +618,13 @@ test("ADMIN approval is version-safe: a stale 409 never approves, and reloading 
   await expect(refreshed.getByText("تأییدشده", { exact: true })).toBeVisible();
 });
 
-test("ADMIN deletes a comment only after confirmation", async ({ page }) => {
+test("ADMIN rejects a comment only after confirmation", async ({ page }) => {
   await login(page, "admin@example.test", "/dashboard/comments");
   const row = page.getByRole("listitem").filter({ hasText: "دیدگاه تأییدشدهٔ من" });
-  await row.getByRole("button", { name: "حذف دیدگاه", exact: true }).click();
-  await expect(page.getByRole("alertdialog")).toContainText("این دیدگاه و پاسخ‌های آن حذف می‌شوند");
-  await page.getByRole("alertdialog").getByRole("button", { name: "تأیید حذف", exact: true }).click();
-  await expect(page.getByRole("status").filter({ hasText: "دیدگاه حذف شد." })).toBeVisible();
+  await row.getByRole("button", { name: "رد دیدگاه", exact: true }).click();
+  await expect(page.getByRole("alertdialog")).toContainText("این دیدگاه و پاسخ‌های آن رد می‌شوند");
+  await page.getByRole("alertdialog").getByRole("button", { name: "تأیید رد", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "دیدگاه رد شد." })).toBeVisible();
   await expect(page.getByText("دیدگاه تأییدشدهٔ من", { exact: false })).toHaveCount(0);
 });
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PublishedFeed } from "@/components/posts/published-feed";
+import { ActiveFilters } from "@/components/posts/active-filters";
 import { FeedLoading } from "@/components/posts/feed-loading";
 import { Card } from "@/components/ui/card";
 import { messages } from "@/i18n/messages/fa";
@@ -67,6 +68,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Pos
           <p>{messages.home.feedDescription}</p>
         </div>
         <SearchForm query={query} />
+        <ActiveFilters query={query} />
         <Suspense key={href} fallback={<FeedLoading />}>
           <PublishedFeed query={query} />
         </Suspense>

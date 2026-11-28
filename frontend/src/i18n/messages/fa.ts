@@ -51,6 +51,8 @@ export const messages = {
     newest: "تازه‌ترین",
     oldest: "قدیمی‌ترین",
     clear: "پاک‌کردن جست‌وجو",
+    removeCategory: "حذف فیلتر دسته‌بندی",
+    removeTag: "حذف فیلتر تگ",
     noResults: "مقاله‌ای با این معیارها پیدا نشد. جست‌وجو را تغییر دهید یا معیارها را حذف کنید.",
     showAll: "مشاهدهٔ همهٔ مقاله‌ها",
   },
@@ -79,6 +81,7 @@ export const messages = {
   },
   article: {
     content: "متن مقاله",
+    loading: "در حال دریافت مقاله…",
     tags: "برچسب‌های مقاله",
     backToFeed: "بازگشت به مقاله‌ها",
     error: "دریافت مقاله ممکن نشد.",

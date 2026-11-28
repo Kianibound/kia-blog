@@ -173,6 +173,15 @@ export default async function DashboardPage({
         section[0] === "authors" &&
         section[1] === "new" ? (
         <ProductionAuthorForm csrfToken={account.csrfToken} />
+      ) : section.length === 0 && account.user.role === "USER" ? (
+        <>
+          <Suspense fallback={<ProductionSavedArticlesLoading />}>
+            <ProductionSavedArticlesPage account={account} />
+          </Suspense>
+          <Suspense key={page} fallback={<ProductionMyCommentsLoading />}>
+            <ProductionMyComments account={account} page={1} />
+          </Suspense>
+        </>
       ) : (
         <Card className="min-h-64 space-y-4 p-6 sm:p-8">
           <h2 className="text-xl leading-tight font-semibold">{meta.title}</h2>
